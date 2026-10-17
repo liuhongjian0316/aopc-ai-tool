@@ -1,0 +1,35 @@
+{
+  "name": "aopc-ai-tool",
+  "description": "liuhongjian 的 AOPC 插件/技能源：收录 AOPC 插件与技能，供 marketplace 安装与更新。",
+  "description_i18n": {
+    "en": "liuhongjian's AOPC plugin/skill source: a marketplace of AOPC plugins and skills for install and update.",
+    "zh-CN": "liuhongjian 的 AOPC 插件/技能源：收录 AOPC 插件与技能，供 marketplace 安装与更新。"
+  },
+  "owner": {
+    "name": "liuhongjian",
+    "url": "https://github.com/liuhongjian0316"
+  },
+  "plugins": [
+    {
+      "name": "fcm-bridge",
+      "source": "./plugins/fcm-bridge",
+      "description": "AOPC 会话内查看与切换 free-coding-models 免费模型路由(/fcm 命令)",
+      "description_i18n": {
+        "en": "Inspect and switch free-coding-models (FCM) free model routing from an AOPC session via the /fcm command.",
+        "zh-CN": "AOPC 会话内查看与切换 free-coding-models 免费模型路由(/fcm 命令)"
+      },
+      "version": "0.1.0",
+      "author": {
+        "name": "liuhongjian"
+      },
+      "license": "MIT",
+      "category": "developer-tools",
+      "keywords": [
+        "fcm",
+        "free-coding-models",
+        "model-router",
+        "aopc"
+      ]
+    }
+  ]
+}
