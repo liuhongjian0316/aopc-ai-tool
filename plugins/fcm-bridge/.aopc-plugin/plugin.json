@@ -1,6 +1,6 @@
 {
   "name": "fcm-bridge",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "AOPC 会话内查看与切换 free-coding-models 免费模型路由(/fcm 命令)",
   "author": {
     "name": "liuhongjian"

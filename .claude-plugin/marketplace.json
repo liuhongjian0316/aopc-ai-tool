@@ -18,7 +18,7 @@
         "en": "Inspect and switch free-coding-models (FCM) free model routing from an AOPC session via the /fcm command.",
         "zh-CN": "AOPC 会话内查看与切换 free-coding-models 免费模型路由(/fcm 命令)"
       },
-      "version": "0.1.0",
+      "version": "0.1.1",
       "author": {
         "name": "liuhongjian"
       },
