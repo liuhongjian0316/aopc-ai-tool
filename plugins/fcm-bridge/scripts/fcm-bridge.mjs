@@ -18,7 +18,9 @@ import path from "node:path";
 import process from "node:process";
 
 const HOME = os.homedir();
-const ROUTER_BASE = "http://localhost:19280";
+// 用 127.0.0.1 而非 localhost：daemon 只绑 IPv4，localhost 可能先解析到 ::1
+// （/etc/hosts 两条都在时 DNS 返回 ::1 优先），在禁用 Happy Eyeballs 的环境里直接 ECONNREFUSED。
+const ROUTER_BASE = "http://127.0.0.1:19280";
 const ROUTER_API_KEY = "fcm-local";
 const ROUTER_PROVIDER_ID = "fcm-router";
 const ROUTER_MODEL_ID = "fcm";
@@ -134,7 +136,7 @@ function extractModelRows(health) {
 async function cmdStatus() {
   const health = await routerHealth();
   if (!health || health.error) {
-    say("▶ FCM 网关: 未运行(azure: " + (health?.error ?? "无响应") + ")");
+    say("▶ FCM 网关: 未运行(" + (health?.error ?? "无响应") + ")");
     say("  启动: free-coding-models --daemon-bg");
   } else {
     const routerConfig = readFcmRouterConfig();
