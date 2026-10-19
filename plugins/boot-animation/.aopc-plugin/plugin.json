@@ -1,0 +1,20 @@
+{
+  "name": "boot-animation",
+  "version": "0.1.0",
+  "description": "自定义 AOPC 启动画面：在插件目录放置 boot.mp4/boot.webm/boot.gif/boot.html，AOPC 启动时全屏播放",
+  "description_i18n": {
+    "en": "Custom AOPC boot animation: drop boot.mp4/boot.webm/boot.gif/boot.html into the plugin dir and AOPC plays it full-screen on launch.",
+    "zh-CN": "自定义 AOPC 启动画面：在插件目录放置 boot.mp4/boot.webm/boot.gif/boot.html，AOPC 启动时全屏播放。"
+  },
+  "author": {
+    "name": "liuhongjian"
+  },
+  "license": "MIT",
+  "commands": "commands",
+  "mcpServers": {
+    "boot-animation": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/server.mjs"]
+    }
+  }
+}
