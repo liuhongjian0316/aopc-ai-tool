@@ -10,7 +10,7 @@ AOPC 桌面本体在创建主窗口前会扫描**已启用插件**的安装目�
 <插件目录>/boot-animation/boot.mp4 | boot.webm | boot.gif | boot.html
 ```
 
-找到即通过 `aopc-media` 协议授权后注入启动壳（index.html）：视频用全屏 `<video>`（cover 填充、静音自动播），HTML 用全屏 sandbox `<iframe>`（时长读页内 `<meta name="aopc-splash-duration-ms">`，默认 5s，上限 20s）。未找到或解析失败时回落默认启动 logo，任何情况都不会卡在启动画面。
+找到即通过 `aopc-media` 协议授权后注入启动壳（index.html）：视频用全屏 `<video>`（cover 填充、自动连声音播放），HTML 用全屏 sandbox `<iframe>`（时长读页内 `<meta name="aopc-splash-duration-ms">`，默认 5s，上限 20s）。未找到或解析失败时回落默认启动 logo，任何情况都不会卡在启动画面。
 
 ## 使用
 
@@ -26,7 +26,7 @@ AOPC 桌面本体在创建主窗口前会扫描**已启用插件**的安装目�
 
 - 视频 1080p、10 秒以内、≤50MB、H.264 + faststart（moov 前置）；
 - HTML 页自包含（不引外链），需要控制时长时在页内加 `<meta name="aopc-splash-duration-ms" content="4000">`；
-- 播放期间点击或按任意键跳过；20 秒看门狗强制兜底。
+- 播放期间点击或按任意键跳过；最长播放时长受插件设置控制。
 
 ## License
 

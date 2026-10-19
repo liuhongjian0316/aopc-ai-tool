@@ -39,7 +39,7 @@
         "en": "Custom AOPC boot animation: plays boot.mp4/webm/gif/html from the plugin dir on launch.",
         "zh-CN": "自定义 AOPC 启动画面：播放插件目录内的 boot.mp4/webm/gif/html，重启 AOPC 生效。"
       },
-      "version": "0.2.0",
+      "version": "0.2.1",
       "author": {
         "name": "liuhongjian"
       },

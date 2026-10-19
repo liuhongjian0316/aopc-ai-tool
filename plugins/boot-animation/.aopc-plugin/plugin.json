@@ -1,6 +1,6 @@
 {
   "name": "boot-animation",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "自定义 AOPC 启动画面：在插件目录放置 boot.mp4/boot.webm/boot.gif/boot.html，AOPC 启动时全屏播放",
   "description_i18n": {
     "en": "Custom AOPC boot animation: drop boot.mp4/boot.webm/boot.gif/boot.html into the plugin dir and AOPC plays it full-screen on launch.",
