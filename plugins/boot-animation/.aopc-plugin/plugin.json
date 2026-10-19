@@ -1,6 +1,6 @@
 {
   "name": "boot-animation",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "自定义 AOPC 启动画面：在插件目录放置 boot.mp4/boot.webm/boot.gif/boot.html，AOPC 启动时全屏播放",
   "description_i18n": {
     "en": "Custom AOPC boot animation: drop boot.mp4/boot.webm/boot.gif/boot.html into the plugin dir and AOPC plays it full-screen on launch.",
@@ -17,6 +17,20 @@
       "args": [
         "${CLAUDE_PLUGIN_ROOT}/mcp-server/server.mjs"
       ]
+    }
+  },
+  "userConfig": {
+    "enabled": {
+      "type": "boolean",
+      "title": "启用自定义启动画面",
+      "description": "关闭后 AOPC 启动回落默认 logo 动画（优先级高于插件目录内是否有动画文件）。重启 AOPC 生效。",
+      "default": true
+    },
+    "durationMs": {
+      "type": "number",
+      "title": "动画最长播放时长（毫秒）",
+      "description": "超过该时长自动进入主界面（视频天然有 ended 事件，此项是超时保护）。范围 1000-30000，默认 20000。",
+      "default": 20000
     }
   }
 }
