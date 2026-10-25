@@ -1,0 +1,71 @@
+// desktop-pet 默认配置（JSONC：允许 // 与 /* */ 注释）。
+// 三层合并：内置默认（本文件）→ <AOPC_PLUGIN_DATA>/config.jsonc（用户层，整段覆盖同名顶层键）
+//          → packs/<名>-config.json（种类条目级覆盖）。
+// 字段语义与 dsh-pet 对齐，完整说明见本插件 README。
+{
+  // 每只宠物的实例级配置：id 唯一（程序定位）；name 显示名可重复；size = 包围盒宽 px；
+  // display: web 预留（AOPC 无浏览器 overlay，等同 desktop）/ desktop / none；
+  // position: 初始落点（corner + margin，工作区坐标）。pack: 素材包目录名（packs/<pack>/）。
+  "pets": [
+    {
+      "id": "duoduo",
+      "name": "小艾",
+      "pack": "dsh",
+      "size": 462,
+      "balanceEnabled": false,
+      "whisperEnabled": true,
+      "workStatusEnabled": true,
+      "fixedEnabled": false,
+      "display": "desktop",
+      "position": { "corner": "bottom-right", "marginX": 60, "marginY": 40 }
+    }
+  ],
+
+  // 随机动画链权重（动画播完掷骰）：分类合计与 idle/turn/move 竞争。
+  // fixedEnabled=true 的宠物 turn/move 按 0 处理（不自己转向/走动）。
+  "animationWeights": { "idle": 10, "turn": 5, "move": 5 },
+
+  // 事件刷新周期（秒）：whisper = 定时碎碎念；balance = 余额档位动画的保留周期（AOPC 版由接口触发，此项仅控制气泡时长兜底）。
+  "eventsRefreshSec": { "whisper": 300, "balance": 1800 },
+
+  // 拖拽/接口抛掷共用的物理参数（与 dsh-pet 默认一致）；totalPower 由 userConfig.physicsPower 注入。
+  "physics": {
+    "gravity": 1400,
+    "restitution": 0.78,
+    "groundFriction": 2.5,
+    "ceilingBounce": true,
+    "throwPower": 1,
+    "petCollision": true
+  },
+
+  // 是否锁定在当前屏（true = 漫游与抛掷都只在所在屏内活动）
+  "confineToScreen": false,
+
+  // 碎碎念短语池（定时/点播时随机抽一句；Agent 通过 pet_say 工具可说任意话）。
+  // AOPC 版的碎碎念默认不调用 LLM（原版由 DSH 宿主调模型）——想让宠物「有性格地说话」，
+  // 在会话里让 Agent 调 pet_say / pet_whisper，或给宠物配置 webhook（见 README）。
+  "whisperPhrases": [
+    "今天也要加油鸭～",
+    "（伸懒腰）坐了一下午啦…",
+    "编译要跑多久嘛，等得都睡着了",
+    "测试全绿！好耶！",
+    "（盯着进度条）…还没到 50%",
+    "主人记得喝水哦",
+    "刚刚那个报错，好像是因为少了个分号？",
+    "下班啦下班啦！"
+  ],
+
+  // 工作状态气泡文案：外层下标 = 档位 0..5（thinking/working/result/waiting/success/error），
+  // 内层每档随机抽一句；整字段缺省 = 只播动画不弹字。
+  "workStatusTexts": [
+    ["让我想想…", "在构思了…"],
+    ["努力工作中…", "敲键盘中…"],
+    ["整理一下结果…"],
+    ["等你确认哦"],
+    ["搞定！"],
+    ["呜…出错了"]
+  ],
+
+  // 通知开关：Agent/接口触发 notify 时，若宠物窗口未聚焦则弹系统通知。
+  "notificationsEnabled": true
+}

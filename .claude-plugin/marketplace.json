@@ -51,6 +51,28 @@
         "startup",
         "aopc"
       ]
+    },
+    {
+      "name": "desktop-pet",
+      "source": "./plugins/desktop-pet",
+      "description": "AOPC 桌面宠物：透明置顶悬浮窗 + 物理交互（拖拽/甩抛/弹弓/互撞）+ 多屏漫游 + 工作状态联动 + 碎碎念气泡 + HTTP API，复刻 dsh-pet 功能",
+      "description_i18n": {
+        "en": "AOPC desktop pet: transparent always-on-top floating windows, physics interactions (drag/throw/slingshot/collision), multi-display roaming, work-status animations, whisper bubbles and an HTTP API. A feature port of dsh-pet.",
+        "zh-CN": "AOPC 桌面宠物：透明置顶悬浮窗 + 物理交互（拖拽/甩抛/弹弓/互撞）+ 多屏漫游 + 工作状态联动 + 碎碎念气泡 + HTTP API，复刻 dsh-pet 功能"
+      },
+      "version": "0.1.0",
+      "author": {
+        "name": "liuhongjian"
+      },
+      "license": "MIT",
+      "category": "customization",
+      "keywords": [
+        "desktop-pet",
+        "pet",
+        "dsh-pet",
+        "electron",
+        "overlay"
+      ]
     }
   ]
 }

@@ -2,3 +2,4 @@
 .idea/
 *.log
 node_modules/
+plugins/desktop-pet/.data/
