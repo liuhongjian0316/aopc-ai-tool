@@ -36,7 +36,7 @@
     box-shadow: 0 calc(var(--f) * 0.1978) calc(var(--f) * 0.7692) rgba(0, 0, 0, 0.14), 0 1px 3px rgba(0, 0, 0, 0.08);
     backdrop-filter: blur(6px);
     opacity: 0;
-    transition: opacity 0.25s ease;
+    transition: opacity 0.25s ease, transform 0.25s ease;
     white-space: normal;
     overflow-wrap: break-word;
     pointer-events: none;
@@ -48,7 +48,11 @@
     border-top-color: rgba(255, 255, 255, 0.92); border-bottom: none;
   }
   .pet-bubble.show { opacity: 1; }
-  .pet-bubble.show.is-fading { opacity: 0; }
+  /* 消失动画：先放大一点再淡出（两段都走 0.25s 过渡） */
+  .pet-bubble.show.is-fading {
+    opacity: 0;
+    transform: translateX(-50%) scale(1.15);
+  }
   /* 碎碎念变体：字号 ×0.7473（dsh 同系数），宽度下限更窄 */
   .pet-bubble.dsh-whisper { font-size: calc(var(--f) * 0.7473); min-width: calc(var(--f) * 2.1978); }
   .pet-bubble.has-img { min-width: 0; }

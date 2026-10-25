@@ -1059,6 +1059,18 @@ function startHttpApi() {
           require("electron").shell.openExternal(body.url);
           return json(res, 200, { ok: true });
         }
+        case "POST /debug/eval": {
+          // 测试专用：在宠物窗口执行 JS 并返回结果（用于无头验证 UI 行为）
+          const body = await readBody(req);
+          const pet = resolvePet(body.pet, res);
+          if (!pet?.win) return json(res, 400, { error: "pet window not ready" });
+          try {
+            const result = await pet.win.webContents.executeJavaScript(body.code, true);
+            return json(res, 200, { ok: true, result });
+          } catch (error) {
+            return json(res, 200, { ok: false, error: error?.message });
+          }
+        }
         case "GET /version":
           return json(res, 200, { version: PLUGIN_VERSION });
         case "GET /quit":
