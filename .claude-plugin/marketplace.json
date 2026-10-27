@@ -82,7 +82,7 @@
         "en": "Douyin account pilot: RPA main channel (creator-center QR login, video & scheduled publishing) + official API channel (data/comments) + ops skill suite.",
         "zh-CN": "抖音账号托管助手：RPA 主通道（创作者中心扫码登录、视频/定时发布）+ 官方 API 通道（数据/评论）+ 运营技能套件"
       },
-      "version": "0.2.0",
+      "version": "0.2.1",
       "author": {
         "name": "liuhongjian"
       },

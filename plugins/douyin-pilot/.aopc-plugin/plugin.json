@@ -1,6 +1,6 @@
 {
   "name": "douyin-pilot",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "抖音账号托管助手：RPA 主通道（创作者中心扫码登录、视频发布、定时发布）+ 官方 API 通道（授权/数据/评论，需资质）+ 数据快照 + 评论回复与私信规则",
   "description_i18n": {
     "en": "Douyin account pilot: RPA main channel (creator-center QR login, video & scheduled publishing) + official API channel (OAuth/data/comments, requires qualification) + data snapshots + comment replies and DM rules.",
@@ -65,11 +65,7 @@
     "apiMode": {
       "type": "string",
       "title": "接口版本",
-      "description": "v1 = /api/douyin/v1/* 新版路径；legacy = /video/create/ 等旧版路径。以应用控制台实际开通为准，见 README 接口核对清单。",
-      "enum": [
-        "v1",
-        "legacy"
-      ],
+      "description": "填 v1（= /api/douyin/v1/* 新版路径，默认）或 legacy（= /video/create/ 等旧版路径）。以应用控制台实际开通为准，见 README 接口核对清单。",
       "default": "v1"
     },
     "dailyPublishCap": {
