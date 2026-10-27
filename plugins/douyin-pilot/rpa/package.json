@@ -1,0 +1,10 @@
+{
+  "name": "douyin-pilot-rpa",
+  "version": "0.2.0",
+  "private": true,
+  "description": "douyin-pilot 的 RPA worker 依赖（创作者中心自动化，主通道=路线B）",
+  "type": "module",
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}

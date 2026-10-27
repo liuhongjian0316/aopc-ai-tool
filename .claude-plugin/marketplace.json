@@ -73,6 +73,28 @@
         "electron",
         "overlay"
       ]
+    },
+    {
+      "name": "douyin-pilot",
+      "source": "./plugins/douyin-pilot",
+      "description": "抖音账号托管助手：RPA 主通道（创作者中心扫码登录、视频/定时发布）+ 官方 API 通道（数据/评论）+ 运营技能套件",
+      "description_i18n": {
+        "en": "Douyin account pilot: RPA main channel (creator-center QR login, video & scheduled publishing) + official API channel (data/comments) + ops skill suite.",
+        "zh-CN": "抖音账号托管助手：RPA 主通道（创作者中心扫码登录、视频/定时发布）+ 官方 API 通道（数据/评论）+ 运营技能套件"
+      },
+      "version": "0.2.0",
+      "author": {
+        "name": "liuhongjian"
+      },
+      "license": "MIT",
+      "category": "social-media",
+      "keywords": [
+        "douyin",
+        "social-media",
+        "automation",
+        "analytics",
+        "aopc"
+      ]
     }
   ]
 }

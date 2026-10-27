@@ -1,0 +1,94 @@
+{
+  "name": "douyin-pilot",
+  "version": "0.2.0",
+  "description": "抖音账号托管助手：RPA 主通道（创作者中心扫码登录、视频发布、定时发布）+ 官方 API 通道（授权/数据/评论，需资质）+ 数据快照 + 评论回复与私信规则",
+  "description_i18n": {
+    "en": "Douyin account pilot: RPA main channel (creator-center QR login, video & scheduled publishing) + official API channel (OAuth/data/comments, requires qualification) + data snapshots + comment replies and DM rules.",
+    "zh-CN": "抖音账号托管助手：RPA 主通道（创作者中心扫码登录、视频发布、定时发布）+ 官方 API 通道（授权/数据/评论，需资质）+ 数据快照 + 评论回复与私信规则"
+  },
+  "author": {
+    "name": "liuhongjian"
+  },
+  "license": "MIT",
+  "keywords": [
+    "douyin",
+    "social-media",
+    "automation",
+    "analytics",
+    "aopc"
+  ],
+  "mcpServers": {
+    "douyin": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "${AOPC_PLUGIN_ROOT}/mcp-server/server.mjs"
+      ],
+      "env": {
+        "AOPC_PLUGIN_DATA": "${AOPC_PLUGIN_DATA}",
+        "DOUYIN_CLIENT_KEY": "${user_config.clientKey}",
+        "DOUYIN_CLIENT_SECRET": "${user_config.clientSecret}",
+        "DOUYIN_REDIRECT_URI": "${user_config.redirectUri}",
+        "DOUYIN_SCOPES": "${user_config.scopes}",
+        "DOUYIN_API_MODE": "${user_config.apiMode}",
+        "DOUYIN_DAILY_PUBLISH_CAP": "${user_config.dailyPublishCap}",
+        "DOUYIN_MIN_PUBLISH_INTERVAL_MIN": "${user_config.minPublishIntervalMin}",
+        "DOUYIN_RPA_HEADLESS": "${user_config.rpaHeadless}"
+      }
+    }
+  },
+  "userConfig": {
+    "clientKey": {
+      "type": "string",
+      "title": "应用 client_key",
+      "description": "抖音开放平台「网站应用/移动应用」的 client_key。也可稍后用 dy_config_set 工具写入。留空则插件只读不可发布。",
+      "default": ""
+    },
+    "clientSecret": {
+      "type": "string",
+      "title": "应用 client_secret",
+      "description": "抖音开放平台 client_secret。仅保存在本机插件数据目录，不会上传。",
+      "default": ""
+    },
+    "redirectUri": {
+      "type": "string",
+      "title": "OAuth 回调地址",
+      "description": "开放平台控制台登记的授权回调域。本机监听模式下填 http://127.0.0.1:8765/callback；若平台只允许线上域名，用手动粘贴 code 模式。",
+      "default": "http://127.0.0.1:8765/callback"
+    },
+    "scopes": {
+      "type": "string",
+      "title": "授权 scope 列表",
+      "description": "逗号分隔。按应用实际开通的能力裁剪：user_info,video.create,video.data,video.list,comment.list,comment.manage",
+      "default": "user_info,video.create,video.data,video.list,comment.list,comment.manage"
+    },
+    "apiMode": {
+      "type": "string",
+      "title": "接口版本",
+      "description": "v1 = /api/douyin/v1/* 新版路径；legacy = /video/create/ 等旧版路径。以应用控制台实际开通为准，见 README 接口核对清单。",
+      "enum": [
+        "v1",
+        "legacy"
+      ],
+      "default": "v1"
+    },
+    "dailyPublishCap": {
+      "type": "number",
+      "title": "单账号每日发布上限",
+      "description": "风控保护：单账号每天最多自动发布条数，超出需 force=true。",
+      "default": 5
+    },
+    "minPublishIntervalMin": {
+      "type": "number",
+      "title": "两次发布最小间隔（分钟）",
+      "description": "风控保护：同一账号两次发布之间的最小间隔，低于该值需 force=true。",
+      "default": 30
+    },
+    "rpaHeadless": {
+      "type": "boolean",
+      "title": "RPA 无头模式",
+      "description": "开启后发布过程在后台静默进行（不弹浏览器窗口）。风控角度建议保持关闭（有头窗口更稳）。扫码登录始终弹窗。",
+      "default": false
+    }
+  }
+}
