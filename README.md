@@ -23,8 +23,11 @@ aopc-ai-tool/
 
 | 插件        | 版本   | 说明                                                         |
 | ----------- | ------ | ------------------------------------------------------------ |
-| fcm-bridge  | 0.1.0  | AOPC 会话内查看与切换 free-coding-models 免费模型路由（`/fcm`） |
+| fcm-bridge  | 0.1.1  | AOPC 会话内查看与切换 free-coding-models 免费模型路由（`/fcm`） |
+| freellm-bridge | 0.2.0 | AOPC 会话内接入 [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi) 免费模型聚合网关：查看网关与可用模型、一键切换默认模型（`/freellm`） |
+| boot-animation | 0.2.1 | 自定义 AOPC 启动画面：播放插件目录内的 boot.mp4/webm/gif/html |
 | desktop-pet | 0.1.0  | AOPC 桌面宠物：透明置顶悬浮窗、拖拽/甩抛/弹弓/互撞物理、多屏漫游、工作状态六档联动、碎碎念气泡、HTTP API（复刻 [dsh-pet](https://github.com/PC2005-cloud/dsh-pet)） |
+| douyin-pilot | 0.2.1 | 抖音账号托管助手：RPA 主通道（创作者中心扫码登录、视频/定时发布）+ 官方 API 通道（数据/评论）+ 运营技能套件 |
 
 ## 安装使用
 

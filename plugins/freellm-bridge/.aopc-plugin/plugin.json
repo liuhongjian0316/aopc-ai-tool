@@ -1,0 +1,10 @@
+{
+  "name": "freellm-bridge",
+  "version": "0.2.0",
+  "description": "AOPC 会话内接入 FreeLLMAPI 免费模型聚合网关：查看网关与可用模型、一键切换默认模型(/freellm 命令)",
+  "author": {
+    "name": "liuhongjian"
+  },
+  "license": "MIT",
+  "commands": "commands"
+}

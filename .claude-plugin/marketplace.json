@@ -18,7 +18,7 @@
         "en": "Inspect and switch free-coding-models (FCM) free model routing from an AOPC session via the /fcm command.",
         "zh-CN": "AOPC 会话内查看与切换 free-coding-models 免费模型路由(/fcm 命令)"
       },
-      "version": "0.1.1",
+      "version": "0.2.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -28,6 +28,28 @@
         "fcm",
         "free-coding-models",
         "model-router",
+        "aopc"
+      ]
+    },
+    {
+      "name": "freellm-bridge",
+      "source": "./plugins/freellm-bridge",
+      "description": "AOPC 会话内接入 FreeLLMAPI 免费模型聚合网关：查看网关与可用模型、一键切换默认模型(/freellm 命令)",
+      "description_i18n": {
+        "en": "Wire AOPC to a local FreeLLMAPI gateway from a session: inspect the router and its ready models, switch AOPC's default model (/freellm command).",
+        "zh-CN": "AOPC 会话内接入 FreeLLMAPI 免费模型聚合网关：查看网关与可用模型、一键切换默认模型(/freellm 命令)"
+      },
+      "version": "0.1.1",
+      "author": {
+        "name": "liuhongjian"
+      },
+      "license": "MIT",
+      "category": "developer-tools",
+      "keywords": [
+        "freellmapi",
+        "free-llm",
+        "model-router",
+        "openai-compatible",
         "aopc"
       ]
     },
