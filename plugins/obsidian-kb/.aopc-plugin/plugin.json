@@ -1,0 +1,141 @@
+{
+  "name": "obsidian-kb",
+  "version": "0.1.0",
+  "description": "Obsidian 知识库集成：读取/搜索/创建/编辑笔记、双向链接图谱、Canvas 画布、Dataview 查询、UI 面板可视化浏览，支持加密 Vault 与同步冲突处理",
+  "description_i18n": {
+    "en": "Obsidian Knowledge Base integration: read/search/create/edit notes, bidirectional link graph, Canvas, Dataview queries, UI panel browsing, with encrypted vault and sync conflict handling",
+    "zh-CN": "Obsidian 知识库集成：读取/搜索/创建/编辑笔记、双向链接图谱、Canvas 画布、Dataview 查询、UI 面板可视化浏览，支持加密 Vault 与同步冲突处理"
+  },
+  "author": {
+    "name": "liuhongjian"
+  },
+  "license": "MIT",
+  "keywords": [
+    "obsidian",
+    "knowledge-base",
+    "notes",
+    "markdown",
+    "graph",
+    "canvas",
+    "dataview",
+    "aopc"
+  ],
+  "skills": "skills",
+  "agents": "agents",
+  "mcpServers": {
+    "obsidian": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "${AOPC_PLUGIN_ROOT}/dist/server.mjs"
+      ],
+      "cwd": "${AOPC_PROJECT_DIR}",
+      "env": {
+        "AOPC_WORKSPACE_ROOT": "${AOPC_PROJECT_DIR}",
+        "AOPC_PLUGIN_DATA": "${AOPC_PLUGIN_DATA}",
+        "OBSIDIAN_VAULT_PATH": "${user_config.vaultPath}",
+        "OBSIDIAN_INDEX_ON_STARTUP": "${user_config.indexOnStartup}",
+        "OBSIDIAN_WATCH_CHANGES": "${user_config.watchChanges}",
+        "OBSIDIAN_MAX_INDEX_SIZE_MB": "${user_config.maxIndexSizeMB}",
+        "OBSIDIAN_ENCRYPTION_ENABLED": "${user_config.encryption.enabled}",
+        "OBSIDIAN_ENCRYPTION_METHOD": "${user_config.encryption.method}",
+        "OBSIDIAN_ENCRYPTION_KEY_PATH": "${user_config.encryption.keyPath}",
+        "OBSIDIAN_ENCRYPTION_PASSPHRASE_ENV": "${user_config.encryption.passphraseEnv}",
+        "OBSIDIAN_ENCRYPTION_CUSTOM_COMMAND": "${user_config.encryption.customCommand}",
+        "OBSIDIAN_SYNC_CONFLICT_STRATEGY": "${user_config.syncConflictStrategy}",
+        "OBSIDIAN_INDEX_EXCLUDE_PATTERNS": "${user_config.indexExcludePatterns}"
+      },
+      "isolation": "workspace"
+    }
+  },
+  "userConfig": {
+    "vaultPath": {
+      "type": "string",
+      "title": "Obsidian Vault 路径",
+      "description": "绝对路径。留空自动检测 ~/Documents/知识库/AIJIUOPC/",
+      "default": ""
+    },
+    "indexOnStartup": {
+      "type": "boolean",
+      "title": "启动时全量索引",
+      "description": "开启后每次插件加载重建搜索索引；关闭则仅增量更新",
+      "default": true
+    },
+    "watchChanges": {
+      "type": "boolean",
+      "title": "监听文件变化",
+      "description": "使用 chokidar 实时同步外部编辑（Obsidian/同步工具修改）",
+      "default": true
+    },
+    "maxIndexSizeMB": {
+      "type": "number",
+      "title": "最大索引大小 (MB)",
+      "default": 100,
+      "description": "超过此大小自动分片或仅索引元数据"
+    },
+    "encryption": {
+      "type": "object",
+      "title": "加密 Vault 处理",
+      "description": "若 vault 使用加密插件，配置解密方式",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "title": "启用加密支持"
+        },
+        "method": {
+          "type": "string",
+          "enum": ["age", "gpg", "openssl", "custom"],
+          "default": "age",
+          "title": "解密方式"
+        },
+        "keyPath": {
+          "type": "string",
+          "title": "密钥文件路径",
+          "description": "age/gpg/openssl 密钥文件绝对路径"
+        },
+        "passphraseEnv": {
+          "type": "string",
+          "title": "密码环境变量名",
+          "description": "存储解密密码的环境变量名（推荐而非明文配置）"
+        },
+        "customCommand": {
+          "type": "string",
+          "title": "自定义解密命令",
+          "description": "模板：{input} 为加密文件路径，{output} 为解密后输出路径。例如：openssl enc -d -aes-256-cbc -in {input} -out {output} -pass env:MY_PASS"
+        }
+      }
+    },
+    "syncConflictStrategy": {
+      "type": "string",
+      "title": "同步冲突策略",
+      "enum": ["readonly", "auto-merge", "prompt"],
+      "default": "readonly",
+      "description": "检测到外部修改时的处理方式：readonly=拒绝写入并提示，auto-merge=尝试合并，prompt=每次询问"
+    },
+    "indexExcludePatterns": {
+      "type": "array",
+      "title": "索引排除模式",
+      "items": {
+        "type": "string"
+      },
+      "default": [".obsidian/**", ".git/**", ".trash/**", "*.canvas", "*.base"],
+      "description": "glob 模式，不参与全文索引"
+    }
+  },
+  "ui": {
+    "surfaces": [
+      {
+        "id": "obsidian",
+        "title": {
+          "zh-CN": "Obsidian 知识库",
+          "en-US": "Obsidian KB"
+        },
+        "icon": "book-open",
+        "server": "obsidian",
+        "resourceUri": "ui://obsidian/panel.html",
+        "availability": "session"
+      }
+    ]
+  }
+}

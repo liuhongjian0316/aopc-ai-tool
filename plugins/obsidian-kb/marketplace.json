@@ -1,0 +1,41 @@
+{
+  "id": "obsidian-kb",
+  "name": "Obsidian Knowledge Base",
+  "version": "0.1.0",
+  "description": "Read, search, create, and edit Obsidian notes with bidirectional link graph, Canvas parsing, Dataview queries, and UI panel browsing. Supports encrypted vaults and sync conflict handling.",
+  "author": "liuhongjian",
+  "license": "MIT",
+  "keywords": ["obsidian", "knowledge-base", "notes", "markdown", "graph", "canvas", "dataview"],
+  "entry": {
+    "mcpServer": "obsidian",
+    "uiSurface": "obsidian"
+  },
+  "dependencies": {
+    "node": ">=20.0.0",
+    "fsevents": ">=1.0.0"
+  },
+  "compatibility": {
+    "aopc": ">=0.1.0",
+    "obsidian": ">=1.0.0"
+  },
+  "screenshots": [],
+  "changelog": [
+    {
+      "version": "0.1.0",
+      "date": "2026-10-31",
+      "changes": [
+        "Initial release: MCP server + UI panel integration",
+        "Full CRUD operations on notes",
+        "Bidirectional link graph with visualization",
+        "Dataview query execution",
+        "Canvas file parsing",
+        "Encrypted vault support (age, gpg, openssl, custom)",
+        "Incremental indexing with chokidar",
+        "Sync conflict handling strategies"
+      ]
+    }
+  ],
+  "licenseFile": "LICENSE",
+  "readmeFile": "README.md",
+  "icon": "book-open"
+}
