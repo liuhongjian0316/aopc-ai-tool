@@ -21,7 +21,6 @@
     "aopc"
   ],
   "skills": "skills",
-  "agents": "agents",
   "mcpServers": {
     "obsidian": {
       "type": "stdio",
@@ -37,11 +36,11 @@
         "OBSIDIAN_INDEX_ON_STARTUP": "${user_config.indexOnStartup}",
         "OBSIDIAN_WATCH_CHANGES": "${user_config.watchChanges}",
         "OBSIDIAN_MAX_INDEX_SIZE_MB": "${user_config.maxIndexSizeMB}",
-        "OBSIDIAN_ENCRYPTION_ENABLED": "${user_config.encryption.enabled}",
-        "OBSIDIAN_ENCRYPTION_METHOD": "${user_config.encryption.method}",
-        "OBSIDIAN_ENCRYPTION_KEY_PATH": "${user_config.encryption.keyPath}",
-        "OBSIDIAN_ENCRYPTION_PASSPHRASE_ENV": "${user_config.encryption.passphraseEnv}",
-        "OBSIDIAN_ENCRYPTION_CUSTOM_COMMAND": "${user_config.encryption.customCommand}",
+        "OBSIDIAN_ENCRYPTION_ENABLED": "${user_config.encryptionEnabled}",
+        "OBSIDIAN_ENCRYPTION_METHOD": "${user_config.encryptionMethod}",
+        "OBSIDIAN_ENCRYPTION_KEY_PATH": "${user_config.encryptionKeyPath}",
+        "OBSIDIAN_ENCRYPTION_PASSPHRASE_ENV": "${user_config.encryptionPassphraseEnv}",
+        "OBSIDIAN_ENCRYPTION_CUSTOM_COMMAND": "${user_config.encryptionCustomCommand}",
         "OBSIDIAN_SYNC_CONFLICT_STRATEGY": "${user_config.syncConflictStrategy}",
         "OBSIDIAN_INDEX_EXCLUDE_PATTERNS": "${user_config.indexExcludePatterns}"
       },
@@ -73,54 +72,47 @@
       "default": 100,
       "description": "超过此大小自动分片或仅索引元数据"
     },
-    "encryption": {
-      "type": "object",
-      "title": "加密 Vault 处理",
-      "description": "若 vault 使用加密插件，配置解密方式",
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": false,
-          "title": "启用加密支持"
-        },
-        "method": {
-          "type": "string",
-          "enum": ["age", "gpg", "openssl", "custom"],
-          "default": "age",
-          "title": "解密方式"
-        },
-        "keyPath": {
-          "type": "string",
-          "title": "密钥文件路径",
-          "description": "age/gpg/openssl 密钥文件绝对路径"
-        },
-        "passphraseEnv": {
-          "type": "string",
-          "title": "密码环境变量名",
-          "description": "存储解密密码的环境变量名（推荐而非明文配置）"
-        },
-        "customCommand": {
-          "type": "string",
-          "title": "自定义解密命令",
-          "description": "模板：{input} 为加密文件路径，{output} 为解密后输出路径。例如：openssl enc -d -aes-256-cbc -in {input} -out {output} -pass env:MY_PASS"
-        }
-      }
+    "encryptionEnabled": {
+      "type": "boolean",
+      "title": "启用加密支持",
+      "description": "若 vault 使用加密插件，开启后按解密方式处理加密文件",
+      "default": false
+    },
+    "encryptionMethod": {
+      "type": "string",
+      "title": "解密方式",
+      "description": "可选 age / gpg / openssl / custom，默认 age",
+      "default": "age"
+    },
+    "encryptionKeyPath": {
+      "type": "string",
+      "title": "密钥文件路径",
+      "description": "age/gpg/openssl 密钥文件绝对路径",
+      "default": ""
+    },
+    "encryptionPassphraseEnv": {
+      "type": "string",
+      "title": "密码环境变量名",
+      "description": "存储解密密码的环境变量名（推荐而非明文配置）",
+      "default": ""
+    },
+    "encryptionCustomCommand": {
+      "type": "string",
+      "title": "自定义解密命令",
+      "description": "模板：{input} 为加密文件路径，{output} 为解密后输出路径。例如：openssl enc -d -aes-256-cbc -in {input} -out {output} -pass env:MY_PASS",
+      "default": ""
     },
     "syncConflictStrategy": {
       "type": "string",
       "title": "同步冲突策略",
-      "enum": ["readonly", "auto-merge", "prompt"],
-      "default": "readonly",
-      "description": "检测到外部修改时的处理方式：readonly=拒绝写入并提示，auto-merge=尝试合并，prompt=每次询问"
+      "description": "可选 readonly / auto-merge / prompt。检测到外部修改时的处理方式：readonly=拒绝写入并提示，auto-merge=尝试合并，prompt=每次询问",
+      "default": "readonly"
     },
     "indexExcludePatterns": {
-      "type": "array",
+      "type": "string",
       "title": "索引排除模式",
-      "items": {
-        "type": "string"
-      },
-      "default": [".obsidian/**", ".git/**", ".trash/**", "*.canvas", "*.base"],
-      "description": "glob 模式，不参与全文索引"
+      "description": "逗号分隔的 glob 模式，匹配的文件不参与全文索引。默认 .obsidian/**,.git/**,.trash/**,*.canvas,*.base",
+      "default": ".obsidian/**,.git/**,.trash/**,*.canvas,*.base"
     }
   },
   "ui": {
