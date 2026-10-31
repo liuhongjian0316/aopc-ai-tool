@@ -117,6 +117,31 @@
         "analytics",
         "aopc"
       ]
+    },
+    {
+      "name": "obsidian-kb",
+      "source": "./plugins/obsidian-kb",
+      "description": "Obsidian 知识库集成：读取/搜索/创建/编辑笔记、双向链接图谱、Canvas 画布、Dataview 查询、UI 面板可视化浏览，支持加密 Vault 与同步冲突处理",
+      "description_i18n": {
+        "en": "Obsidian Knowledge Base integration: read/search/create/edit notes, bidirectional link graph, Canvas, Dataview queries, UI panel browsing, with encrypted vault and sync conflict handling",
+        "zh-CN": "Obsidian 知识库集成：读取/搜索/创建/编辑笔记、双向链接图谱、Canvas 画布、Dataview 查询、UI 面板可视化浏览，支持加密 Vault 与同步冲突处理"
+      },
+      "version": "0.1.0",
+      "author": {
+        "name": "liuhongjian"
+      },
+      "license": "MIT",
+      "category": "knowledge-base",
+      "keywords": [
+        "obsidian",
+        "knowledge-base",
+        "notes",
+        "markdown",
+        "graph",
+        "canvas",
+        "dataview",
+        "aopc"
+      ]
     }
   ]
 }
