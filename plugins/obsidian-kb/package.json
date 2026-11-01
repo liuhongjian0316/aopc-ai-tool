@@ -1,6 +1,6 @@
 {
   "name": "obsidian-kb",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Obsidian Knowledge Base integration for AOPC",
   "type": "module",
   "scripts": {
@@ -10,6 +10,7 @@
     "dev": "node --watch src/main.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^2.0.0",
     "chokidar": "^3.6.0",
     "gray-matter": "^4.0.3",
     "minisearch": "^7.1.0",
