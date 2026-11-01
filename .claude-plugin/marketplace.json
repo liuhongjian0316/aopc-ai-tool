@@ -126,7 +126,7 @@
         "en": "Obsidian Knowledge Base integration: read/search/create/edit notes, bidirectional link graph, Canvas, Dataview queries, UI panel browsing, with encrypted vault and sync conflict handling",
         "zh-CN": "Obsidian 知识库集成：读取/搜索/创建/编辑笔记、双向链接图谱、Canvas 画布、Dataview 查询、UI 面板可视化浏览，支持加密 Vault 与同步冲突处理"
       },
-      "version": "0.1.2",
+      "version": "0.1.3",
       "author": {
         "name": "liuhongjian"
       },
@@ -143,6 +143,13 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.1.3",
+          "date": "2026-11-01",
+          "changes": [
+            "vault_info 与 list_files 加入 tools/list 对外声明（此前仅面板内部实现，宿主按 tools/list 校验直接拒绝，面板文件树无法加载）"
+          ]
+        },
         {
           "version": "0.1.2",
           "date": "2026-11-01",

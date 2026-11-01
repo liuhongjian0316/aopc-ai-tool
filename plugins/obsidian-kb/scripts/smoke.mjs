@@ -103,8 +103,8 @@ async function testMCPServer() {
 
     const tools = await rpc(server, 2, "tools/list", {});
     const names = (tools.result?.tools ?? []).map((t) => t.name);
-    if (names.length < 11) {
-      console.error(`   ❌ tools/list returned ${names.length} tools`);
+    if (names.length < 13) {
+      console.error(`   ❌ tools/list returned ${names.length} tools (expect 13)`);
       return false;
     }
     console.log(`   ✅ tools/list: ${names.length} tools`);

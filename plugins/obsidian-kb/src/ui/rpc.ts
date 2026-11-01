@@ -9,7 +9,7 @@ let appPromise: Promise<App> | null = null;
 
 function getApp(): Promise<App> {
   if (!appPromise) {
-    const app = new App({ name: "obsidian-kb", version: "0.1.2" }, {}, { autoResize: false });
+    const app = new App({ name: "obsidian-kb", version: "0.1.3" }, {}, { autoResize: false });
     app.onhostcontextchanged = () => applyTheme(app);
     appPromise = app
       .connect()

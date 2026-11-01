@@ -9051,6 +9051,22 @@ var TOOLS = [
       },
       required: ["path"]
     }
+  },
+  {
+    name: "vault_info",
+    description: "Get vault info: root path, indexed document count, index build time",
+    inputSchema: {
+      type: "object",
+      properties: {}
+    }
+  },
+  {
+    name: "list_files",
+    description: "List all notes as a folder tree (path/name/type with children)",
+    inputSchema: {
+      type: "object",
+      properties: {}
+    }
   }
 ];
 function createServer(vault, indexer) {
@@ -9266,7 +9282,7 @@ function createServer(vault, indexer) {
       send(id, {
         protocolVersion: params?.protocolVersion ?? "2024-11-05",
         capabilities: { tools: {}, resources: {} },
-        serverInfo: { name: "obsidian-kb", version: "0.1.1" }
+        serverInfo: { name: "obsidian-kb", version: "0.1.3" }
       });
       return;
     }
