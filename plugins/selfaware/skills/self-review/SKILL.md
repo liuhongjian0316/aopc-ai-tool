@@ -1,0 +1,35 @@
+---
+name: self-review
+description: "周期复盘流程(观己 L4):汇总自我状态、错误史与反思日志,归纳行为模式,产出反思日志条目与自我模型/playbook 修订提案,经人审批落地。与 metacognition 的分工:那是单次任务级的自评与复盘,这是跨任务的周期复盘。"
+when_to_use: "Stop 提醒复盘债时;用户说『复盘一下』『你最近表现怎么样』时;/reflect 命令的执行主体"
+---
+
+# 周期复盘流程(观己 L4)
+
+复盘的价值在"定期发生",不在"一次做深"。按下面的标准流程走,别自由发挥成回忆录。
+
+## 数据采集(只读,不臆测)
+
+1. `self_state` — 本会话与子代理的 turn/工具/失败计数、上下文预算。
+2. `self_errors` — 聚合错误史:哪个工具、哪类签名在反复出现。
+3. `self_journal` action=query — 近期反思条目,看哪些 lesson 还没落地。
+4. (可选)Read `self/self-model.md` 与 `self/playbooks/` 现状。
+
+## 归纳(找模式,不数流水账)
+
+回答三个问题,每个都要有数据出处:
+1. **这段时间我哪类任务做得吃力?**(错误集中点、反复重试点)
+2. **自我模型和实际行为有没有偏差?**(自以为擅长但数据打脸的;数据证明已在进步的)
+3. **有哪些教训该固化成规则还没固化?**(journal 里 proposed 未落地的)
+
+## 产出(三条通道,缺一不可)
+
+1. **journal 条目**:调用 self_journal append,kind=`guanji_report`(深度复盘)或 `failure_postmortem`(清积压),body 写归纳结论。
+2. **自我模型修订提案**:若发现偏差,用 Edit 修改 `self/self-model.md` 对应段落——Edit 会触发权限审批,**人审通过才算数**;文件尾部的「变更记录」追加一行(日期+改动+依据 journal id)。
+3. **playbook 修订**:把 lesson 落成 `self/playbooks/<主题>.md` 里的一条规则,格式 `- [P1][日期] 规则一句话 ← journal#<id>`;没有现成主题文件就新建一个(文件名用 kebab-case,如 `verification-habits.md`)。
+
+## 纪律
+
+- 复盘产出必须可追溯:每条修订引用 journal id;journal 里查不到出处的规则不许写进 playbook。
+- 不在复盘里改自我模型以外的任何东西;不借复盘给自己加戏。
+- 轻量复盘(Stop 提醒触发的):只做"清积压"——把未落地的 lesson 落地,不重写自我模型;深度复盘(用户主动或 /reflect)才做全面修订。

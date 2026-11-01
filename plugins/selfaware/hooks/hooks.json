@@ -1,0 +1,74 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${AOPC_PLUGIN_ROOT}/hooks/observer.mjs"],
+            "enabled": true,
+            "timeoutMs": 10000
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${AOPC_PLUGIN_ROOT}/hooks/observer.mjs"],
+            "enabled": true,
+            "timeoutMs": 10000
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${AOPC_PLUGIN_ROOT}/hooks/observer.mjs"],
+            "enabled": true,
+            "timeoutMs": 10000
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${AOPC_PLUGIN_ROOT}/hooks/observer.mjs"],
+            "enabled": true,
+            "timeoutMs": 10000
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${AOPC_PLUGIN_ROOT}/hooks/observer.mjs"],
+            "enabled": true,
+            "timeoutMs": 10000
+          }
+        ]
+      }
+    ]
+  }
+}

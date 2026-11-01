@@ -169,6 +169,50 @@
           ]
         }
       ]
+    },
+    {
+      "name": "selfaware",
+      "source": "./plugins/selfaware",
+      "description": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进",
+      "description_i18n": {
+        "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
+        "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
+      },
+      "version": "0.2.0",
+      "author": {
+        "name": "liuhongjian"
+      },
+      "license": "Apache-2.0",
+      "category": "productivity",
+      "keywords": [
+        "self-awareness",
+        "metacognition",
+        "reflection",
+        "memory",
+        "agent",
+        "aopc"
+      ],
+      "changelog": [
+        {
+          "version": "0.2.0",
+          "date": "2026-11-02",
+          "changes": [
+            "新增 self_history:跨会话自传体记忆(会话列表、失败率趋势、累计统计)",
+            "SessionStart 自动播种自我档案与 playbooks 骨架(只创建不覆盖);playbook 规则聚合注入横幅(600 字符预算)——L4 闭环的规则真正进入上下文",
+            "新增 /self-check 真机自检命令:逐项验证 hook 注入、数据流、rollout 对应、子代理观测、派发名",
+            "修复:self_state 可能误选子代理会话为主会话(observer 现显式标记 sub);冒烟测试扩至 59 项全绿"
+          ]
+        },
+        {
+          "version": "0.1.0",
+          "date": "2026-11-02",
+          "changes": [
+            "首个版本:L1 观察器 hook(5 事件观测 + 第一人称注入)+ MCP 四工具(self_state/self_errors/self_usage/self_journal)",
+            "L2 元认知技能 + critic 子代理;L3 自我模型与 guanji 子代理;L4 self-review 技能与 /reflect 命令",
+            "44 项冒烟测试全绿(scripts/smoke.mjs);真机会话验证待做"
+          ]
+        }
+      ]
     }
   ]
 }
