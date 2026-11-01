@@ -58,37 +58,25 @@ const app = await build({
   logOverride: { "direct-eval": "silent" },
 });
 
-// Split large JS into chunked .txt resources
-const js = Buffer.from(app.outputFiles[0].contents);
-const scripts = [];
-for (let offset = 0; offset < js.length; ) {
-  let end = Math.min(offset + 4 * 1024 * 1024, js.length);
-  // Align to UTF-8 boundary
-  while (end < js.length && (js[end] & 0xc0) === 0x80) end++;
-  const name = `bundle-${scripts.length}.txt`;
-  scripts.push(name);
-  await writeFile(join(uiDir, name), js.subarray(offset, end));
-  offset = end;
-}
-await writeFile(join(uiDir, "assets.json"), JSON.stringify({ scripts }));
+// 面板经 MCP resources/read 以单个 HTML 字符串分发（ui:// 无相对路径可解析），
+// 必须自包含：CSS 与 JS 全部内联，转义 </script 防止提前闭合标签。
+const js = Buffer.from(app.outputFiles[0].contents)
+  .toString("utf-8")
+  .replaceAll("</script", "<\\/script");
+const css = await readFile(join(root, "src/ui/styles.css"), "utf-8");
 
-// Panel HTML — generated inline
+// Panel HTML — self-contained
 const panelHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${pluginJson.description_i18n["zh-CN"] || pluginJson.description}</title>
-<link rel="stylesheet" href="./panel.css">
+<style>${css}</style>
 </head>
 <body>
 <div id="root"></div>
-${scripts.map((s) => `<script src="${s}" onload="__loadNextScript()"></script>`).join("\n")}
-<script>self.__nextScripts=[];</script>
-<script>
-self.__loadNextScript=function(){if(self.__nextScripts.length){self.__nextScripts.shift().call()}};
-window.addEventListener("load",()=>{try{__renderPanel()}catch(e){document.getElementById("root").innerHTML="<pre style=color:red>"+e.message+"</pre>"}});
-</script>
+<script>${js}</script>
 </body>
 </html>`;
 await writeFile(join(uiDir, "panel.html"), panelHtml);
@@ -101,5 +89,5 @@ const totalBytes = Object.values(server.metafile?.outputs).reduce(
   0
 );
 process.stdout.write(
-  `obsidian-kb v${pkg.version}: server ${Math.round(totalBytes / 1024)} KiB, UI ${Math.round(js.length / 1024)} KiB (${scripts.length} chunks)\n`
+  `obsidian-kb v${pkg.version}: server ${Math.round(totalBytes / 1024)} KiB, UI ${Math.round(js.length / 1024)} KiB (self-contained panel.html)\n`
 );

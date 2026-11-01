@@ -1,11 +1,23 @@
 /**
  * MCP Server Implementation for Obsidian KB
- * Implements: initialize, tools/list, tools/call
+ * Implements: initialize, tools/list, tools/call, resources/list, resources/read
  */
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { Vault, type Note } from "./vault.js";
 import { Indexer } from "./indexer.js";
 import { parseCanvas } from "./parsers/canvas.js";
 import { parseDataviewQuery } from "./parsers/dataview.js";
+
+/** UI 面板资源（.aopc-plugin/plugin.json 的 ui.surfaces[].resourceUri）。 */
+const PANEL_URI = "ui://obsidian/panel.html";
+/** MCP Apps 面板 HTML 的 mimeType（UI_PLUGIN.md 契约）。 */
+const PANEL_MIME = "text/html;profile=mcp-app";
+
+/** 读取打包产物中的自包含面板 HTML（dist/server.mjs 相邻的 dist/ui/panel.html）。 */
+function readPanelHtml(): string {
+  return readFileSync(fileURLToPath(new URL("./ui/panel.html", import.meta.url)), "utf-8");
+}
 
 interface Tool {
   name: string;
@@ -393,8 +405,8 @@ export function createServer(vault: Vault, indexer: Indexer) {
     if (method === "initialize") {
       send(id, {
         protocolVersion: params?.protocolVersion ?? "2024-11-05",
-        capabilities: { tools: {} },
-        serverInfo: { name: "obsidian-kb", version: "0.1.0" }
+        capabilities: { tools: {}, resources: {} },
+        serverInfo: { name: "obsidian-kb", version: "0.1.1" }
       });
       return;
     }
@@ -408,6 +420,36 @@ export function createServer(vault: Vault, indexer: Indexer) {
 
     if (method === "tools/call") {
       callTool(params?.name ?? "", params?.arguments ?? {}).then((result) => send(id, result));
+      return;
+    }
+
+    if (method === "resources/list") {
+      send(id, {
+        resources: [
+          { uri: PANEL_URI, name: "Obsidian Knowledge Base Panel", mimeType: PANEL_MIME }
+        ]
+      });
+      return;
+    }
+
+    if (method === "resources/templates/list") {
+      send(id, { resourceTemplates: [] });
+      return;
+    }
+
+    if (method === "resources/read") {
+      const uri = params?.uri as string | undefined;
+      if (uri !== PANEL_URI) {
+        sendError(id, -32602, `Unknown resource: ${uri ?? "(missing uri)"}`);
+        return;
+      }
+      try {
+        send(id, {
+          contents: [{ uri: PANEL_URI, mimeType: PANEL_MIME, text: readPanelHtml() }]
+        });
+      } catch (err) {
+        sendError(id, -32603, `Failed to read panel: ${err instanceof Error ? err.message : String(err)}`);
+      }
       return;
     }
 

@@ -72,9 +72,8 @@ export function App() {
   );
 }
 
-export function renderPanel() {
-  const root = document.getElementById("root");
-  if (root) {
-    createRoot(root).render(React.createElement(App));
-  }
+// 脚本内联在 panel.html 末尾，DOM 已就绪，直接渲染。
+const root = document.getElementById("root");
+if (root) {
+  createRoot(root).render(React.createElement(App));
 }

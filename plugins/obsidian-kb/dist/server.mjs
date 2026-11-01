@@ -8836,6 +8836,10 @@ var require_chokidar = __commonJS({
   }
 });
 
+// src/server.ts
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 // src/parsers/canvas.ts
 function parseCanvas(content) {
   const parsed = JSON.parse(content);
@@ -8903,6 +8907,11 @@ function parseConditions(str2) {
 }
 
 // src/server.ts
+var PANEL_URI = "ui://obsidian/panel.html";
+var PANEL_MIME = "text/html;profile=mcp-app";
+function readPanelHtml() {
+  return readFileSync(fileURLToPath(new URL("./ui/panel.html", import.meta.url)), "utf-8");
+}
 var TOOLS = [
   {
     name: "open_note",
@@ -9256,8 +9265,8 @@ function createServer(vault, indexer) {
     if (method === "initialize") {
       send(id, {
         protocolVersion: params?.protocolVersion ?? "2024-11-05",
-        capabilities: { tools: {} },
-        serverInfo: { name: "obsidian-kb", version: "0.1.0" }
+        capabilities: { tools: {}, resources: {} },
+        serverInfo: { name: "obsidian-kb", version: "0.1.1" }
       });
       return;
     }
@@ -9268,6 +9277,33 @@ function createServer(vault, indexer) {
     }
     if (method === "tools/call") {
       callTool(params?.name ?? "", params?.arguments ?? {}).then((result) => send(id, result));
+      return;
+    }
+    if (method === "resources/list") {
+      send(id, {
+        resources: [
+          { uri: PANEL_URI, name: "Obsidian Knowledge Base Panel", mimeType: PANEL_MIME }
+        ]
+      });
+      return;
+    }
+    if (method === "resources/templates/list") {
+      send(id, { resourceTemplates: [] });
+      return;
+    }
+    if (method === "resources/read") {
+      const uri = params?.uri;
+      if (uri !== PANEL_URI) {
+        sendError(id, -32602, `Unknown resource: ${uri ?? "(missing uri)"}`);
+        return;
+      }
+      try {
+        send(id, {
+          contents: [{ uri: PANEL_URI, mimeType: PANEL_MIME, text: readPanelHtml() }]
+        });
+      } catch (err) {
+        sendError(id, -32603, `Failed to read panel: ${err instanceof Error ? err.message : String(err)}`);
+      }
       return;
     }
     if (method === "ping") {

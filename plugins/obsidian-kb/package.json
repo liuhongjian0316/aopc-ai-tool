@@ -1,6 +1,6 @@
 {
   "name": "obsidian-kb",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Obsidian Knowledge Base integration for AOPC",
   "type": "module",
   "scripts": {

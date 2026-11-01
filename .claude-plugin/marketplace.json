@@ -126,7 +126,7 @@
         "en": "Obsidian Knowledge Base integration: read/search/create/edit notes, bidirectional link graph, Canvas, Dataview queries, UI panel browsing, with encrypted vault and sync conflict handling",
         "zh-CN": "Obsidian 知识库集成：读取/搜索/创建/编辑笔记、双向链接图谱、Canvas 画布、Dataview 查询、UI 面板可视化浏览，支持加密 Vault 与同步冲突处理"
       },
-      "version": "0.1.0",
+      "version": "0.1.1",
       "author": {
         "name": "liuhongjian"
       },
@@ -141,6 +141,18 @@
         "canvas",
         "dataview",
         "aopc"
+      ],
+      "changelog": [
+        {
+          "version": "0.1.1",
+          "date": "2026-11-01",
+          "changes": [
+            "修复面板加载：MCP server 实现 resources/list 与 resources/read（text/html;profile=mcp-app）",
+            "panel.html 改为自包含产物：CSS/JS 全部内联（ui:// 资源无法解析相对引用）",
+            "面板自启动渲染；新增深色主题样式",
+            "userConfig 拍平为标量选项以通过 AOPC schema 校验"
+          ]
+        }
       ]
     }
   ]

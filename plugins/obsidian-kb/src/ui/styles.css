@@ -1,0 +1,251 @@
+/* obsidian-kb 面板样式：深色主题，跟随宿主暗色风格 */
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #161618;
+  color: #e4e4e7;
+  font: 14px/1.6 -apple-system, "PingFang SC", "Segoe UI", sans-serif;
+}
+
+#root { height: 100vh; }
+
+.obsidian-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ── 头部 ── */
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #2a2a2e;
+  flex: none;
+}
+
+.panel-title {
+  flex: 1;
+  font-weight: 600;
+  font-size: 13px;
+  color: #a1a1aa;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-count {
+  font-size: 12px;
+  color: #71717a;
+  background: #26262b;
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+/* ── Tab 栏 ── */
+.panel-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #2a2a2e;
+  flex: none;
+}
+
+.panel-tabs button {
+  background: transparent;
+  border: none;
+  color: #a1a1aa;
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.panel-tabs button:hover { background: #26262b; color: #e4e4e7; }
+
+.panel-tabs button.active {
+  background: #2f2f36;
+  color: #f4b04a;
+  font-weight: 600;
+}
+
+/* ── 主区布局 ── */
+.panel-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── 文件树 ── */
+.file-tree {
+  width: 240px;
+  flex: none;
+  overflow-y: auto;
+  border-right: 1px solid #2a2a2e;
+  padding: 8px 6px;
+}
+
+.tree-folder {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  color: #a1a1aa;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 6px;
+  user-select: none;
+}
+
+.tree-folder:hover { background: #26262b; }
+
+.file-tree button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: #d4d4d8;
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 8px 4px 24px;
+  border-radius: 6px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-tree button:hover { background: #26262b; color: #f4b04a; }
+.file-tree button.active { background: #2f2f36; color: #f4b04a; }
+.tree-error { color: #f87171; padding: 8px; font-size: 12px; }
+
+/* ── 笔记查看 ── */
+.note-viewer {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  min-width: 0;
+}
+
+.note-title { margin: 0 0 12px; font-size: 20px; color: #fafafa; }
+.note-heading { margin: 20px 0 8px; font-size: 15px; color: #e4e4e7; }
+.note-content { color: #d4d4d8; white-space: pre-wrap; word-break: break-word; }
+.note-empty { color: #52525b; padding: 32px; text-align: center; }
+.note-viewer .error { color: #f87171; }
+
+.frontmatter {
+  background: #1d1d21;
+  border: 1px solid #2a2a2e;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: #a1a1aa;
+  white-space: pre-wrap;
+}
+
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+
+.tag {
+  font-size: 11px;
+  color: #f4b04a;
+  background: rgba(244, 176, 74, 0.12);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.wikilink {
+  color: #7da2f0;
+  cursor: pointer;
+  background: none;
+  border: none;
+  font: inherit;
+  padding: 0;
+}
+
+.wikilink:hover { text-decoration: underline; }
+
+.backlinks {
+  margin-top: 24px;
+  border-top: 1px solid #2a2a2e;
+  padding-top: 12px;
+  font-size: 12px;
+  color: #a1a1aa;
+}
+
+.backlinks .backlink {
+  display: block;
+  background: none;
+  border: none;
+  color: #7da2f0;
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.backlinks .backlink:hover { text-decoration: underline; }
+
+/* ── 图谱 ── */
+.graph-view {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  overflow: auto;
+}
+
+.graph-view svg { max-width: 100%; height: auto; }
+
+/* ── 搜索 ── */
+.search-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 20px;
+  min-height: 0;
+}
+
+.search-bar {
+  background: #1d1d21;
+  border: 1px solid #2a2a2e;
+  border-radius: 8px;
+  color: #e4e4e7;
+  font: inherit;
+  padding: 8px 12px;
+  outline: none;
+  flex: none;
+}
+
+.search-bar:focus { border-color: #f4b04a; }
+
+.search-results {
+  margin-top: 12px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.search-result {
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.search-result:hover { background: #1d1d21; }
+
+.result-title { display: block; color: #fafafa; font-weight: 600; font-size: 13px; }
+.result-path { display: block; color: #71717a; font-size: 11px; margin-top: 2px; }
+.result-excerpt { display: block; color: #a1a1aa; font-size: 12px; margin-top: 4px; }
