@@ -8,6 +8,7 @@
 //   self/self-model.md  自我模型;self/playbooks/  自我改写手册
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 export const STATE_VERSION = 2;
@@ -15,8 +16,8 @@ export const STATE_VERSION = 2;
 export function dataRoot() {
   const d = process.env.AOPC_PLUGIN_DATA || "";
   if (d) return d;
-  // 兜底:脱离宿主直跑(本地测试)时的默认位置
-  return path.join(process.env.HOME || ".", ".aopc/cli/plugins/data/selfaware@aopc-ai-tool");
+  // 兜底:脱离宿主直跑(本地测试)时的默认位置;os.homedir() 跨平台(Win 用 USERPROFILE)
+  return path.join(os.homedir(), ".aopc/cli/plugins/data/selfaware@aopc-ai-tool");
 }
 
 export const eventsDir = () => path.join(dataRoot(), "events");
@@ -38,9 +39,12 @@ export const DEFAULT_CONFIG = {
   injectBudget: true,
   injectErrorWarn: true,
   injectReflectNudge: true,
+  injectCriticNudge: true,
   contextWindow: 200000,
+  retentionDays: 90, // 0 = 永久保留;过期 events/*.jsonl 在 SessionStart 惰性清理
   budgetThrottle: { mid: 0.3, high: 0.6, critical: 0.85, midEveryTurns: 10 },
   reflectNudge: { minSegments: 8, minFailures: 3 },
+  criticNudge: { atEdits: 10 },
 };
 
 export function loadConfig() {
@@ -51,9 +55,15 @@ export function loadConfig() {
       ...raw,
       budgetThrottle: { ...DEFAULT_CONFIG.budgetThrottle, ...(raw.budgetThrottle || {}) },
       reflectNudge: { ...DEFAULT_CONFIG.reflectNudge, ...(raw.reflectNudge || {}) },
+      criticNudge: { ...DEFAULT_CONFIG.criticNudge, ...(raw.criticNudge || {}) },
     };
   } catch {
-    return { ...DEFAULT_CONFIG, budgetThrottle: { ...DEFAULT_CONFIG.budgetThrottle }, reflectNudge: { ...DEFAULT_CONFIG.reflectNudge } };
+    return {
+      ...DEFAULT_CONFIG,
+      budgetThrottle: { ...DEFAULT_CONFIG.budgetThrottle },
+      reflectNudge: { ...DEFAULT_CONFIG.reflectNudge },
+      criticNudge: { ...DEFAULT_CONFIG.criticNudge },
+    };
   }
 }
 
@@ -72,6 +82,8 @@ export function emptySession(sid) {
     samples: [],
     lastInject: { budgetTurn: -1, errorStreakKey: "" },
     failuresSinceReflect: 0,
+    carried: 0,
+    fileEdits: 0,
     sub: false,
   };
 }
@@ -81,7 +93,7 @@ export function loadState() {
     const j = JSON.parse(fs.readFileSync(statePath(), "utf8"));
     if (j && j.version === STATE_VERSION && j.sessions) return j;
   } catch {}
-  return { version: STATE_VERSION, sessions: {}, reflect: { lastDeepAt: 0, lastLiteAt: 0 } };
+  return { version: STATE_VERSION, sessions: {}, reflect: { lastDeepAt: 0, lastLiteAt: 0 }, outstandingDebt: 0 };
 }
 
 /** 原子重写(temp + rename);并发 hook 进程 last-writer-wins 可接受 */

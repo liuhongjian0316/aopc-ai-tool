@@ -178,7 +178,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "0.2.0",
+      "version": "0.7.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -193,6 +193,57 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.7.0",
+          "date": "2026-11-02",
+          "changes": [
+            "事件日志保留策略 retentionDays(默认 90 天,0=永久):过期会话事件在下次启动惰性清理,events/ 不再无限增长",
+            "self_history 时间展示本地化(此前 UTC,对 UTC+8 用户傍晚的会话会显示成次日凌晨)",
+            "冒烟测试 94 → 100 项全绿(测试侧顺带修正 fs.utimesSync 秒/毫秒陷阱)"
+          ]
+        },
+        {
+          "version": "0.6.0",
+          "date": "2026-11-02",
+          "changes": [
+            "新增 self_config 工具:注入开关/节流参数/上下文窗口会话内白名单读写,立即生效,不必手改 config.json",
+            "宿主级校验通过:plugin manifest is valid(aopc plugins validate)",
+            "/selfcheck 真机 dogfood:5/6 PASS,C5 见证 self_history 积累 5 个真实会话;命令命名统一为 /selfcheck(宿主按文件名注册)",
+            "冒烟测试 85 → 94 项全绿"
+          ]
+        },
+        {
+          "version": "0.5.0",
+          "date": "2026-11-02",
+          "changes": [
+            "self_state 新增自我档案健康度:五段完整性、教训条数、最后变更日期——防止复盘漂移的仪表(T19 顺带修正健康度统计的按节切片实现)",
+            "self_journal 查询对超 7 天未落地的提案打 ⚠ 并给出清账指引——积压的提案等于没有提案(T20)",
+            "新增 scripts/e2e.mjs:真机端到端回归脚本化(复跑 V1/V2/V3 断言;--skip-subagent 省 token),与 smoke(85 项本地伪造)构成两级测试",
+            "dataRoot 回退改 os.homedir()(Windows 兼容)"
+          ]
+        },
+        {
+          "version": "0.4.0",
+          "date": "2026-11-02",
+          "changes": [
+            "真机无头验证(aopc -p ×3):hook 全链触发、provider 实测预算(39.7k/200k·19.8%)、MCP 端到端、guanji 裸名派发均通过;子代理内部调用不触发 hook(C3 负结果)",
+            "修复:rollout 在 turn 结束才落盘导致首 turn/单 turn 会话预算为 null——Stop 时增量刷新",
+            "适配 C3:self_state 子代理视图改为 Agent 派发计数(子代理内部调用对 hook 不可见)",
+            "慢性错误自动落 playbook 提案(self_errors 惰性写 journal,同签名去重)",
+            "跨会话复盘债:会话收尾未复盘失败增量并入全局,开场横幅提示,journal 落账清零;playbook 规则按 P1→P3 优先注入",
+            "冒烟测试 70 → 76 项全绿(增量搬运语义由 T5/T17 双向锁定)"
+          ]
+        },
+        {
+          "version": "0.3.0",
+          "date": "2026-11-02",
+          "changes": [
+            "慢性错误检测:self_errors 发现同一错误签名跨 ≥3 个会话复发时,标记为习惯性问题并建议固化为 playbook 规则",
+            "self_history 叙事化:Stop 事件留存我最后回复的脱敏片段(200 字符),跨会话记忆从纯统计升级为『最近在做』",
+            "新增 critic 提醒:会话内文件改动累计 10 处时,一次性建议收尾前派 critic 对抗审查(第 4 个独立开关 injectCriticNudge)",
+            "真机实证:resume 会话 SessionStart hook 与自我档案自动播种在真实宿主上验证通过;冒烟测试 59 → 70 项全绿"
+          ]
+        },
         {
           "version": "0.2.0",
           "date": "2026-11-02",

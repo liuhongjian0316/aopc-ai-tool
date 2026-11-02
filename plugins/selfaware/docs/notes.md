@@ -1,14 +1,25 @@
 # P1 勘察与实现笔记(2026-11-02)
 
-对应 DESIGN.md §11 路线图。状态:**P1–P5 代码已全部落地,冒烟测试 59 项全绿(v0.2.0)**;待真机会话验证(装上后可直接跑 `/self-check`)与 marketplace 发布。
+对应 DESIGN.md §11 路线图。状态:**迭代至 v0.4.0,冒烟测试 76 项全绿;真机验证六项全部有结论(见 §四)**;待办:0.4.0 提交推送、marketplace 发布、周级语感调优。
 
-## 〇、v0.2.0 升级记录(2026-11-02)
+## 〇、升级记录
+
+### v0.3.0(2026-11-02)
+
+- **慢性错误检测**:`self_errors` 对同一 工具×签名 跨 ≥3 个会话复发的错误标记"慢性"并建议固化 playbook——把"偶发"和"习惯性问题"区分开,是 L2→L4 闭环的推理升级(T14)。
+- **self_history 叙事化**:Stop 事件留存我最后回复的脱敏片段(200 字符,密钥打码),跨会话记忆从纯统计升级为"最近在做"(T13)。
+- **critic 提醒**:会话内文件改动累计 10 处(atEdits 可配)时一次性建议收尾前派 critic——大改动是定稿审查的最佳触发点;开关 `injectCriticNudge`(第 4 独立开关,延续拍板 #3 的粒度精神)(T12)。
+- **实现教训(T12 抓出)**:`const FILE_TOOLS` 一度声明在 `main()` 之后,模块顶部的 `main()` 调用触发 TDZ,PostToolUse 全路径静默死亡——观察器"静默降级"铁律同时会吞掉这类 bug,新增测试是唯一防线;已把声明提到 `main()` 前,并在注释中标明约束。
+- **真机实证(部分)**:0.2.0 已安装;resume 老会话(sess_cefed5a4…)时 SessionStart hook 触发、self-model/playbooks 骨架自动播种——C1/C2 的关键链路在真实宿主通过。冒烟测试 59 → **70 项**全绿。
+- 数据目录清理:清除了早前冒烟调试误写入真实数据目录的 state.json/sess_dbg 残留(均零数据,无用户内容)。
+
+### v0.2.0(2026-11-02)
 
 - **修复**:`self_state` 可能误选子代理会话为主会话——observer 现对每个事件显式写 `sess.sub = isSub`;子代理会话即便更晚活跃也不会被选为 currentSid(T8 覆盖)。
 - **新增 self_history**:跨会话自传体记忆——最近 N 个会话的轮数/工具调用/失败率 + 累计统计(工具表第 5 项)。
 - **SessionStart 自动播种**:首次会话自动创建 `self/self-model.md` 五段式骨架与 `self/playbooks/README.md`(只创建、不覆盖;内容填充仍只走复盘,§6.2 纪律不变)。
 - **playbook 规则注入横幅**:规则从文件进入上下文(600 字符截断预算,超量提示"其余 N 条见目录")——L4 闭环的"规则被执行"有了载体(T10 覆盖)。
-- **新增 /self-check 命令**:把本文件 §四的待真机验证项产品化,新会话一键逐项核对(C1 注入/C2 数据流/C3 子代理观测/C4 派发名/C5 工具/C6 预算来源)。
+- **新增 /selfcheck 命令**:把本文件 §四的待真机验证项产品化,新会话一键逐项核对(C1 注入/C2 数据流/C3 子代理观测/C4 派发名/C5 工具/C6 预算来源)。
 - 冒烟测试 44 → **59 项**全绿;`/reflect` 命令中"数据全空则初始化骨架"分支保留,与自动播种互为冗余。
 
 ## 一、四项行为假设的验证结论
@@ -77,10 +88,49 @@
 | T6 | compact 横幅;坏输入 exit 0 静默;TTY 守卫 |
 | T7 | MCP 握手(协议回显)、4 工具、journal append/query、复盘债清理、errors 聚合、ping |
 
-## 四、待真机会话验证(装上插件后)
+## 四、真机验证结论(2026-11-02,`aopc -p` 无头 ×3 + resume 会话)
 
-1. SessionStart 注入在真实首轮前的出现时机与排版。
-2. 子代理工具调用是否触发 PostToolUse*、其 `session_id` 是否 `sess_subagent_` 前缀(决定合并视角的实际数据流)。
-3. 真实会话的 rollout 文件名与 hook `session_id` 的对应(冒烟用的是历史文件;真实会话首写时 offset 逻辑首跑)。
-4. `/reflect` 全流程与 guanji 派发名(`guanji` 裸名 vs `selfaware:guanji`)。
-5. 注入语感与节流参数在真实使用中的观感(周级)。
+| 项 | 结论 | 证据 |
+|---|---|---|
+| C1 SessionStart 注入 | **✓ hook 实锤触发**(startup 与 resume 两种 source 都见过);注入到达模型由 stdout 契约 + 冒烟保证 | 真实 `events/*.jsonl` 出现 `session_start`(resume:老会话 sess_cefed5a4;startup:无头 V1) |
+| C2 数据流与 rollout 对应 | **✓** 事件/state/rollout 三方一致;**但发现时序 bug**:rollout 在 turn 结束才落盘 → 首 turn 预算必为 null(v0.4.0 修复:Stop 时增量刷新) | V1:events 齐全而 budget null;rollout mtime 晚于 Stop |
+| C3 子代理观测 | **✗ 负结果(实锤)**:子代理内部工具调用不触发 hook、不产生 sess_subagent_ 事件,主会话只见 `Agent` 派发本身。合并视角降级为**派发计数**(v0.4.0 已适配) | V2 派发 Explore+guanji,主会话 toolCalls 仅 `{"Agent":2}` |
+| C4 子代理派发名 | **✓ `guanji` 裸名在真实宿主直接可用**(无需回落 `selfaware:guanji`) | V2 主 agent 汇报"在可用 agent 类型列表中存在,一次派发成功" |
+| C5 MCP 工具 | **✓ 真实宿主端到端可用**;MCP 工具真实命名空间实测为 `mcp__plugin_selfaware_selfaware__self_state`(plugin_插件名_服务名__工具名) | V3:主 agent 调 `self_state` 并完整回传结构化结果;事件日志记下真实工具名 |
+| C6 预算来源 | **✓ provider 实测**(confidence=high,"39.7k/200k,19.8%")——V1 的 null 纯属时序,非估算失真 | V3 self_state 原文 |
+
+另:/selfcheck 命令(宿主按文件名注册,非 /self-check)作为产品化自检保留,2026-11-02 已在真实宿主完成首次 dogfood:**5/6 PASS**(C3 为已知宿主事实,报告中引的是当时安装的 0.2.0 措辞,0.4.0+ 已适配派发计数);C5 见证 self_history 积累到 5 个真实会话。
+
+## 〇、升级记录
+
+### v0.7.0(2026-11-02,长期卫生)
+
+- **事件日志保留策略**:`retentionDays`(默认 90,0=永久)——超过保留期的 events/*.jsonl 在首个 startup 会话惰性清理(仅 startup,避开 resume/compact 热路径)。此前 events/ 无限增长且 self_history 每次全量扫描,长期使用会退化。
+- **时间展示本地化**:self_history/self_journal 从 UTC 改本地时区——UTC+8 用户傍晚的会话此前会显示成"次日凌晨"。
+- **测试侧教训(T22)**:`fs.utimesSync` 传数字按**秒**解释而非毫秒,旧文件被设成未来时间导致清理断言失败——改传 Date 对象。
+- 冒烟测试 94 → **100 项**全绿。
+
+### v0.6.0(2026-11-02,校验与 dogfood 收口)
+
+- **宿主级校验通过**:`aopc plugins validate` → "Plugin manifest is valid"——设计承诺的最后一道验证关卡关闭。
+- **/selfcheck 真机 dogfood**:产品自己的体检命令在真实宿主端到端跑通,5/6 PASS(唯一 FAIL 为已知 C3 宿主事实,报告引用的是当时安装的 0.2.0 措辞);C5 见证 self_history 积累 5 个真实会话。
+- **self_config 工具**(第 6 个 MCP 工具):注入开关/节流参数/上下文窗口会话内白名单读写,立即生效,不必手改 config.json。
+- 命令命名统一 `/selfcheck`(宿主按文件名注册);冒烟测试 85 → 94 项全绿。
+
+### v0.5.0(2026-11-02,自检闭环收紧)
+
+- **自我档案健康度**:self_state 报告五段完整性、教训条数、最后变更——复盘漂移有了仪表;健康度统计按 "## " 标题切片实现(第一版正则被 `/m` 的 `$`-行尾语义坑了,T19 抓出,教训同 TDZ 一并记档:观察器的静默降级会吞实现错误,测试是唯一防线)。
+- **过期提案提醒**:self_journal 查询对超 7 天未落地的提案打 ⚠ + 清账指引——积压的提案等于没有提案(T20)。
+- **真机回归脚本化**:scripts/e2e.mjs 把 V1/V2/V3 手工验证固化为可复跑断言(hook 全链/provider 预算/Agent 派发计数/无子代理事件/MCP 端到端),与 smoke(85 项本地)构成两级测试;e2e 需已安装 ≥0.4.0。
+- dataRoot 回退改 `os.homedir()`(Windows 兼容);冒烟测试 76 → **85 项**全绿。
+
+### v0.4.0(2026-11-02,真机验证驱动)
+
+- **修复(C2)**:rollout 在 turn 结束才落盘 → 首 turn/单 turn 会话预算永远 null。Stop 时增量刷新预算(T15 复现→修复→锁定)。
+- **适配(C3)**:`self_state` 子代理视图从"子会话聚合"改为"Agent 派发计数";子代理内部调用对 hook 不可见是宿主事实,如实呈报。
+- **慢性错误自动提案**:`self_errors` 发现慢性模式时惰性写 journal `playbook_proposal`(refs 带 `chronic:tool|sig` 去重标记,/reflect 落地)——L2→L4 闭环不再依赖人记得去查(T16)。
+- **跨会话复盘债**:Stop 时把未复盘失败**增量**并入全局 `outstandingDebt`,开场横幅提示清账,journal 落账(复盘/自省/规则落地)清零。**T5 教训**:Stop 每轮触发,整批搬运会把会话内 nudge 计数搬空——必须增量搬运(carried 游标),T5/T17 双向锁定该语义。
+- playbookDigest 规则按 P1→P3 排序进入预算(T18)。
+- 冒烟测试 70 → **76 项**全绿。
+
+### v0.3.0(2026-11-02)

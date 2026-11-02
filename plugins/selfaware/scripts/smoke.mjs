@@ -67,7 +67,7 @@ function eventsOf(dataDir, sid) {
 // ---------- T0 语法检查 ----------
 
 console.log("\n[T0] node --check 语法");
-for (const f of ["hooks/observer.mjs", "server.mjs", "lib/state.mjs", "lib/budget.mjs", "lib/redact.mjs", "scripts/smoke.mjs"]) {
+for (const f of ["hooks/observer.mjs", "server.mjs", "lib/state.mjs", "lib/budget.mjs", "lib/redact.mjs", "lib/templates.mjs", "scripts/smoke.mjs", "scripts/e2e.mjs"]) {
   const r = spawnSync("node", ["--check", path.join(ROOT, f)], { encoding: "utf8" });
   check(`${f}`, r.status === 0, r.stderr.split("\n")[0]);
 }
@@ -201,7 +201,7 @@ console.log("\n[T7] MCP server:握手 / 工具列表 / 四工具调用");
   check("initialize 回显协议版本", byId.get(1)?.result?.protocolVersion === "2025-06-18", JSON.stringify(byId.get(1)));
   check("serverInfo=selfaware", byId.get(1)?.result?.serverInfo?.name === "selfaware");
   const tools = byId.get(2)?.result?.tools || [];
-  check("5 个工具", tools.length === 5 && ["self_state", "self_errors", "self_usage", "self_history", "self_journal"].every((n) => tools.some((t) => t.name === n)), JSON.stringify(tools.map((t) => t.name)));
+  check("6 个工具", tools.length === 6 && ["self_state", "self_errors", "self_usage", "self_history", "self_config", "self_journal"].every((n) => tools.some((t) => t.name === n)), JSON.stringify(tools.map((t) => t.name)));
   const stTxt = byId.get(3)?.result?.content?.[0]?.text || "";
   check("self_state 返回主会话状态", stTxt.includes("sess_t7") && stTxt.includes("<self-state>"), stTxt.slice(0, 200));
   const jApp = byId.get(4)?.result?.content?.[0]?.text || "";
@@ -224,6 +224,7 @@ console.log("\n[T8] 子代理会话 sub 标记;self_state 主/子分列不串");
   runObserver(dir, { session_id: "sess_t8main", hook_event_name: "UserPromptSubmit", prompt: "hi" });
   runObserver(dir, { session_id: "sess_subagent_agent_x1", hook_event_name: "PostToolUseFailure", tool_name: "Bash", tool_input: {}, error: "command not found: foo", is_interrupt: false });
   runObserver(dir, { session_id: "sess_subagent_agent_x1", hook_event_name: "PostToolUse", tool_name: "Read", tool_input: {}, tool_response: {} });
+  runObserver(dir, { session_id: "sess_t8main", hook_event_name: "PostToolUse", tool_name: "Agent", tool_input: {}, tool_response: {} });
   const st = readState(dir);
   check("子会话标记 sub=true", st?.sessions?.sess_subagent_agent_x1?.sub === true);
   check("主会话标记 sub=false", st?.sessions?.sess_t8main?.sub === false);
@@ -234,7 +235,7 @@ console.log("\n[T8] 子代理会话 sub 标记;self_state 主/子分列不串");
   const r = spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000 });
   const txt = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).map((m) => m?.result?.content?.[0]?.text || "").join("");
   check("self_state 选中主会话(而非更晚的子会话)", txt.includes("sess_t8main"), txt.slice(0, 200));
-  check("子代理聚合可见", txt.includes("子代理") && txt.includes("1 个会话"), txt.slice(0, 300));
+  check("子代理视图为派发计数(C3 适配)", txt.includes("子代理派发:本会话 1 次"), txt.slice(0, 400));
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
@@ -301,6 +302,290 @@ console.log("\n[T11] MCP self_history:多会话聚合与累计统计");
   check("两个会话都列出", txt.includes("sess_t11a") && txt.includes("sess_t11b"), txt.slice(0, 200));
   check("失败率入账(1/2 工具事件 → 50%)", txt.includes("失败率 50%"), txt.slice(0, 300));
   check("累计统计行", txt.includes("累计:") && txt.includes("2 轮"), txt.slice(0, 300));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ---------- T12 编辑量 critic 提醒 ----------
+
+console.log("\n[T12] 文件改动 ×10 → 一次性 critic 提醒;开关可关");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  runObserver(dir, { session_id: "sess_t12", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  let last = "";
+  for (let i = 1; i <= 10; i++) last = runObserver(dir, { session_id: "sess_t12", hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: {}, tool_response: {} }).stdout;
+  check("第 10 次改动提醒派 critic", parseOut(last)?.additionalContext?.includes("critic"), last.slice(0, 200));
+  const r11 = runObserver(dir, { session_id: "sess_t12", hook_event_name: "PostToolUse", tool_name: "Write", tool_input: {}, tool_response: {} });
+  check("只提醒一次", r11.stdout === "", r11.stdout.slice(0, 200));
+  check("非文件工具不计数", (() => {
+    runObserver(dir, { session_id: "sess_t12", hook_event_name: "PostToolUse", tool_name: "Read", tool_input: {}, tool_response: {} });
+    return readState(dir)?.sessions?.sess_t12?.fileEdits === 11;
+  })());
+  const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  fs.writeFileSync(path.join(dir2, "config.json"), JSON.stringify({ injectCriticNudge: false }));
+  runObserver(dir2, { session_id: "sess_t12b", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  let last2 = "";
+  for (let i = 0; i < 10; i++) last2 = runObserver(dir2, { session_id: "sess_t12b", hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: {}, tool_response: {} }).stdout;
+  check("开关关闭则静默", last2 === "", last2.slice(0, 200));
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(dir2, { recursive: true, force: true });
+}
+
+// ---------- T13 叙事片段与脱敏 ----------
+
+console.log("\n[T13] Stop 叙事入事件与 self_history;密钥脱敏");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  runObserver(dir, { session_id: "sess_t13", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  const msg = "已修复登录 bug,token 是 sk-abcdef123456789,改动见 src/auth.ts";
+  runObserver(dir, { session_id: "sess_t13", hook_event_name: "Stop", stop_hook_active: false, last_assistant_message: msg });
+  const evs = eventsOf(dir, "sess_t13").filter((e) => e.ev === "segment_end");
+  check("叙事已入事件", evs.length === 1 && evs[0].lastMsg.includes("已修复登录 bug"), JSON.stringify(evs));
+  check("叙事中密钥已打码", !JSON.stringify(evs).includes("sk-abcdef") && JSON.stringify(evs).includes("***"));
+  const rpc = [{ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "self_history", arguments: { limit: 5 } } }]
+    .map((m) => JSON.stringify(m)).join("\n") + "\n";
+  const r = spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000 });
+  const txt = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).map((m) => m?.result?.content?.[0]?.text || "").join("");
+  check("self_history 显示最近在做", txt.includes("最近在做") && txt.includes("已修复登录 bug"), txt.slice(0, 300));
+  check("history 不含密钥原文", !txt.includes("sk-abcdef"), txt.slice(0, 300));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ---------- T14 慢性错误检测 ----------
+
+console.log("\n[T14] self_errors:同签名跨 ≥3 会话 → 慢性错误标记");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  for (const sid of ["sess_t14a", "sess_t14b", "sess_t14c"]) {
+    runObserver(dir, { session_id: sid, hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+    runObserver(dir, { session_id: sid, hook_event_name: "PostToolUseFailure", tool_name: "Bash", tool_input: {}, error: "fatal: not a git repository", is_interrupt: false });
+  }
+  runObserver(dir, { session_id: "sess_t14d", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  runObserver(dir, { session_id: "sess_t14d", hook_event_name: "PostToolUseFailure", tool_name: "Grep", tool_input: {}, error: "No files found", is_interrupt: false });
+  const rpc = [{ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "self_errors", arguments: { limit: 10 } } }]
+    .map((m) => JSON.stringify(m)).join("\n") + "\n";
+  const r = spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000 });
+  const txt = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).map((m) => m?.result?.content?.[0]?.text || "").join("");
+  check("慢性错误区块出现", txt.includes("慢性错误"), txt.slice(0, 200));
+  check("git 误用被标记为慢性(跨3会话)", txt.includes("跨 3 个会话"), txt.slice(0, 400));
+  check("单会话 Grep 失败不算慢性", !txt.includes("Grep [No files found] 跨") || !txt.split("慢性错误")[1]?.includes("Grep"), txt.slice(0, 400));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ---------- T15 Stop 时刷新预算(修首 turn null) ----------
+
+console.log("\n[T15] rollout 在 turn 中途落盘 → Stop 时预算来自 provider");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const rd = fs.mkdtempSync(path.join(os.tmpdir(), "sa-roll-"));
+  fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify({ rolloutDir: rd, contextWindow: 200000 }));
+  const sid = "sess_t15";
+  runObserver(dir, { session_id: sid, hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  runObserver(dir, { session_id: sid, hook_event_name: "UserPromptSubmit", prompt: "hi" }); // rollout 尚未落盘 → budget null
+  check("首 turn 预算确实为 null(复现 V1 现象)", readState(dir)?.sessions?.[sid]?.budget === null);
+  // turn 进行中,宿主把 rollout 落盘(带 provider usage)
+  fs.writeFileSync(path.join(rd, `model-io-${sid}.jsonl`), JSON.stringify({ response: { usage: { inputTokens: 50000 } } }) + "\n");
+  runObserver(dir, { session_id: sid, hook_event_name: "Stop", stop_hook_active: false, last_assistant_message: "done" });
+  const b = readState(dir)?.sessions?.[sid]?.budget;
+  check("Stop 后预算来自 provider 实测", b?.src === "provider" && b?.used === 50000, JSON.stringify(b));
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(rd, { recursive: true, force: true });
+}
+
+// ---------- T16 慢性错误自动落提案(去重) ----------
+
+console.log("\n[T16] 慢性错误 → 自动 playbook 提案;同签名不重复");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  for (const sid of ["sess_t16a", "sess_t16b", "sess_t16c"]) {
+    runObserver(dir, { session_id: sid, hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+    runObserver(dir, { session_id: sid, hook_event_name: "PostToolUseFailure", tool_name: "Bash", tool_input: {}, error: "fatal: not a git repository", is_interrupt: false });
+  }
+  const call = () => spawnSync("node", [SERVER], {
+    input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "self_errors", arguments: { limit: 10 } } }) + "\n",
+    env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000,
+  });
+  call();
+  let entries = fs.readFileSync(path.join(dir, "journal.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  const props = entries.filter((e) => e.kind === "playbook_proposal");
+  check("自动落 1 条提案", props.length === 1 && props[0].title.includes("慢性错误"), JSON.stringify(props));
+  check("提案带 chronic 去重标记", props[0]?.refs?.[0] === "chronic:Bash|fatal: not a git repository", JSON.stringify(props[0]?.refs));
+  call();
+  entries = fs.readFileSync(path.join(dir, "journal.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  check("再次查询不重复提案", entries.filter((e) => e.kind === "playbook_proposal").length === 1);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ---------- T17 跨会话复盘债 ----------
+
+console.log("\n[T17] 未复盘失败跨会话累计;横幅提示;journal 清账");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  runObserver(dir, { session_id: "sess_t17a", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  for (let i = 0; i < 2; i++) runObserver(dir, { session_id: "sess_t17a", hook_event_name: "PostToolUseFailure", tool_name: "Edit", tool_input: {}, error: "string to replace not found", is_interrupt: false });
+  runObserver(dir, { session_id: "sess_t17a", hook_event_name: "Stop", stop_hook_active: false, last_assistant_message: "ok" });
+  check("Stop 后债务并入全局(增量搬运)", readState(dir)?.outstandingDebt === 2, JSON.stringify(readState(dir)?.outstandingDebt));
+  check("会话内计数保留(nudge 仍可见)", readState(dir)?.sessions?.sess_t17a?.failuresSinceReflect === 2);
+  const rb = runObserver(dir, { session_id: "sess_t17b", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  check("新会话横幅提示遗留债务", parseOut(rb.stdout)?.additionalContext?.includes("跨会话未复盘失败累计 2 次"), (rb.stdout || "").slice(0, 300));
+  // 复盘落账清债
+  const rpc = [{ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "self_journal", arguments: { action: "append", entry: { kind: "failure_postmortem", title: "清债复盘", lesson: "规则Y" } } } }]
+    .map((m) => JSON.stringify(m)).join("\n") + "\n";
+  spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000 });
+  check("journal 落账后全局债务清零", readState(dir)?.outstandingDebt === 0);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ---------- T18 playbook P1 优先注入 ----------
+
+console.log("\n[T18] playbook 规则按 P1→P3 排序进入预算");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  runObserver(dir, { session_id: "sess_t18", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  fs.mkdirSync(path.join(dir, "self", "playbooks"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "self", "playbooks", "mixed.md"), [
+    "- [P3][2026-11-02] 三级规则甲",
+    "- [P2][2026-11-02] 二级规则乙",
+    "- [P1][2026-11-02] 一级规则丙",
+  ].join("\n"));
+  const r = runObserver(dir, { session_id: "sess_t18", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  const ctx = parseOut(r.stdout)?.additionalContext || "";
+  const iP1 = ctx.indexOf("一级规则丙");
+  const iP2 = ctx.indexOf("二级规则乙");
+  const iP3 = ctx.indexOf("三级规则甲");
+  check("三条规则都注入", iP1 >= 0 && iP2 >= 0 && iP3 >= 0, ctx.slice(0, 400));
+  check("P1 排在最前", iP1 < iP2 && iP2 < iP3, `顺序 ${iP1}/${iP2}/${iP3}`);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ---------- T19 自我档案健康度 ----------
+
+console.log("\n[T19] self_state 报告自我档案健康度");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  runObserver(dir, { session_id: "sess_t19", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  const rpc = [{ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "self_state", arguments: {} } }]
+    .map((m) => JSON.stringify(m)).join("\n") + "\n";
+  const call = () => spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000 });
+  let txt = call();
+  txt = (txt.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).map((m) => m?.result?.content?.[0]?.text || "").join("");
+  check("骨架状态:五段齐 + 占位提示", txt.includes("五段齐") && txt.includes("待 /reflect 填充"), txt.slice(0, 400));
+  // 修订档案:把教训写进「我的教训」节、变更记录追加条目,健康度应更新
+  const sm = path.join(dir, "self", "self-model.md");
+  const md0 = fs.readFileSync(sm, "utf8");
+  fs.writeFileSync(sm, md0
+    .replace("(待积累,格式:`- [YYYY-MM-DD] 规则一句话 ← journal#<id>`)", "- [2026-11-02] 规则甲 ← journal#j001")
+    .replaceAll("(待补", "(").replaceAll("待补", "已填")
+    + "- [2026-11-02] 修订教训段与能力清单\n");
+  txt = (call().stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).map((m) => m?.result?.content?.[0]?.text || "").join("");
+  check("教训计数 1", txt.includes("教训 1 条"), txt.slice(0, 400));
+  check("最后变更更新为今天", txt.includes("最后变更:2026-11-02"), txt.slice(0, 400));
+  check("占位提示消失", !txt.includes("待 /reflect 填充"));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ---------- T20 过期提案提醒 ----------
+
+console.log("\n[T20] self_journal 查询:超 7 天未落地提案带 ⚠");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  fs.mkdirSync(dir, { recursive: true });
+  const old = Date.now() - 8 * 86400000;
+  fs.writeFileSync(path.join(dir, "journal.jsonl"), [
+    JSON.stringify({ id: "j001", t: old, kind: "playbook_proposal", title: "陈年提案", lesson: "规则X", status: "proposed", refs: [] }),
+    JSON.stringify({ id: "j002", t: Date.now(), kind: "failure_postmortem", title: "新鲜复盘", status: "", refs: [] }),
+  ].join("\n") + "\n");
+  fs.writeFileSync(path.join(dir, "state.json"), JSON.stringify({ version: 2, sessions: {}, reflect: { lastDeepAt: 0, lastLiteAt: 0 }, outstandingDebt: 0, journalSeq: 2 }));
+  const rpc = [{ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "self_journal", arguments: { action: "query", limit: 10 } } }]
+    .map((m) => JSON.stringify(m)).join("\n") + "\n";
+  const r = spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000 });
+  const txt = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).map((m) => m?.result?.content?.[0]?.text || "").join("");
+  check("陈年提案带 ⚠ 标记", txt.includes("超 7 天未落地") && txt.includes("陈年提案"), txt.slice(0, 300));
+  check("汇总行给出清账指引", txt.includes("积压的提案等于没有提案"), txt.slice(0, 300));
+  check("新鲜复盘不受影响", !txt.includes("新鲜复盘 ⚠") && txt.includes("新鲜复盘"));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ---------- T21 self_config 开关读写 ----------
+
+console.log("\n[T21] self_config:get/set 白名单键、类型校验、嵌套路径");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    return { text: m?.result?.content?.[0]?.text || "", isError: !!m?.result?.isError };
+  };
+  const g = call("self_config", { action: "get" });
+  check("get 返回默认配置", g.text.includes('"injectBudget": true') && g.text.includes("config.json"), g.text.slice(0, 200));
+  const s1 = call("self_config", { action: "set", key: "injectBudget", value: false });
+  check("set 布尔开关生效", !s1.isError && s1.text.includes('"injectBudget": false'), s1.text.slice(0, 200));
+  check("config.json 已落盘", JSON.parse(fs.readFileSync(path.join(dir, "config.json"), "utf8")).injectBudget === false);
+  const s2 = call("self_config", { action: "set", key: "budgetThrottle.mid", value: 0.5 });
+  check("嵌套路径生效", !s2.isError && JSON.parse(fs.readFileSync(path.join(dir, "config.json"), "utf8")).budgetThrottle.mid === 0.5);
+  check("生效配置回显", s2.text.includes('"mid": 0.5'));
+  const s3 = call("self_config", { action: "set", key: "notAllowed", value: 1 });
+  check("白名单外拒绝", s3.isError && s3.text.includes("白名单"), s3.text.slice(0, 200));
+  const s4 = call("self_config", { action: "set", key: "injectBudget", value: "yes" });
+  check("类型错误拒绝", s4.isError && s4.text.includes("boolean"), s4.text.slice(0, 200));
+  const s5 = call("self_config", { action: "set", key: "contextWindow", value: 128000 });
+  check("contextWindow 可调", !s5.isError && s5.text.includes('"contextWindow": 128000'));
+  // 开关对 hook 立即生效:关掉预算注入后 UserPromptSubmit 静默
+  fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify({ injectBudget: false }));
+  const r2 = runObserver(dir, { session_id: "sess_t21", hook_event_name: "UserPromptSubmit", prompt: "hi" });
+  check("hook 读到新开关(静默)", r2.stdout === "", r2.stdout.slice(0, 100));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ---------- T22 事件日志保留期 ----------
+
+console.log("\n[T22] retentionDays:过期事件文件在 SessionStart 清理;0 = 永久");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  fs.mkdirSync(path.join(dir, "events"), { recursive: true });
+  const oldF = path.join(dir, "events", "sess_old.jsonl");
+  const newF = path.join(dir, "events", "sess_new.jsonl");
+  fs.writeFileSync(oldF, "{}\n");
+  fs.writeFileSync(newF, "{}\n");
+  const oldTime = Date.now() - 91 * 86400000;
+  const oldDate = new Date(oldTime); // utimesSync 传数字按秒算,必须传 Date(T22 第一版的坑)
+  fs.utimesSync(oldF, oldDate, oldDate); // 模拟 91 天前的旧文件
+  runObserver(dir, { session_id: "sess_t22", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  check("91 天前的文件被清理", !fs.existsSync(oldF));
+  check("新文件保留", fs.existsSync(newF));
+  check("当前会话事件正常写入", fs.existsSync(path.join(dir, "events", "sess_t22.jsonl")));
+  // retentionDays: 0 → 永久
+  const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  fs.mkdirSync(path.join(dir2, "events"), { recursive: true });
+  fs.writeFileSync(path.join(dir2, "events", "sess_old2.jsonl"), "{}\n");
+  fs.utimesSync(path.join(dir2, "events", "sess_old2.jsonl"), oldTime, oldTime);
+  fs.writeFileSync(path.join(dir2, "config.json"), JSON.stringify({ retentionDays: 0 }));
+  runObserver(dir2, { session_id: "sess_t22b", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  check("retentionDays=0 时永久保留", fs.existsSync(path.join(dir2, "events", "sess_old2.jsonl")));
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(dir2, { recursive: true, force: true });
+}
+
+// ---------- T23 时间本地化 ----------
+
+console.log("\n[T23] self_history 时间按本地时区展示");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  // 选一个 UTC 与本地(UTC+8)跨日的时刻:2026-11-02T18:30:00Z → 本地 2026-11-03 02:30
+  const t = Date.UTC(2026, 10, 2, 18, 30, 0);
+  fs.mkdirSync(path.join(dir, "events"), { recursive: true });
+  const d = new Date(t);
+  const p = (n) => String(n).padStart(2, "0");
+  const localStr = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  fs.writeFileSync(path.join(dir, "events", "sess_t23.jsonl"), JSON.stringify({ ev: "session_start", source: "startup", t, sid: "sess_t23" }) + "\n");
+  const rpc = [{ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "self_history", arguments: { limit: 5 } } }]
+    .map((m) => JSON.stringify(m)).join("\n") + "\n";
+  const r = spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000 });
+  const txt = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).map((m) => m?.result?.content?.[0]?.text || "").join("");
+  check(`本地时区时间入列(${localStr})`, txt.includes(localStr), txt.slice(0, 200));
+  check("不再是 UTC 串(18:30Z→02:30 本地)", !txt.includes("11-02 18:30"), txt.slice(0, 200));
   fs.rmSync(dir, { recursive: true, force: true });
 }
 

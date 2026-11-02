@@ -12,12 +12,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
-  dataRoot, loadConfig, loadState, saveState, journalPath,
+  dataRoot, configPath, loadConfig, loadState, saveState, journalPath,
   selfModelPath, playbooksDir, listEventSids, readEvents,
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "0.2.0";
+const VERSION = "0.7.0";
 
 const TOOLS = [
   {
@@ -48,6 +48,24 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: { limit: { type: "number", description: "返回最近 N 个会话,默认 10" } },
+    },
+  },
+  {
+    name: "self_config",
+    description:
+      "观己:查看或修改我的配置(注入开关/节流参数/上下文窗口/rolloutDir)。用户要求调整观己行为(『别再注入预算了』『复盘提醒关掉』)时使用;set 只接受白名单键且立即生效(hook 与 MCP 共用),无需手改 config.json。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["get", "set"] },
+        key: {
+          type: "string",
+          description:
+            "set 时的键名,白名单:injectBudget / injectErrorWarn / injectReflectNudge / injectCriticNudge / contextWindow / budgetThrottle.mid|high|critical|midEveryTurns / reflectNudge.minSegments|minFailures / criticNudge.atEdits / rolloutDir",
+        },
+        value: { type: ["boolean", "number", "string"], description: "set 时的值" },
+      },
+      required: ["action"],
     },
   },
   {
@@ -154,6 +172,8 @@ function callTool(params) {
         return textResult(selfUsage());
       case "self_history":
         return textResult(selfHistory(Number(args.limit) || 10));
+      case "self_config":
+        return textResult(selfConfig(args));
       case "self_journal":
         return textResult(selfJournal(args));
       default:
@@ -181,6 +201,36 @@ function fmtK(n) {
   return Math.round((n || 0) / 100) / 10 + "k";
 }
 
+/** 自我档案健康度(0.5.0):五段完整性、教训条数、最后变更——防复盘漂移的仪表 */
+function selfModelHealth() {
+  try {
+    const md = fs.readFileSync(selfModelPath(), "utf8");
+    // 按 "## " 标题切片取节内容(/m 的 $ 只匹配到行尾,正则版会在标题行截断——T19 教训)
+    const section = (name) => {
+      const lines = md.split("\n");
+      const start = lines.findIndex((l) => l.trim() === `## ${name}`);
+      if (start < 0) return "";
+      let end = lines.length;
+      for (let i = start + 1; i < lines.length; i++) {
+        if (lines[i].startsWith("## ")) {
+          end = i;
+          break;
+        }
+      }
+      return lines.slice(start + 1, end).join("\n");
+    };
+    const sections = ["我是谁", "我能做什么", "我的教训", "我与用户", "我的叙事"];
+    const missing = sections.filter((s) => !section(s));
+    const lessons = (section("我的教训").match(/^- /gm) || []).length;
+    const changes = [...section("变更记录").matchAll(/^- \[([^\]]+)\]/gm)].map((m) => m[1]).filter((x) => x !== "初始化");
+    const lastChange = changes[changes.length - 1] || "无";
+    const pending = md.includes("待补") ? ",尚有占位待 /reflect 填充" : "";
+    return `五段${missing.length ? "缺 " + missing.join("/") : "齐"},教训 ${lessons} 条,最后变更:${lastChange}${pending}`;
+  } catch {
+    return "不存在(下次 SessionStart 自动播种)";
+  }
+}
+
 function selfState() {
   const st = loadState();
   const cfg = loadConfig();
@@ -191,12 +241,6 @@ function selfState() {
       updateBudget(cur.sid, cur, cfg);
     } catch {}
   }
-  const subs = Object.values(st.sessions).filter((s) => s.sub);
-  const subAgg = {
-    sessions: subs.length,
-    toolCalls: subs.reduce((a, s) => a + sumVal(s.toolCalls), 0),
-    errors: subs.reduce((a, s) => a + sumVal(s.errors), 0),
-  };
   const lines = [];
   lines.push("<self-state>");
   if (cur) {
@@ -211,7 +255,11 @@ function selfState() {
   } else {
     lines.push("主会话:暂无观察数据(观己 hook 尚未在本会话运行,或为新装插件)");
   }
-  lines.push(`子代理(合并视角):${subAgg.sessions} 个会话、${subAgg.toolCalls} 次工具调用、${subAgg.errors} 次失败`);
+  // 0.4.0 适配 C3 真机结论:子代理内部工具调用不触发 hook,合并视角降级为派发计数
+  const dispatches = cur ? cur.toolCalls?.Agent || 0 : 0;
+  lines.push(`子代理派发:本会话 ${dispatches} 次(经 Agent 工具计数;子代理内部调用不经过 hook——C3 真机实测)`);
+  if (st.outstandingDebt > 0) lines.push(`跨会话复盘债:${st.outstandingDebt} 次失败未复盘(跑 /reflect 清账)`);
+  lines.push(`自我档案健康:${selfModelHealth()}`);
   lines.push(`自我档案:${selfModelPath()}${fs.existsSync(selfModelPath()) ? "" : "(尚未创建——首次 /reflect 时建立)"}`);
   lines.push(`playbook 目录:${playbooksDir()}`);
   lines.push(`反思日志:${journalPath()}`);
@@ -221,8 +269,8 @@ function selfState() {
 
 function selfErrors(limit) {
   const st = loadState();
-  const cfg = loadConfig();
   const cur = currentSid(st);
+  const cfg = loadConfig();
   if (cur) {
     try {
       updateBudget(cur.sid, cur, cfg);
@@ -249,6 +297,34 @@ function selfErrors(limit) {
   if (!groups.size) {
     lines.push("错误史为空:本机观察范围内没有记录到工具失败。");
   } else {
+    // 0.3.0 慢性错误:同一 工具×签名 跨 ≥3 个会话复发 → 这是习惯性问题,不是偶发
+    const chronic = [...groups.values()].filter((g) => g.sids.size >= 3).sort((a, b) => b.sids.size - a.sids.size || b.count - a.count);
+    if (chronic.length) {
+      lines.push("⚠ 慢性错误(同一签名跨 ≥3 个会话复发——这是我的习惯性问题,建议按 self-review 流程固化为 playbook 规则):");
+      for (const g of chronic.slice(0, 5)) {
+        lines.push(`- ${g.tool} [${g.sig}] 跨 ${g.sids.size} 个会话共 ${g.count} 次,最近:"${(g.lastMsgHead || "").slice(0, 100)}"`);
+      }
+      // 0.4.0:惰性落提案到反思日志(同签名已有未拒提案则跳过),/reflect 时落地
+      let proposed = 0;
+      for (const g of chronic.slice(0, 5)) {
+        const marker = `chronic:${g.tool}|${g.sig}`;
+        const entries = readJournalEntries();
+        if (entries.some((e) => e.kind === "playbook_proposal" && (e.refs || []).includes(marker) && e.status !== "rejected")) continue;
+        appendJournalRecord(st, {
+          t: Date.now(),
+          kind: "playbook_proposal",
+          title: `慢性错误:${g.tool} [${g.sig}] 跨 ${g.sids.size} 个会话复发`,
+          body: `同一错误签名跨 ${g.sids.size} 个会话共 ${g.count} 次,最近:"${(g.lastMsgHead || "").slice(0, 120)}"。这是习惯性问题而非偶发,建议在下次 /reflect 时固化为 playbook 规则。`,
+          lesson: `使用 ${g.tool} 遇到 [${g.sig}] 时,先检查已知诱因再重试`,
+          playbookTarget: "",
+          refs: [marker],
+          status: "proposed",
+          sessionId: cur?.sid || "",
+        });
+        proposed += 1;
+      }
+      if (proposed) lines.push(`  → 已自动记入 ${proposed} 条 playbook 提案(同签名去重),跑 /reflect 落地`);
+    }
     lines.push("按 工具×签名 分组(降序):");
     for (const g of [...groups.values()].sort((a, b) => b.count - a.count).slice(0, 12)) {
       lines.push(`- ${g.tool} ×${g.count} [${g.sig}] 最近:"${(g.lastMsgHead || "").slice(0, 120)}"(${g.sids.size} 个会话)`);
@@ -295,6 +371,7 @@ function selfHistory(limit) {
       turns: 0,
       calls: 0,
       errors: 0,
+      lastMsg: "",
       sub: sid.startsWith("sess_subagent_"),
     };
     for (const ev of evs) {
@@ -302,6 +379,8 @@ function selfHistory(limit) {
       else if (ev.ev === "tool_done") {
         if (ev.ok) r.calls += 1;
         else if (!ev.interrupt) r.errors += 1;
+      } else if (ev.ev === "segment_end" && ev.lastMsg) {
+        r.lastMsg = ev.lastMsg; // 0.3.0:取最近一段叙事
       }
     }
     rows.push(r);
@@ -312,7 +391,10 @@ function selfHistory(limit) {
   for (const r of picked) {
     const total = r.calls + r.errors;
     const rate = total ? Math.round((r.errors / total) * 100) : 0;
-    lines.push(`- ${r.sub ? "[子] " : ""}${r.sid} ${fmtDate(r.lastAt)} · ${r.turns} 轮 · ${r.calls} 次工具 · ${r.errors} 败${total ? `(失败率 ${rate}%)` : ""}`);
+    lines.push(
+      `- ${r.sub ? "[子] " : ""}${r.sid} ${fmtDate(r.lastAt)} · ${r.turns} 轮 · ${r.calls} 次工具 · ${r.errors} 败${total ? `(失败率 ${rate}%)` : ""}` +
+        (r.lastMsg ? `\n    最近在做:"${r.lastMsg.slice(0, 80)}"` : "")
+    );
   }
   const tot = rows.reduce((a, r) => ({ turns: a.turns + r.turns, calls: a.calls + r.calls, errors: a.errors + r.errors }), { turns: 0, calls: 0, errors: 0 });
   const totAll = tot.calls + tot.errors;
@@ -322,24 +404,141 @@ function selfHistory(limit) {
 }
 
 function fmtDate(t) {
+  // 0.7.0:本地时区展示(此前是 UTC,对 UTC+8 的用户傍晚后的会话会显示成"明天凌晨")
   try {
-    return new Date(t).toISOString().slice(0, 16).replace("T", " ");
+    const d = new Date(t);
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   } catch {
     return "?";
+  }
+}
+
+// ---------- 配置读写(0.6.0:白名单键,hook 与 MCP 共用 config.json) ----------
+
+const CONFIG_SCHEMA = {
+  injectBudget: { type: "boolean" },
+  injectErrorWarn: { type: "boolean" },
+  injectReflectNudge: { type: "boolean" },
+  injectCriticNudge: { type: "boolean" },
+  contextWindow: { type: "int", min: 1000 },
+  "budgetThrottle.mid": { type: "num", min: 0, max: 1 },
+  "budgetThrottle.high": { type: "num", min: 0, max: 1 },
+  "budgetThrottle.critical": { type: "num", min: 0, max: 1 },
+  "budgetThrottle.midEveryTurns": { type: "int", min: 1 },
+  "reflectNudge.minSegments": { type: "int", min: 1 },
+  "reflectNudge.minFailures": { type: "int", min: 1 },
+  "criticNudge.atEdits": { type: "int", min: 1 },
+  rolloutDir: { type: "string" },
+};
+
+function readRawConfig() {
+  try {
+    return JSON.parse(fs.readFileSync(configPath(), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function writeRawConfig(raw) {
+  fs.mkdirSync(dataRoot(), { recursive: true });
+  const tmp = configPath() + ".tmp-" + process.pid;
+  fs.writeFileSync(tmp, JSON.stringify(raw, null, 2) + "\n");
+  fs.renameSync(tmp, configPath());
+}
+
+function setConfigPath(raw, keyPath, value) {
+  const parts = keyPath.split(".");
+  let node = raw;
+  for (let i = 0; i < parts.length - 1; i++) {
+    if (typeof node[parts[i]] !== "object" || node[parts[i]] === null) node[parts[i]] = {};
+    node = node[parts[i]];
+  }
+  node[parts[parts.length - 1]] = value;
+}
+
+function selfConfig(args) {
+  if (args.action === "get") {
+    const cfg = loadConfig();
+    return ["<self-config>", JSON.stringify(cfg, null, 2), `配置文件:${configPath()}(也可直接手改,立即生效)`, "</self-config>"].join("\n");
+  }
+  // set
+  const key = String(args.key || "");
+  const rule = CONFIG_SCHEMA[key];
+  if (!rule) {
+    throw new Error(`未知或不可配置的键:${key}。白名单:${Object.keys(CONFIG_SCHEMA).join(", ")}`);
+  }
+  const v = args.value;
+  if (rule.type === "boolean" && typeof v !== "boolean") throw new Error(`${key} 需要 boolean,收到:${JSON.stringify(v)}`);
+  if (rule.type === "int" && (!Number.isFinite(v) || !Number.isInteger(v) || v < rule.min)) throw new Error(`${key} 需要 ≥${rule.min} 的整数,收到:${JSON.stringify(v)}`);
+  if (rule.type === "num" && (!Number.isFinite(v) || v < rule.min || v > rule.max)) throw new Error(`${key} 需要 ${rule.min}–${rule.max} 的数,收到:${JSON.stringify(v)}`);
+  if (rule.type === "string" && typeof v !== "string") throw new Error(`${key} 需要 string,收到:${JSON.stringify(v)}`);
+  const raw = readRawConfig();
+  setConfigPath(raw, key, v);
+  writeRawConfig(raw);
+  const cfg = loadConfig();
+  return [
+    `已更新 ${key} = ${JSON.stringify(v)},立即生效(新 hook 进程与 MCP 共用此文件)。`,
+    "当前生效配置:",
+    JSON.stringify(cfg, null, 2),
+  ].join("\n");
+}
+
+// ---------- journal 助手(0.4.0:供 self_journal 与慢性错误自提案共用) ----------
+
+function readJournalEntries() {
+  try {
+    return fs
+      .readFileSync(journalPath(), "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => {
+        try {
+          return JSON.parse(l);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function appendJournalRecord(st, rec) {
+  st.journalSeq = (st.journalSeq || 0) + 1;
+  rec.id = `j${String(st.journalSeq).padStart(3, "0")}`;
+  fs.mkdirSync(dataRoot(), { recursive: true });
+  fs.appendFileSync(journalPath(), JSON.stringify(rec) + "\n");
+  saveState(st);
+  return rec;
+}
+
+/** 复盘产出(失败复盘/自省报告/规则落地)清全部复盘债 */
+function clearReflectDebt(st) {
+  st.outstandingDebt = 0;
+  for (const s of Object.values(st.sessions)) {
+    s.failuresSinceReflect = 0;
+    s.carried = 0;
   }
 }
 
 function selfJournal(args) {
   if (args.action === "query") {
     const limit = Number(args.limit) || 15;
-    let entries = [];
-    try {
-      entries = fs.readFileSync(journalPath(), "utf8").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
-    } catch {}
+    const entries = readJournalEntries();
     const lines = [`<self-journal> 共 ${entries.length} 条,最近 ${Math.min(limit, entries.length)} 条:`];
+    let stale = 0;
+    const STALE_MS = 7 * 86400000;
     for (const e of entries.slice(-limit).reverse()) {
-      lines.push(`- [${e.id}] ${new Date(e.t).toISOString().slice(0, 10)} ${e.kind}「${e.title}」${e.lesson ? ` 规则:${e.lesson}` : ""}${e.playbookTarget ? ` → ${e.playbookTarget}` : ""}${e.status ? ` (${e.status})` : ""}`);
+      const isStale = e.status === "proposed" && Date.now() - (e.t || 0) > STALE_MS;
+      if (isStale) stale += 1;
+      lines.push(
+        `- ${isStale ? "⚠ 超 7 天未落地 " : ""}[${e.id}] ${new Date(e.t).toISOString().slice(0, 10)} ${e.kind}「${e.title}」` +
+          `${e.lesson ? ` 规则:${e.lesson}` : ""}${e.playbookTarget ? ` → ${e.playbookTarget}` : ""}${e.status ? ` (${e.status})` : ""}`
+      );
     }
+    if (stale) lines.push(`⚠ ${stale} 条提案超过 7 天未落地:跑 /reflect 落地,或明确拒绝(status=rejected)——积压的提案等于没有提案`);
     lines.push("</self-journal>");
     return lines.join("\n");
   }
@@ -347,10 +546,7 @@ function selfJournal(args) {
   const entry = args.entry || {};
   if (!entry.kind || !entry.title) throw new Error("append 需要 entry.kind 与 entry.title");
   const st = loadState();
-  const seq = (st.journalSeq || 0) + 1;
-  st.journalSeq = seq;
-  const rec = {
-    id: `j${String(seq).padStart(3, "0")}`,
+  const rec = appendJournalRecord(st, {
     t: Date.now(),
     kind: entry.kind,
     title: String(entry.title).slice(0, 200),
@@ -360,16 +556,14 @@ function selfJournal(args) {
     refs: Array.isArray(entry.refs) ? entry.refs.map(String).slice(0, 8) : [],
     status: ["playbook_proposal", "playbook_landed"].includes(entry.kind) ? "proposed" : "",
     sessionId: currentSid(st)?.sid || "",
-  };
-  fs.mkdirSync(dataRoot(), { recursive: true });
-  fs.appendFileSync(journalPath(), JSON.stringify(rec) + "\n");
-  // 复盘产出会清复盘债(设计 §7.2)
-  if (rec.kind === "failure_postmortem" || rec.kind === "guanji_report") {
-    st.reflect.lastLiteAt = rec.t;
+  });
+  // 复盘产出会清复盘债(设计 §7.2;0.4.0 起含跨会话债)
+  if (rec.kind === "failure_postmortem" || rec.kind === "guanji_report" || rec.kind === "playbook_landed") {
+    if (rec.kind === "failure_postmortem") st.reflect.lastLiteAt = rec.t;
     if (rec.kind === "guanji_report") st.reflect.lastDeepAt = rec.t;
-    for (const s of Object.values(st.sessions)) s.failuresSinceReflect = 0;
+    clearReflectDebt(st);
+    saveState(st);
   }
-  saveState(st);
   return `已记入反思日志:${rec.id} ${rec.kind}「${rec.title}」${rec.lesson ? `\n提炼规则:${rec.lesson}` : ""}\n自我模型与 playbook 的修订请用 Edit 直接改文件(会走权限审批,人审即安全边界)。`;
 }
 

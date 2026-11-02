@@ -139,9 +139,9 @@ AOPC 运行时已有相当多的自省设施(盘点见 §3):环境宣告、模�
 | `SessionStart` | `startup\|resume` | 初始化会话状态;缺失时**自动播种 self-model/playbooks 骨架**(0.2.0 起,只创建不覆盖);注入**自我横幅**(self-model 摘要 + 数据路径宣告 + **playbook 规则聚合注入**,≤600 字符预算) | 是(1 条,≤ 800B + 规则预算) |
 | `SessionStart` | `compact` | 把"压缩前状态存档"写进事件日志;注入一行"上下文已压缩,历史已归档" | 是(1 行) |
 | `UserPromptSubmit` | — | 记 turn 开始;按节流策略注入**上下文预算行**(见 4.3) | 节流 |
-| `PostToolUse` | `*` | 记工具调用成功(计数),清除该工具连败 streak | **否** |
+| `PostToolUse` | `*` | 记工具调用成功(计数),清除该工具连败 streak;**文件类工具计数编辑量**(0.3.0),达 `atEdits`(默认 10)时一次性注入 critic 提醒 | 仅编辑量达阈 |
 | `PostToolUseFailure` | `*` | 记错误(工具名 + 错误签名;用户打断不计失败);连败 ≥3 时注入一行告警 | 仅超阈 |
-| `Stop` | — | 记会话片段结束;计数达到节奏时注入**轻量复盘建议** | 节流(建议,不用 block) |
+| `Stop` | — | 记会话片段结束,**留存叙事片段**(脱敏 last_message 200 字符,0.3.0);计数达到节奏时注入**轻量复盘建议** | 节流(建议,不用 block) |
 
 > 实现注(P1 后修订):**PreToolUse 不注册**——避免给每次工具调用前置一个 node 进程(~30-80ms)开销;调用计数由 PostToolUse/PostToolUseFailure 承担,代价是挂起中未返回的调用不计入。
 
@@ -183,15 +183,17 @@ AOPC 运行时已有相当多的自省设施(盘点见 §3):环境宣告、模�
 
 PostToolUseFailure 告警:同一工具连续失败 ≥ 3 次才注入一次(与宿主 `model_anomaly` 的 repeatedToolCallWarningThreshold=3 呼应但不重复其文案),内容聚焦"同类失败我已连吃 3 次,已记入错误史;先复盘再重试"。
 
+Critic 提醒(0.3.0):会话内 Edit/Write/ApplyPatch 等文件类工具累计改动达 `criticNudge.atEdits`(默认 10)时,**一次性**注入"收尾前要不要派 critic 对抗审查"——大改动是定稿审查的最佳触发点,只提醒一次不做打断。
+
 ### 4.4 MCP 工具(`server.mjs`,stdio)
 
 | 工具 | 签名 | 返回 |
 |---|---|---|
-| `self_state` | 无参 | 当前会话快照,**主/子分列**(拍板 #5):`{main: {turns, toolCalls, errors, budget, anomalies…}, subagents: {count, toolCalls, errors}}`;子代理事件按 `sess_subagent_` id 前缀归类(hook 对子代理的覆盖范围留 P1 实测);末尾附 self-model 与 playbook 路径 |
-| `self_errors` | `{since?, groupBy?: "tool"\|"signature", limit?}` | 聚合错误史:按工具/错误签名分组、时间戳、最近 N 条、与哪条 playbook 规则相关(若已标注) |
+| `self_state` | 无参 | 当前会话快照(主会话 turn/工具/失败/预算/连败);**子代理视图为 Agent 派发计数**(C3 真机结论:子代理内部调用不触发 hook);**自我档案健康度**(0.5.0:五段完整/教训数/最后变更);跨会话复盘债;末尾附 self-model 与 playbook 路径 |
+| `self_errors` | `{since?, groupBy?: "tool"\|"signature", limit?}` | 聚合错误史:按工具/错误签名分组、时间戳、最近 N 条;**慢性错误检测**(0.3.0):同签名跨 ≥3 会话复发 → 标记为习惯性问题,建议固化 playbook 规则 |
 | `self_usage` | `{detail?: boolean}` | 预算对象;detail 时附 rollout 逐段估算 |
-| `self_history` | `{limit?}` | **跨会话自传体记忆**(0.2.0):最近 N 个会话的轮数/工具调用/失败率 + 累计统计,回答"我最近在忙什么" |
-| `self_journal` | `{action: "append"\|"query", entry?, filter?}` | L2 的反思日志读写(见 §8.3) |
+| `self_history` | `{limit?}` | **跨会话自传体记忆**(0.2.0,0.3.0 叙事化):最近 N 个会话的轮数/工具调用/失败率 + 累计统计,每会话附 Stop 留存的"最近在做"叙事片段 |
+| `self_journal` | `{action: "append"\|"query", entry?, filter?}` | L2 的反思日志读写(见 §8.3);query 对超 7 天未落地的提案打 ⚠(0.5.0) |
 
 MCP server 同时返回数据目录路径,让主 agent 知道去哪 Read/Edit self-model 与 playbook(数据目录含 marketplace 后缀,路径不稳定,**必须运行时宣告而非写死**)。
 
@@ -456,7 +458,7 @@ aopc-ai-tool/plugins/selfaware/
 │   └── guanji.md
 ├── commands/
 │   ├── reflect.md
-│   └── selfcheck.md          ← /self-check 真机自检(0.2.0)
+│   └── selfcheck.md          ← /selfcheck 真机自检(0.2.0;宿主按文件名注册)
 └── README.md
 ```
 
@@ -466,7 +468,7 @@ marketplace 条目按 `aopc-ai-tool/.claude-plugin/marketplace.json` 现有格�
 
 ## 11. 实施路线图
 
-> **进度(2026-11-02)**:P1 冒烟验证 + P2–P5 代码全部落地并升级至 **v0.2.0**(self_history 自传体记忆、SessionStart 自动播种骨架、playbook 规则注入横幅、/self-check 真机自检命令),**59 项冒烟测试全绿**(`scripts/smoke.mjs`,结论与偏差详见 [docs/notes.md](notes.md));待办:真机会话验证(可直接跑 `/self-check`)、marketplace 发布、周级语感调优(P6)。
+> **进度(2026-11-02)**:迭代至 **v0.7.0**,**100 项冒烟测试全绿**(`scripts/smoke.mjs`)+ 真机 e2e 脚本化(`scripts/e2e.mjs`)+ 宿主校验通过 + `/selfcheck` 真机 dogfood 5/6 PASS(见 [docs/notes.md](notes.md) §四)。版本轨迹:0.4.0 真机验证驱动修复(预算时序/Agent 派发计数/自动提案/复盘债)→ 0.5.0 防漂移仪表(健康度/过期提案/e2e 脚本)→ 0.6.0 self_config 会话内开关 + 宿主校验 + dogfood → 0.7.0 长期卫生(retentionDays 保留策略/时间本地化)。**功能面已完备,待办:提交推送、安装升级、P6 周级真实使用调优。**
 
 | 阶段 | 内容 | 验收标准 |
 |---|---|---|
