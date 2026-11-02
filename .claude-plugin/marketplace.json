@@ -371,7 +371,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -386,6 +386,17 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "1.1.0",
+          "date": "2026-11-03",
+          "changes": [
+            "自愈协议(用户反馈『遇到问题还是需要我来』的直接回应):障碍三分类——机械障碍自己修、凭据障碍问一次永久记住、价值判断才请示;禁止把 A 类当请示上报",
+            "自主学习日常化:每日收工强制提炼 ≥1 条规则直接落 playbook(完全自主使命免事前审批,出处留痕人事后审计);连续 3 天零学习 = 进化停滞,周报须自我检讨",
+            "标准请示格式:事实 + 默认提案 + 一句话所需,用户回复一次即成永久规则",
+            "bootstrap 播种 ops-fixes.md 自愈手册(已知修法种子:playwright 缺失/凭据/验证),agent 演化内容绝不覆盖",
+            "冒烟测试 125 → 130 项全绿"
+          ]
+        },
         {
           "version": "1.0.0",
           "date": "2026-11-02",

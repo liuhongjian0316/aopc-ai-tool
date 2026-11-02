@@ -1,5 +1,6 @@
 // 观己 · 初始化模板
-// 0.2.0 起,首次 SessionStart 由观察器自动播种骨架;内容填充仍只走复盘流程(DESIGN §6.2 纪律)。
+// 0.2.0 起,首次 SessionStart 由观察器自动播种骨架;1.1.0 起额外播种障碍自愈手册种子。
+// 内容填充纪律:完全自主使命下 playbook 规则由 agent 自主落地(带出处),人事后审计。
 
 export const SELF_MODEL_SKELETON = `# 自我档案(观己)
 
@@ -35,9 +36,21 @@ export const PLAYBOOK_README = `# Playbooks(自我改写的规则手册)
 
 每条规则一行:
 
-    - [P1|P2|P3][YYYY-MM-DD] 规则一句话 ← journal#<id>
+    - [P1|P2|P3][YYYY-MM-DD] 规则一句话 ← journal#<id> 或 ← 日期+证据
 
 - P1 = 必须遵守;P2 = 应当遵守;P3 = 参考
 - 文件按主题拆分(kebab-case,如 bash-pitfalls.md、verification-habits.md)
-- **没有 journal 出处的规则不许写入**(self-review 技能纪律);修订时旧规则直接改行,别堆积重复
+- 修订时旧规则直接改行,别堆积重复
+- 完全自主使命下,规则由 agent 自主落地(带出处),人事后通过面板/周报/journal 审计
 `;
+
+export const PLAYBOOK_OPS_FIXES = `# Ops Fixes(障碍自愈手册)
+
+障碍三分类自愈协议的第一站:遇到机械障碍(A 类)先查这里。每修成一个新障碍,当天补一条(操作、命令、验证方式)。v1.1 种子规则:
+
+- [P1][2026-11-03] 依赖/环境缺失(如 playwright chromium、npm 包)是 A 类机械障碍:自己执行安装命令(如 npx playwright install chromium),装完验证,不要请示用户 ← v1.1 首日三阻塞教训
+- [P1][2026-11-03] 扫码/授权类凭据是 B 类:发标准请示要一次授权,拿到后立刻把"以后如何自己使用/续期"写进本手册,同一凭据问题永不问第二次
+- [P2][2026-11-03] 命令失败先看完整 stderr 再动手;修复后必须跑一次验证命令确认,修而未验等于没修
+- [P2][2026-11-03] 同一障碍修了 3 次仍失败 → 升级为 B 类标准请示,附上三次尝试的完整证据
+`;
+

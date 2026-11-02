@@ -16,7 +16,7 @@ import {
 } from "../lib/state.mjs";
 import { updateBudget } from "../lib/budget.mjs";
 import { redact, errorSignature } from "../lib/redact.mjs";
-import { SELF_MODEL_SKELETON, PLAYBOOK_README } from "../lib/templates.mjs";
+import { SELF_MODEL_SKELETON, PLAYBOOK_README, PLAYBOOK_OPS_FIXES } from "../lib/templates.mjs";
 
 /** 会改工作区文件的工具(0.3.0:用于编辑量统计与 critic 提醒)——必须先于 main() 声明 */
 const FILE_TOOLS = new Set(["Edit", "Write", "ApplyPatch", "MultiEdit", "NotebookEdit"]);
@@ -183,6 +183,12 @@ function bootstrapSelf() {
     if (!fs.existsSync(playbooksDir())) {
       fs.mkdirSync(playbooksDir(), { recursive: true });
       fs.writeFileSync(path.join(playbooksDir(), "README.md"), PLAYBOOK_README);
+      created = true;
+    }
+    const opsFixes = path.join(playbooksDir(), "ops-fixes.md");
+    if (!fs.existsSync(opsFixes)) {
+      // 1.1.0:自愈手册种子(已存在则绝不覆盖——agent 可能已自行演化)
+      fs.writeFileSync(opsFixes, PLAYBOOK_OPS_FIXES);
       created = true;
     }
   } catch {

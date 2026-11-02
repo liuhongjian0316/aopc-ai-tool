@@ -25,11 +25,14 @@ when_to_use: "Stop 提醒复盘债时;用户说『复盘一下』『你最近表
 ## 产出(三条通道,缺一不可)
 
 1. **journal 条目**:调用 self_journal append,kind=`guanji_report`(深度复盘)或 `failure_postmortem`(清积压),body 写归纳结论。
-2. **自我模型修订提案**:若发现偏差,用 Edit 修改 `self/self-model.md` 对应段落——Edit 会触发权限审批,**人审通过才算数**;文件尾部的「变更记录」追加一行(日期+改动+依据 journal id)。
-3. **playbook 修订**:把 lesson 落成 `self/playbooks/<主题>.md` 里的一条规则,格式 `- [P1][日期] 规则一句话 ← journal#<id>`;没有现成主题文件就新建一个(文件名用 kebab-case,如 `verification-habits.md`)。
+2. **自我模型修订**:若发现偏差,用 Edit 修改 `self/self-model.md` 对应段落;文件尾部的「变更记录」追加一行(日期+改动+依据 journal id)。
+3. **playbook 修订**:把 lesson 落成 `self/playbooks/<主题>.md` 里的一条规则,格式 `- [P1][日期] 规则 ← journal#<id>`;没有现成主题文件就新建一个(文件名用 kebab-case,如 `verification-habits.md`)。
+
+**落地权限(v1.1)**:完全自主使命(`autonomy=full`)下,以上修订由 agent **自主落地**——每条带出处留痕,人事后通过面板、周报与 journal 审计,不再事前审批(用户明令:进化不能等人)。受监督使命仍走权限审批。
 
 ## 纪律
 
-- 复盘产出必须可追溯:每条修订引用 journal id;journal 里查不到出处的规则不许写进 playbook。
+- 复盘产出必须可追溯:每条修订引用 journal id 或日期+证据;journal 里查不到出处的规则不许写进 playbook。
+- 自主落地不等于随意落地:只落"反复出现 ≥2 次"或"修成过实际障碍"的规则;单次偶然不配成为规则。
 - 不在复盘里改自我模型以外的任何东西;不借复盘给自己加戏。
 - 轻量复盘(Stop 提醒触发的):只做"清积压"——把未落地的 lesson 落地,不重写自我模型;深度复盘(用户主动或 /reflect)才做全面修订。

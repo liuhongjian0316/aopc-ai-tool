@@ -744,6 +744,22 @@ console.log("\n[T29] mission autonomy:full 受横幅与结构化携带;默认 su
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// ---------- T30 ops-fixes 自愈手册种子 ----------
+
+console.log("\n[T30] bootstrap 播种 ops-fixes.md;已有文件不覆盖");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  runObserver(dir, { session_id: "sess_t30", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  const ops = path.join(dir, "self", "playbooks", "ops-fixes.md");
+  check("ops-fixes.md 已播种", fs.existsSync(ops));
+  check("含障碍三分类种子规则", fs.readFileSync(ops, "utf8").includes("A 类机械障碍"));
+  // agent 演化过的文件不被覆盖
+  fs.appendFileSync(ops, "\n- [P1][2026-11-03] 我自己修的规则 ← 证据\n");
+  runObserver(dir, { session_id: "sess_t30", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  check("演化内容不被覆盖", fs.readFileSync(ops, "utf8").includes("我自己修的规则"));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);
