@@ -46,6 +46,7 @@ export const DEFAULT_CONFIG = {
   budgetThrottle: { mid: 0.3, high: 0.6, critical: 0.85, midEveryTurns: 10 },
   reflectNudge: { minSegments: 8, minFailures: 3 },
   criticNudge: { atEdits: 10 },
+  knowledgeBase: { path: "", folder: "观己学习", dailyLearning: true, autoCommit: true, autoPush: false },
 };
 
 export function loadConfig() {
@@ -57,6 +58,7 @@ export function loadConfig() {
       budgetThrottle: { ...DEFAULT_CONFIG.budgetThrottle, ...(raw.budgetThrottle || {}) },
       reflectNudge: { ...DEFAULT_CONFIG.reflectNudge, ...(raw.reflectNudge || {}) },
       criticNudge: { ...DEFAULT_CONFIG.criticNudge, ...(raw.criticNudge || {}) },
+      knowledgeBase: { ...DEFAULT_CONFIG.knowledgeBase, ...(raw.knowledgeBase || {}) },
     };
   } catch {
     return {
@@ -64,6 +66,7 @@ export function loadConfig() {
       budgetThrottle: { ...DEFAULT_CONFIG.budgetThrottle },
       reflectNudge: { ...DEFAULT_CONFIG.reflectNudge },
       criticNudge: { ...DEFAULT_CONFIG.criticNudge },
+      knowledgeBase: { ...DEFAULT_CONFIG.knowledgeBase },
     };
   }
 }

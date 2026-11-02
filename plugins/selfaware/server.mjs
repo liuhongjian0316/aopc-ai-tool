@@ -11,7 +11,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
+import { execSync } from "node:child_process";
 
 // 面板资源(0.8.0):panel.html 以 ui:// 资源分发(text/html;profile=mcp-app,MCP App 规范),
 // 模式照搬 wudi-coding / obsidian-kb:manifest ui.surfaces → resources/list+read → 自包含单文件。
@@ -29,7 +31,7 @@ import {
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "1.3.0";
+const VERSION = "1.4.0";
 
 const TOOLS = [
   {
@@ -92,6 +94,21 @@ const TOOLS = [
         goal: { type: "string", description: "start:完成判据/目标(可选)" },
         autonomy: { type: "string", enum: ["supervised", "full"], description: "start:自主等级。full=完全自主(日常发布与数据分析无需逐条请示,红线仍须请示);supervised=受监督(默认)" },
         text: { type: "string", description: "note/close:本条记录内容" },
+      },
+      required: ["action"],
+    },
+  },
+  {
+    name: "self_learn",
+    description:
+      "观己:每日学习时刻——把学到的新知识写入用户的 Obsidian 知识库(带 agent 标识 frontmatter + git 自动提交)。每天至少 1 条:解决问题时查的资料、领域文档要点、数据里的新模式,都算。action=record 需要 title + body(body 必须写清来源与证据,不编造);action=list 查看已写入的。知识库路径未配置时,先用 self_config 设 knowledgeBase.path。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["record", "list"] },
+        title: { type: "string", description: "record:知识条目标题(一句话说清学到了什么)" },
+        body: { type: "string", description: "record:知识正文——学到了什么、来源/证据、怎么用" },
+        tags: { type: "string", description: "record:附加标签,逗号分隔(会自动附加 观己/agent-written)" },
       },
       required: ["action"],
     },
@@ -233,6 +250,9 @@ function callTool(params) {
       case "self_config":
         r = selfConfig(args);
         break;
+      case "self_learn":
+        r = selfLearn(args);
+        break;
       case "self_mission":
         r = selfMission(args);
         break;
@@ -324,6 +344,7 @@ function selfState() {
   const health = selfModelHealth();
   const playbookRules = readPlaybookRules();
   const mission = readMission();
+  const knowledge = kbStats(cfg); // 1.4.0:知识库(每日学习时刻的落点)
   // 1.3.0:自扩展资产清单——能力自扩展协议的可见性基础设施
   const playbookFiles = (() => {
     try {
@@ -359,6 +380,7 @@ function selfState() {
     lastDeepAt: st.reflect?.lastDeepAt || 0,
     playbookRules,
     playbookFiles,
+    knowledge,
     opsScripts,
     mission: {
       active: mission.active ? { ...mission.active, day: missionDay(mission.active) } : null,
@@ -385,6 +407,7 @@ function selfState() {
   if (st.outstandingDebt > 0) lines.push(`跨会话复盘债:${st.outstandingDebt} 次失败未复盘(跑 /reflect 清账)`);
   if (mission.active) lines.push(`当前使命:「${mission.active.title}」(第 ${missionDay(mission.active)} 天)`);
   lines.push(`自扩展资产:自造脚本 ${opsScripts.length} 个 / playbook ${playbookFiles.length} 个(含 ${playbookFiles.filter((f) => f.endsWith("-ops.md")).length} 份领域手册);明细见 structured`);
+  lines.push(`知识库:${knowledge.configured ? `累计 ${knowledge.total} 条 / 今日 ${knowledge.today} 条(${knowledge.path})` : "未配置——self_config set knowledgeBase.path 后,每日学习写入 Obsidian"}`);
   lines.push(`自我档案健康:${health}`);
   lines.push(`自我档案:${selfModelPath()}${fs.existsSync(selfModelPath()) ? "" : "(尚未创建——首次 /reflect 时建立)"}`);
   lines.push(`playbook 目录:${playbooksDir()}`);
@@ -574,24 +597,7 @@ function fmtDate(t) {
   }
 }
 
-// ---------- 配置读写(0.6.0:白名单键,hook 与 MCP 共用 config.json) ----------
-
-const CONFIG_SCHEMA = {
-  injectBudget: { type: "boolean" },
-  injectErrorWarn: { type: "boolean" },
-  injectReflectNudge: { type: "boolean" },
-  injectCriticNudge: { type: "boolean" },
-  contextWindow: { type: "int", min: 1000 },
-  retentionDays: { type: "int", min: 0 },
-  "budgetThrottle.mid": { type: "num", min: 0, max: 1 },
-  "budgetThrottle.high": { type: "num", min: 0, max: 1 },
-  "budgetThrottle.critical": { type: "num", min: 0, max: 1 },
-  "budgetThrottle.midEveryTurns": { type: "int", min: 1 },
-  "reflectNudge.minSegments": { type: "int", min: 1 },
-  "reflectNudge.minFailures": { type: "int", min: 1 },
-  "criticNudge.atEdits": { type: "int", min: 1 },
-  rolloutDir: { type: "string" },
-};
+// ---------- 配置读写(0.6.0:白名单键,hook 与 MCP 共用 config.json;1.4.0 增 knowledgeBase.* 与 retentionDays) ----------
 
 function readRawConfig() {
   try {
@@ -726,6 +732,157 @@ function missionStructured(m, st) {
     },
     sessionId: currentSid(st)?.sid || "",
   };
+}
+
+// ---------- 每日学习时刻(1.4.0:学新知识 → Obsidian 知识库,带 agent 标识) ----------
+
+const CONFIG_SCHEMA = {
+  injectBudget: { type: "boolean" },
+  injectErrorWarn: { type: "boolean" },
+  injectReflectNudge: { type: "boolean" },
+  injectCriticNudge: { type: "boolean" },
+  contextWindow: { type: "int", min: 1000 },
+  retentionDays: { type: "int", min: 0 },
+  "budgetThrottle.mid": { type: "num", min: 0, max: 1 },
+  "budgetThrottle.high": { type: "num", min: 0, max: 1 },
+  "budgetThrottle.critical": { type: "num", min: 0, max: 1 },
+  "budgetThrottle.midEveryTurns": { type: "int", min: 1 },
+  "reflectNudge.minSegments": { type: "int", min: 1 },
+  "reflectNudge.minFailures": { type: "int", min: 1 },
+  "criticNudge.atEdits": { type: "int", min: 1 },
+  rolloutDir: { type: "string" },
+  "knowledgeBase.path": { type: "string" },
+  "knowledgeBase.folder": { type: "string" },
+  "knowledgeBase.dailyLearning": { type: "boolean" },
+  "knowledgeBase.autoCommit": { type: "boolean" },
+  "knowledgeBase.autoPush": { type: "boolean" },
+};
+
+/** 知识库目录(cfg 未配路径或目录不存在 → null) */
+function kbDir(cfg) {
+  const root = cfg.knowledgeBase?.path;
+  if (!root || !fs.existsSync(root)) return null;
+  return path.join(root, cfg.knowledgeBase?.folder || "观己学习");
+}
+
+function kbSlug(title) {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  const today = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  const t = String(title).trim().replace(/[\\/:*?"<>|\s]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "note";
+  return `${today}-${t}.md`;
+}
+
+function kbGitCommit(root, message) {
+  try {
+    if (!fs.existsSync(path.join(root, ".git"))) return { committed: false, reason: "非 git 仓库" };
+    execSync(`git add -A && git commit -m ${JSON.stringify(message)}`, { cwd: root, timeout: 30000, stdio: "pipe" });
+    return { committed: true };
+  } catch (e) {
+    return { committed: false, reason: String(e?.message || e).slice(0, 160) };
+  }
+}
+
+function kbStats(cfg) {
+  const dir = kbDir(cfg);
+  if (!dir) return { configured: !!cfg.knowledgeBase?.path, path: cfg.knowledgeBase?.path || "" };
+  const p = (n) => String(n).padStart(2, "0");
+  const todayPrefix = `${new Date().getFullYear()}-${p(new Date().getMonth() + 1)}-${p(new Date().getDate())}`;
+  let files = [];
+  try {
+    files = fs.readdirSync(dir).filter((f) => f.endsWith(".md"));
+  } catch {}
+  return {
+    configured: true,
+    path: cfg.knowledgeBase?.path,
+    folder: cfg.knowledgeBase?.folder || "观己学习",
+    total: files.length,
+    today: files.filter((f) => f.startsWith(todayPrefix)).length,
+    recent: files.slice(-3).reverse(),
+  };
+}
+
+function selfLearn(args) {
+  const action = args?.action || "list";
+  const cfg = loadConfig();
+  if (action === "list") {
+    const dir = kbDir(cfg);
+    if (!dir) return { text: `<self-learn> 知识库未配置或路径不存在。用 self_config 设 knowledgeBase.path(本地路径)与 knowledgeBase.folder(子文件夹,默认 观己学习)。</self-learn>`, structured: { kb: kbStats(cfg) } };
+    let files = [];
+    try {
+      files = fs.readdirSync(dir).filter((f) => f.endsWith(".md")).map((f) => ({ file: f, t: fs.statSync(path.join(dir, f)).mtimeMs }));
+    } catch {}
+    files.sort((a, b) => b.t - a.t);
+    const lines = [`<self-learn> 知识库已写入 ${files.length} 条(目录:${dir}),最近 ${Math.min(10, files.length)} 条:`];
+    for (const f of files.slice(0, 10)) lines.push(`- ${f.file}`);
+    lines.push("</self-learn>");
+    return { text: lines.join("\n"), structured: { kb: { ...kbStats(cfg), recent: files.slice(0, 3).map((f) => f.file) } } };
+  }
+  // record
+  const title = String(args?.title || "").trim();
+  const body = String(args?.body || "").trim();
+  if (!title) throw new Error("record 需要 title(一句话说清学到了什么)");
+  if (!body) throw new Error("record 需要 body(学到了什么、来源/证据、怎么用——不编造)");
+  const dir = kbDir(cfg);
+  if (!dir) throw new Error("知识库路径未配置:self_config set knowledgeBase.path=<Obsidian 仓库本地路径>");
+  fs.mkdirSync(dir, { recursive: true });
+  const st = loadState();
+  const mission = readMission();
+  const file = path.join(dir, kbSlug(title));
+  const now = new Date();
+  const p2 = (n) => String(n).padStart(2, "0");
+  const time = `${p2(now.getHours())}:${p2(now.getMinutes())}`;
+  const tags = ["观己", "agent-written", ...String(args?.tags || "").split(/[,，\s]+/).filter(Boolean)];
+  let text;
+  if (fs.existsSync(file)) {
+    // 同题补学:追加节,不覆盖
+    fs.appendFileSync(file, `\n\n## 补充(${time})\n\n${body}\n`);
+    text = `已补充到已有笔记:${path.basename(file)}(同题补学)`;
+  } else {
+    const fm = [
+      "---",
+      `title: ${title}`,
+      "source: agent-selfaware",
+      `agent: 观己 (selfaware v${VERSION})`,
+      "author: 观己(自主 agent)",
+      "agent-written: true",
+      `learned_at: ${now.toISOString().slice(0, 10)}`,
+      `mission: ${mission.active?.title || "无"}`,
+      `tags: [${tags.join(", ")}]`,
+      "---",
+      "",
+      banner(),
+      "",
+      `# ${title}`,
+      "",
+      body,
+      "",
+    ].join("\n");
+    fs.writeFileSync(file, fm);
+    text = `已写入知识库:${path.basename(file)}`;
+  }
+  // git 自动提交(本地;push 默认关)
+  let git = { committed: false };
+  const root = cfg.knowledgeBase?.path;
+  if (cfg.knowledgeBase?.autoCommit) {
+    git = kbGitCommit(root, `agent(观己): 学习记录 ${title}`);
+    if (cfg.knowledgeBase?.autoPush && git.committed) {
+      try {
+        execSync("git push", { cwd: root, timeout: 60000, stdio: "pipe" });
+        git.pushed = true;
+      } catch (e) {
+        git.reason = `push 失败:${String(e?.message || e).slice(0, 120)}`;
+      }
+    }
+  }
+  return {
+    text: `${text}${git.committed ? "(已 git 提交)" : git.reason ? `(git 未提交:${git.reason})` : ""}。知识库累计 ${kbStats(cfg).total} 条。`,
+    structured: { kb: kbStats(cfg), file: path.basename(file), title, git },
+  };
+}
+
+function banner() {
+  return `> 🤖 本文由自主 agent「观己」(selfaware)自动学习并写入,标签 #agent-written。来源与证据见正文;如有错误,责任在 agent 而非知识库主人。`;
 }
 
 // ---------- journal 助手(0.4.0:供 self_journal 与慢性错误自提案共用) ----------

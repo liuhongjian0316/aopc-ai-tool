@@ -201,7 +201,7 @@ console.log("\n[T7] MCP server:握手 / 工具列表 / 四工具调用");
   check("initialize 回显协议版本", byId.get(1)?.result?.protocolVersion === "2025-06-18", JSON.stringify(byId.get(1)));
   check("serverInfo=selfaware", byId.get(1)?.result?.serverInfo?.name === "selfaware");
   const tools = byId.get(2)?.result?.tools || [];
-  check("7 个工具", tools.length === 7 && ["self_state", "self_errors", "self_usage", "self_history", "self_config", "self_mission", "self_journal"].every((n) => tools.some((t) => t.name === n)), JSON.stringify(tools.map((t) => t.name)));
+  check("8 个工具", tools.length === 8 && ["self_state", "self_errors", "self_usage", "self_history", "self_config", "self_mission", "self_learn", "self_journal"].every((n) => tools.some((t) => t.name === n)), JSON.stringify(tools.map((t) => t.name)));
   const stTxt = byId.get(3)?.result?.content?.[0]?.text || "";
   check("self_state 返回主会话状态", stTxt.includes("sess_t7") && stTxt.includes("<self-state>"), stTxt.slice(0, 200));
   const jApp = byId.get(4)?.result?.content?.[0]?.text || "";
@@ -788,6 +788,67 @@ console.log("\n[T32] self_config 白名单补 retentionDays");
   spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000 });
   check("retentionDays=30 已落盘", JSON.parse(fs.readFileSync(path.join(dir, "config.json"), "utf8")).retentionDays === 30);
   fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ---------- T33/T34 每日学习时刻(self_learn → Obsidian 知识库) ----------
+
+console.log("\n[T33] self_learn record:写入带 agent 标识的 Obsidian 笔记 + git 提交");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const kb = fs.mkdtempSync(path.join(os.tmpdir(), "sa-kb-"));
+  spawnSync("git", ["init"], { cwd: kb, encoding: "utf8" });
+  spawnSync("git", ["config", "user.email", "agent@test"], { cwd: kb, encoding: "utf8" });
+  spawnSync("git", ["config", "user.name", "guanji-test"], { cwd: kb, encoding: "utf8" });
+  fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify({ knowledgeBase: { path: kb, autoCommit: true } }));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    return { text: m?.result?.content?.[0]?.text || "", sc: m?.result?.structuredContent, isError: !!m?.result?.isError };
+  };
+  const r1 = call("self_learn", { action: "record", title: "Playwright chromium 自愈安装要点", body: "来源:ops-fixes 首日实践。学习:npx playwright install chromium 可自愈 RPA 前提;装完必须跑验证命令。", tags: "douyin" });
+  check("record 写入成功", !r1.isError && r1.text.includes("已写入知识库"), r1.text.slice(0, 200));
+  const kbDir = path.join(kb, "观己学习");
+  const files = fs.readdirSync(kbDir).filter((f) => f.endsWith(".md"));
+  const nowD = new Date();
+  const pd = (n) => String(n).padStart(2, "0");
+  const localToday = `${nowD.getFullYear()}-${pd(nowD.getMonth() + 1)}-${pd(nowD.getDate())}`; // kbSlug 用本地日期,断言必须同口径(UTC 会差一天)
+  check("文件名带日期与标题 slug", files.length === 1 && files[0].startsWith(localToday) && files[0].includes("Playwright-chromium"), JSON.stringify(files));
+  const md = fs.readFileSync(path.join(kbDir, files[0]), "utf8");
+  check("frontmatter 带 agent 标识", md.includes("source: agent-selfaware") && md.includes("agent-written: true"), md.slice(0, 300));
+  check("正文带 🤖 横幅", md.includes("🤖 本文由自主 agent「观己」"));
+  check("tags 含 agent-written 与用户标签", md.includes("tags: [观己, agent-written, douyin]"));
+  const gl = spawnSync("git", ["log", "--oneline", "--grep=agent(观己)"], { cwd: kb, encoding: "utf8" });
+  check("git 已带 agent 标识提交", (gl.stdout || "").trim().length > 0, gl.stdout + gl.stderr);
+  const r2 = call("self_learn", { action: "record", title: "Playwright chromium 自愈安装要点", body: "补充:升级 playwright 版本后需重装对应 chromium。" });
+  check("同题补学走追加", !r2.isError && r2.text.includes("补充") && fs.readdirSync(kbDir).length === 1);
+  check("追加节在文件内", fs.readFileSync(path.join(kbDir, files[0]), "utf8").includes("## 补充("));
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(kb, { recursive: true, force: true });
+}
+
+console.log("\n[T34] self_learn list + self_state 知识库统计");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const kb = fs.mkdtempSync(path.join(os.tmpdir(), "sa-kb-"));
+  fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify({ knowledgeBase: { path: kb } }));
+  runObserver(dir, { session_id: "sess_t34", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  fs.mkdirSync(path.join(kb, "观己学习"), { recursive: true });
+  fs.writeFileSync(path.join(kb, "观己学习", "2026-11-03-测试知识.md"), "# t\n");
+  const rpc = [
+    { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "self_learn", arguments: { action: "list" } } },
+    { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "self_state", arguments: {} } },
+  ].map((m) => JSON.stringify(m)).join("\n") + "\n";
+  const r = spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000 });
+  const replies = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  const listTxt = replies.find((m) => m.id === 1)?.result?.content?.[0]?.text || "";
+  check("list 列出已写入笔记", listTxt.includes("2026-11-03-测试知识.md"), listTxt.slice(0, 200));
+  const sc2 = replies.find((m) => m.id === 2)?.result?.structuredContent;
+  check("self_state 带知识库统计", sc2?.knowledge?.configured === true && sc2.knowledge.total === 1 && sc2.knowledge.today === 1, JSON.stringify(sc2?.knowledge));
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(kb, { recursive: true, force: true });
 }
 
 // ---------- 汇总 ----------

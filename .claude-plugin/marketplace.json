@@ -371,7 +371,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "1.3.0",
+      "version": "1.4.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -386,6 +386,17 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "1.4.0",
+          "date": "2026-11-03",
+          "changes": [
+            "每日学习时刻(用户需求:自主进化要每天学新知识):self_learn 工具把新知识写入用户的 Obsidian 知识库(本地路径可配 knowledgeBase.path,默认子文件夹 观己学习)",
+            "agent 标识三重:frontmatter(source: agent-selfaware / agent-written: true)+ 正文 🤖 横幅 + git 提交信息 agent(观己):;同题补学追加不覆盖;autoCommit 默认开,autoPush 默认关",
+            "面板新增每日学习卡(今日/累计/最近条目);autonomous-ops 日循环加入学习时刻步骤(来源必须真实,知识库是公开仓库,署名即信誉)",
+            "修复:callTool switch 丢失 self_mission case + self_journal 重复(历史编辑事故, mission 测试曾因此静默通过存疑——已由 141 项测试锁定)",
+            "冒烟测试 128 → 141 项全绿"
+          ]
+        },
         {
           "version": "1.3.0",
           "date": "2026-11-03",

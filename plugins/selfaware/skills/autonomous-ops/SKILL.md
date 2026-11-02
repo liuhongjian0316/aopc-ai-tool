@@ -58,7 +58,8 @@ when_to_use: "用户授权 agent 完全自主运营任何长期事务并已 self
 2. **前提自愈**:缺口先过三分类;**"全部阻塞所以什么都没干"是反模式**——总有不依赖缺失前提的工作(数据分析/复盘/沉淀/自扩展)。
 3. **执行领域日循环**。
 4. **收工记账与强制学习**:`self_mission` note(做了什么/数据/明日);**每日强制提炼 ≥1 条规则直接落 playbook**——解决过的问题进 ops-fixes,发现的模式进领域手册,边界进 autonomy-boundaries。零学习汇报是失职;连续 3 天零学习 = 进化停滞,周报自我检讨。
-5. 当日失败走 metacognition 复盘 + `self_journal` 落账。
+5. **每日学习时刻(1.4.0:学新知识,不只反思自己)**:从今天查过的资料、领域文档、数据模式中挑 **≥1 条新知识**,用 `self_learn` action=record 写入用户的 Obsidian 知识库(title + body 写清"学到了什么、来源/证据、怎么用")。自动带 agent 标识(frontmatter `source: agent-selfaware` + 🤖 横幅)并 git 提交。路径未配置就先用 self_config 配好。**分寸:写入的是知识,不是流水账;来源必须真实,不许编造——知识库是公开仓库,你的署名就是你的信誉。**
+6. 当日失败走 metacognition 复盘 + `self_journal` 落账。
 
 ## 熔断器(任一触发停止领域核心动作)
 
@@ -66,7 +67,7 @@ when_to_use: "用户授权 agent 完全自主运营任何长期事务并已 self
 
 ## 每周进化循环(周日或每第 7 个工作日)
 
-领域指标 top/bottom 对照当日动作 → 洞察(note 前缀「洞察:」)→ **反复出现 ≥2 次的洞察固化进领域手册**(如 douyin-content.md)→ 派 `guanji` 周度自省(必答三问:本周把几个问题变成了能力?ops-fixes 长了几条?自扩展了什么?)→ 给用户周报。
+领域指标 top/bottom 对照当日动作 → 洞察(note 前缀「洞察:」)→ **反复出现 ≥2 次的洞察固化进领域手册**(如 douyin-content.md)→ 派 `guanji` 周度自省(必答三问:本周把几个问题变成了能力?ops-fixes 长了几条?自扩展了什么?)→ 本周学习清单(知识库新条目,`self_learn` action=list)随周报给用户。
 
 ## 红线(完全自主也不豁免)
 
