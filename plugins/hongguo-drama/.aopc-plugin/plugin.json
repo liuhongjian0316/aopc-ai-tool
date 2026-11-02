@@ -1,0 +1,71 @@
+{
+  "name": "hongguo-drama",
+  "version": "0.2.2",
+  "description": "红果短剧下载器接入 AOPC：Agent 可搜索/解析/提交下载/查询进度，独立 Electron 运行壳承载完整 UI（播放、下载管理、追剧），关窗后台续下；侧栏面板可视化剧库与下载进度",
+  "description_i18n": {
+    "en": "Hongguo short-drama downloader for AOPC: let the agent search, resolve, submit downloads and track progress; a self-contained Electron runtime shell carries the full UI (player, download manager, follow-list) and keeps downloading with the window closed. Sidebar panel visualizes library and download progress.",
+    "zh-CN": "红果短剧下载器接入 AOPC：Agent 可搜索/解析/提交下载/查询进度，独立 Electron 运行壳承载完整 UI（播放、下载管理、追剧），关窗后台续下；侧栏面板可视化剧库与下载进度"
+  },
+  "author": {
+    "name": "liuhongjian"
+  },
+  "license": "GPL-3.0",
+  "keywords": [
+    "hongguo",
+    "short-drama",
+    "downloader",
+    "electron",
+    "video",
+    "aopc"
+  ],
+  "mcpServers": {
+    "hongguo": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "${AOPC_PLUGIN_ROOT}/mcp-server/server.mjs"
+      ],
+      "env": {
+        "AOPC_PLUGIN_DATA": "${AOPC_PLUGIN_DATA}",
+        "AOPC_HONGGUO_DOWNLOAD_DIR": "${user_config.downloadDir}",
+        "AOPC_HONGGUO_AUTO_START": "${user_config.autoStart}",
+        "AOPC_HONGGUO_ELECTRON": "${user_config.electronPath}"
+      }
+    }
+  },
+  "ui": {
+    "surfaces": [
+      {
+        "id": "hongguo",
+        "title": {
+          "zh-CN": "红果短剧",
+          "en-US": "Hongguo Drama"
+        },
+        "icon": "clapperboard",
+        "server": "hongguo",
+        "resourceUri": "ui://hongguo-drama/panel.html",
+        "availability": "session"
+      }
+    ]
+  },
+  "userConfig": {
+    "downloadDir": {
+      "type": "string",
+      "title": "下载目录",
+      "description": "下载视频的保存目录。留空 = 插件数据目录下的 downloads 文件夹；也可以在应用窗口的设置页随时改。改动目录后需用 hongguo_quit 退出运行壳，下次使用生效。",
+      "default": ""
+    },
+    "autoStart": {
+      "type": "boolean",
+      "title": "会话启动时拉起下载器",
+      "description": "开启后每个 AOPC 会话创建即后台拉起运行壳（无窗口），追剧检测与续跑下载更早开始；关闭则首次调用工具时才拉起。",
+      "default": false
+    },
+    "electronPath": {
+      "type": "string",
+      "title": "Electron 可执行文件路径（可选）",
+      "description": "显式指定 Electron 可执行文件（如已安装的 Electron 或其他应用的运行时）。留空 = 自动解析，找不到时自动下载到插件数据目录。",
+      "default": ""
+    }
+  }
+}

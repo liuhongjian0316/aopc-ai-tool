@@ -1,0 +1,16 @@
+{
+  "name": "hongguo-drama",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "红果短剧 AOPC 插件构建工程（MCP server 与运行壳均为无依赖源码，此处仅面板构建用）",
+  "scripts": {
+    "build:panel": "node scripts/build-panel.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^2.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.23.0"
+  }
+}

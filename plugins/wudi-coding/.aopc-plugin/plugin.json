@@ -1,0 +1,89 @@
+{
+  "name": "wudi-coding",
+  "version": "0.12.0",
+  "description": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册）。/wudi 命令族调度四个域，wudi-* 技能提供方法论，wudi_* MCP 工具提供项目档案与部署流水线真工具",
+  "description_i18n": {
+    "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (design mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation (README/API/PRD/runbook). /wudi command family orchestrates the four domains, wudi-* skills provide methodology, wudi_* MCP tools provide project profile and the real deploy pipeline.",
+    "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册）。/wudi 命令族调度四个域，wudi-* 技能提供方法论，wudi_* MCP 工具提供项目档案与部署流水线真工具"
+  },
+  "author": {
+    "name": "liuhongjian"
+  },
+  "license": "MIT",
+  "keywords": [
+    "wudi",
+    "full-lifecycle",
+    "developer-tools",
+    "deploy",
+    "ui-design",
+    "docs",
+    "aopc"
+  ],
+  "commands": "commands",
+  "skills": "skills",
+  "mcpServers": {
+    "wudi": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "${AOPC_PLUGIN_ROOT}/mcp-server/server.mjs"
+      ],
+      "cwd": "${AOPC_PROJECT_DIR}",
+      "env": {
+        "AOPC_WORKSPACE_ROOT": "${AOPC_PROJECT_DIR}",
+        "AOPC_PLUGIN_DATA": "${AOPC_PLUGIN_DATA}",
+        "WUDI_SSH_HOST": "${user_config.sshHost}",
+        "WUDI_SSH_PORT": "${user_config.sshPort}",
+        "WUDI_SSH_USER": "${user_config.sshUser}",
+        "WUDI_SSH_IDENTITY": "${user_config.sshIdentityPath}",
+        "WUDI_FIGMA_TOKEN": "${user_config.figmaToken}"
+      }
+    }
+  },
+  "userConfig": {
+    "sshHost": {
+      "type": "string",
+      "title": "部署服务器地址",
+      "description": "SSH 目标主机，如 203.0.113.10 或 server.example.com。留空则部署/远程执行工具不可用（其余功能不受影响）。",
+      "default": ""
+    },
+    "sshPort": {
+      "type": "string",
+      "title": "SSH 端口",
+      "default": "22"
+    },
+    "sshUser": {
+      "type": "string",
+      "title": "SSH 用户",
+      "description": "仅支持密钥认证（identity file / ssh-agent），不使用密码。",
+      "default": "root"
+    },
+    "sshIdentityPath": {
+      "type": "string",
+      "title": "SSH 私钥路径",
+      "description": "私钥绝对路径（如 ~/.ssh/id_ed25519）。留空则使用默认密钥或 ssh-agent。",
+      "default": ""
+    },
+    "figmaToken": {
+      "type": "string",
+      "title": "Figma Personal Access Token（可选）",
+      "description": "配置后解锁 wudi_figma_fetch（Figma 设计稿拉取）。仅保存在本机，不会上传。",
+      "default": ""
+    }
+  },
+  "ui": {
+    "surfaces": [
+      {
+        "id": "wudi",
+        "title": {
+          "zh-CN": "无敌编程工作台",
+          "en-US": "Wudi Workbench"
+        },
+        "icon": "rocket",
+        "server": "wudi",
+        "resourceUri": "ui://wudi-coding/panel.html",
+        "availability": "session"
+      }
+    ]
+  }
+}

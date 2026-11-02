@@ -3,3 +3,7 @@
 *.log
 node_modules/
 plugins/desktop-pet/.data/
+plugins/hongguo-drama/.data/
+# hongguo 运行壳的 axios stub 必须随插件分发（重定向到 vendor/axios.cjs 单文件包）
+!plugins/hongguo-drama/runtime/node_modules/
+!plugins/hongguo-drama/runtime/node_modules/**
