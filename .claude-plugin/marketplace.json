@@ -371,7 +371,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "1.1.0",
+      "version": "1.2.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -386,6 +386,16 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "1.2.0",
+          "date": "2026-11-03",
+          "changes": [
+            "通用自主(用户澄清:抖音只是场景):autonomous-ops 重写为领域无关操作系统——核心骨架(三分类自愈/强制学习/熔断/周进化)不变,领域细节由 agent 在『域适应』时自己写进 <domain>-ops.md",
+            "能力自扩展:缺工具三选一——组合现有工具 → 自造脚本进 self/ops/scripts/(可复用可演化,跑通当天登记)→ 才借外力;禁止『我没这个能力』直接请示",
+            "定时桥泛化:每日 09:30 拉起的日循环改为驱动『当前使命』(以 self_mission get 为准),换领域不用改定时器",
+            "guanji 周度自省新增三问:本周把几个问题变成能力?ops-fixes 长了几条?自扩展了什么?"
+          ]
+        },
         {
           "version": "1.1.0",
           "date": "2026-11-03",
