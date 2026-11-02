@@ -371,7 +371,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -386,6 +386,17 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "1.3.0",
+          "date": "2026-11-03",
+          "changes": [
+            "无头请示落点协议(实测事故驱动:B 类扫码卡死无头会话 5 小时):B/C 类请示写入 mission note(前缀【请示】)后立即结束本轮,不等待不挂起;批复经面板/下次会话",
+            "自扩展资产可见性:self_state 暴露 opsScripts(自造脚本)与 playbookFiles(含领域手册)——能力自扩展协议有了清单基础设施",
+            "self_config 白名单补 retentionDays",
+            "真机里程碑:agent 自主完成 96 条历史视频数据分析并自我纠偏使命定位(数据胜出模式 4 条写入 mission goal);chromium 自愈安装成功(ops-fixes 种子规则生效)",
+            "冒烟测试 128 → 131 项全绿"
+          ]
+        },
         {
           "version": "1.2.0",
           "date": "2026-11-03",

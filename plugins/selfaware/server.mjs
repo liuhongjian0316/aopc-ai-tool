@@ -24,12 +24,12 @@ function readPanel() {
 }
 import {
   dataRoot, configPath, loadConfig, loadState, saveState, journalPath,
-  selfModelPath, playbooksDir, listEventSids, readEvents,
+  selfModelPath, selfDir, playbooksDir, listEventSids, readEvents,
   missionPath, readMission, writeMission, missionDay,
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "1.2.0";
+const VERSION = "1.3.0";
 
 const TOOLS = [
   {
@@ -324,6 +324,21 @@ function selfState() {
   const health = selfModelHealth();
   const playbookRules = readPlaybookRules();
   const mission = readMission();
+  // 1.3.0:自扩展资产清单——能力自扩展协议的可见性基础设施
+  const playbookFiles = (() => {
+    try {
+      return fs.readdirSync(playbooksDir()).filter((f) => f.endsWith(".md"));
+    } catch {
+      return [];
+    }
+  })();
+  const opsScripts = (() => {
+    try {
+      return fs.readdirSync(path.join(selfDir(), "ops", "scripts")).filter((f) => !f.startsWith("."));
+    } catch {
+      return [];
+    }
+  })();
   const structured = {
     session: cur
       ? {
@@ -343,6 +358,8 @@ function selfState() {
     health,
     lastDeepAt: st.reflect?.lastDeepAt || 0,
     playbookRules,
+    playbookFiles,
+    opsScripts,
     mission: {
       active: mission.active ? { ...mission.active, day: missionDay(mission.active) } : null,
       recentLog: mission.log.slice(-5).reverse(),
@@ -367,6 +384,7 @@ function selfState() {
   lines.push(`子代理派发:本会话 ${dispatches} 次(经 Agent 工具计数;子代理内部调用不经过 hook——C3 真机实测)`);
   if (st.outstandingDebt > 0) lines.push(`跨会话复盘债:${st.outstandingDebt} 次失败未复盘(跑 /reflect 清账)`);
   if (mission.active) lines.push(`当前使命:「${mission.active.title}」(第 ${missionDay(mission.active)} 天)`);
+  lines.push(`自扩展资产:自造脚本 ${opsScripts.length} 个 / playbook ${playbookFiles.length} 个(含 ${playbookFiles.filter((f) => f.endsWith("-ops.md")).length} 份领域手册);明细见 structured`);
   lines.push(`自我档案健康:${health}`);
   lines.push(`自我档案:${selfModelPath()}${fs.existsSync(selfModelPath()) ? "" : "(尚未创建——首次 /reflect 时建立)"}`);
   lines.push(`playbook 目录:${playbooksDir()}`);
@@ -564,6 +582,7 @@ const CONFIG_SCHEMA = {
   injectReflectNudge: { type: "boolean" },
   injectCriticNudge: { type: "boolean" },
   contextWindow: { type: "int", min: 1000 },
+  retentionDays: { type: "int", min: 0 },
   "budgetThrottle.mid": { type: "num", min: 0, max: 1 },
   "budgetThrottle.high": { type: "num", min: 0, max: 1 },
   "budgetThrottle.critical": { type: "num", min: 0, max: 1 },

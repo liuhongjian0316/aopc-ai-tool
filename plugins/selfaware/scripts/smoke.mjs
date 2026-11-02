@@ -760,6 +760,36 @@ console.log("\n[T30] bootstrap 播种 ops-fixes.md;已有文件不覆盖");
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// ---------- T31 自扩展资产可见性 ----------
+
+console.log("\n[T31] self_state 暴露 opsScripts 与 playbookFiles");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  runObserver(dir, { session_id: "sess_t31", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  fs.mkdirSync(path.join(dir, "self", "ops", "scripts"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "self", "ops", "scripts", "resize_video.sh"), "#!/bin/sh\n");
+  fs.writeFileSync(path.join(dir, "self", "playbooks", "douyin-ops.md"), "# 领域手册\n");
+  const rpc = [{ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "self_state", arguments: {} } }]
+    .map((m) => JSON.stringify(m)).join("\n") + "\n";
+  const r = spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000 });
+  const sc = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).map((m) => m?.result?.structuredContent)[0];
+  check("自造脚本入清单", sc?.opsScripts?.includes("resize_video.sh"), JSON.stringify(sc?.opsScripts));
+  check("领域手册入清单", sc?.playbookFiles?.includes("douyin-ops.md") && sc?.playbookFiles?.includes("ops-fixes.md"), JSON.stringify(sc?.playbookFiles));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ---------- T32 retentionDays 可经 self_config 调整 ----------
+
+console.log("\n[T32] self_config 白名单补 retentionDays");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const rpc = [{ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "self_config", arguments: { action: "set", key: "retentionDays", value: 30 } } }]
+    .map((m) => JSON.stringify(m)).join("\n") + "\n";
+  spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000 });
+  check("retentionDays=30 已落盘", JSON.parse(fs.readFileSync(path.join(dir, "config.json"), "utf8")).retentionDays === 30);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);
