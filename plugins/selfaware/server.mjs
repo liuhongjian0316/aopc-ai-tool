@@ -31,7 +31,7 @@ import {
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "1.4.0";
+const VERSION = "1.5.0";
 
 const TOOLS = [
   {
@@ -89,11 +89,14 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["get", "start", "note", "close"] },
-        title: { type: "string", description: "start:使命标题(一句话)" },
+        action: { type: "string", enum: ["get", "start", "note", "close", "obstacle", "resolve"] },
+        title: { type: "string", description: "start:使命标题(一句话);resolve:已研究的困难知识标题(将写入知识库)" },
         goal: { type: "string", description: "start:完成判据/目标(可选)" },
         autonomy: { type: "string", enum: ["supervised", "full"], description: "start:自主等级。full=完全自主(日常发布与数据分析无需逐条请示,红线仍须请示);supervised=受监督(默认)" },
-        text: { type: "string", description: "note/close:本条记录内容" },
+        text: { type: "string", description: "note/close/obstacle:本条记录内容(obstacle 描述遇到的困难与已尝试的方案)" },
+        id: { type: "string", description: "resolve:要消化的困难条目 id(d001…)" },
+        body: { type: "string", description: "resolve:研究正文——机制是什么、为什么会这样、下次怎么更快(写入知识库)" },
+        tags: { type: "string", description: "resolve:附加标签(自动追加 troubleshooting)" },
       },
       required: ["action"],
     },
@@ -345,6 +348,7 @@ function selfState() {
   const playbookRules = readPlaybookRules();
   const mission = readMission();
   const knowledge = kbStats(cfg); // 1.4.0:知识库(每日学习时刻的落点)
+  const openDifficulties = (mission.open || []).filter((d) => d.status === "open");
   // 1.3.0:自扩展资产清单——能力自扩展协议的可见性基础设施
   const playbookFiles = (() => {
     try {
@@ -385,6 +389,7 @@ function selfState() {
     mission: {
       active: mission.active ? { ...mission.active, day: missionDay(mission.active) } : null,
       recentLog: mission.log.slice(-5).reverse(),
+      openDifficulties,
     },
     paths: { data: dataRoot(), selfModel: selfModelPath(), playbooks: playbooksDir(), journal: journalPath() },
   };
@@ -406,6 +411,7 @@ function selfState() {
   lines.push(`子代理派发:本会话 ${dispatches} 次(经 Agent 工具计数;子代理内部调用不经过 hook——C3 真机实测)`);
   if (st.outstandingDebt > 0) lines.push(`跨会话复盘债:${st.outstandingDebt} 次失败未复盘(跑 /reflect 清账)`);
   if (mission.active) lines.push(`当前使命:「${mission.active.title}」(第 ${missionDay(mission.active)} 天)`);
+  if (openDifficulties.length) lines.push(`待研究困难:${openDifficulties.length} 条(${openDifficulties.slice(-3).map((d) => d.id).join(",")}…)——每日学习时刻消化`);
   lines.push(`自扩展资产:自造脚本 ${opsScripts.length} 个 / playbook ${playbookFiles.length} 个(含 ${playbookFiles.filter((f) => f.endsWith("-ops.md")).length} 份领域手册);明细见 structured`);
   lines.push(`知识库:${knowledge.configured ? `累计 ${knowledge.total} 条 / 今日 ${knowledge.today} 条(${knowledge.path})` : "未配置——self_config set knowledgeBase.path 后,每日学习写入 Obsidian"}`);
   lines.push(`自我档案健康:${health}`);
@@ -703,6 +709,37 @@ function selfMission(args) {
     writeMission(m);
     return { text: `使命「${title}」已结项。建议跑 /reflect 把这段运营的经验教训固化进自我模型。`, structured: missionStructured(m, st) };
   }
+  if (action === "obstacle") {
+    // 1.5.0:困难入队——遇到没把握的困难先记录,学习时刻研究消化
+    const text = String(args.text || "").trim();
+    if (!text) throw new Error("obstacle 需要 text(描述困难与已尝试的方案)");
+    const seq = m.openSeq = (m.openSeq || 0) + 1;
+    m.open = m.open || [];
+    const item = { id: `d${String(seq).padStart(3, "0")}`, t: Date.now(), text: text.slice(0, 300), status: "open" };
+    m.open.push(item);
+    m.log.push({ t: Date.now(), kind: "obstacle", text: text.slice(0, 120) });
+    writeMission(m);
+    return { text: `困难已入队(${item.id}):${text.slice(0, 100)}\n当日学习时刻会研究它:机制是什么/为什么/下次怎么更快;研究完用 action=resolve 写入知识库并消化本条。`, structured: missionStructured(m, loadState()) };
+  }
+  if (action === "resolve") {
+    // 1.5.0:消化困难——研究完成,知识写入知识库(带 agent 标识),队列标记 learned
+    const item = (m.open || []).find((d) => d.id === String(args.id || "") && d.status === "open");
+    if (!item) throw new Error(`未找到待研究的困难:${args.id || "(未传 id)"}(action=get 查看队列)`);
+    const title = String(args.title || `困难研究:${item.text.slice(0, 40)}`).trim();
+    const body = String(args.body || "").trim();
+    if (!body) throw new Error("resolve 需要 body(研究正文:机制是什么、为什么会这样、下次怎么更快)");
+    const cfg = loadConfig();
+    const rec = kbRecord(cfg, { title, body, tags: `${args.tags || ""},troubleshooting` });
+    item.status = "learned";
+    item.resolvedAt = Date.now();
+    item.kbNote = rec.file;
+    m.log.push({ t: Date.now(), kind: "learned", text: `${item.id} → ${rec.file}` });
+    writeMission(m);
+    return {
+      text: `困难 ${item.id} 已研究消化:${rec.mode === "append" ? "补充到" : "写入"}知识库 ${rec.file}${rec.git.committed ? "(已 git 提交)" : ""}。队列剩余 ${(m.open || []).filter((d) => d.status === "open").length} 条待研究。`,
+      structured: missionStructured(m, loadState()),
+    };
+  }
   throw new Error(`未知 action:${action}`);
 }
 
@@ -712,6 +749,11 @@ function missionText(m) {
     lines.push(`当前使命:「${m.active.title}」(第 ${missionDay(m.active)} 天)${m.active.goal ? `\n目标:${m.active.goal}` : ""}`);
   } else {
     lines.push("当前无进行中的使命(self_mission action=start 立项)");
+  }
+  const openDiff = (m.open || []).filter((d) => d.status === "open");
+  if (openDiff.length) {
+    lines.push(`待研究困难(${openDiff.length} 条,每日学习时刻消化):`);
+    for (const d of openDiff.slice(-5)) lines.push(`- [${d.id}] ${d.text.slice(0, 80)}`);
   }
   const recent = m.log.slice(-8).reverse();
   if (recent.length) {
@@ -729,6 +771,7 @@ function missionStructured(m, st) {
         ? { ...m.active, day: missionDay(m.active) }
         : null,
       recentLog: m.log.slice(-8).reverse(),
+      openDifficulties: (m.open || []).filter((d) => d.status === "open"),
     },
     sessionId: currentSid(st)?.sid || "",
   };
@@ -802,6 +845,60 @@ function kbStats(cfg) {
   };
 }
 
+/** 知识库写入(1.5.0 抽取:self_learn 与困难研究共用;同题补学追加,git 按 autoCommit/autoPush) */
+function kbRecord(cfg, { title, body, tags }) {
+  const dir = kbDir(cfg);
+  if (!dir) throw new Error("知识库路径未配置:self_config set knowledgeBase.path=<Obsidian 仓库本地路径>");
+  fs.mkdirSync(dir, { recursive: true });
+  const mission = readMission();
+  const file = path.join(dir, kbSlug(title));
+  const now = new Date();
+  const p2 = (n) => String(n).padStart(2, "0");
+  const time = `${p2(now.getHours())}:${p2(now.getMinutes())}`;
+  const tagArr = ["观己", "agent-written", ...String(tags || "").split(/[,，\s]+/).filter(Boolean)];
+  let mode;
+  if (fs.existsSync(file)) {
+    fs.appendFileSync(file, `\n\n## 补充(${time})\n\n${body}\n`);
+    mode = "append";
+  } else {
+    const fm = [
+      "---",
+      `title: ${title}`,
+      "source: agent-selfaware",
+      `agent: 观己 (selfaware v${VERSION})`,
+      "author: 观己(自主 agent)",
+      "agent-written: true",
+      `learned_at: ${now.toISOString().slice(0, 10)}`,
+      `mission: ${mission.active?.title || "无"}`,
+      `tags: [${tagArr.join(", ")}]`,
+      "---",
+      "",
+      banner(),
+      "",
+      `# ${title}`,
+      "",
+      body,
+      "",
+    ].join("\n");
+    fs.writeFileSync(file, fm);
+    mode = "create";
+  }
+  let git = { committed: false };
+  const root = cfg.knowledgeBase?.path;
+  if (cfg.knowledgeBase?.autoCommit) {
+    git = kbGitCommit(root, `agent(观己): 学习记录 ${title}`);
+    if (cfg.knowledgeBase?.autoPush && git.committed) {
+      try {
+        execSync("git push", { cwd: root, timeout: 60000, stdio: "pipe" });
+        git.pushed = true;
+      } catch (e) {
+        git.reason = `push 失败:${String(e?.message || e).slice(0, 120)}`;
+      }
+    }
+  }
+  return { file: path.basename(file), mode, git };
+}
+
 function selfLearn(args) {
   const action = args?.action || "list";
   const cfg = loadConfig();
@@ -823,61 +920,11 @@ function selfLearn(args) {
   const body = String(args?.body || "").trim();
   if (!title) throw new Error("record 需要 title(一句话说清学到了什么)");
   if (!body) throw new Error("record 需要 body(学到了什么、来源/证据、怎么用——不编造)");
-  const dir = kbDir(cfg);
-  if (!dir) throw new Error("知识库路径未配置:self_config set knowledgeBase.path=<Obsidian 仓库本地路径>");
-  fs.mkdirSync(dir, { recursive: true });
+  const rec = kbRecord(cfg, { title, body, tags: args?.tags });
   const st = loadState();
-  const mission = readMission();
-  const file = path.join(dir, kbSlug(title));
-  const now = new Date();
-  const p2 = (n) => String(n).padStart(2, "0");
-  const time = `${p2(now.getHours())}:${p2(now.getMinutes())}`;
-  const tags = ["观己", "agent-written", ...String(args?.tags || "").split(/[,，\s]+/).filter(Boolean)];
-  let text;
-  if (fs.existsSync(file)) {
-    // 同题补学:追加节,不覆盖
-    fs.appendFileSync(file, `\n\n## 补充(${time})\n\n${body}\n`);
-    text = `已补充到已有笔记:${path.basename(file)}(同题补学)`;
-  } else {
-    const fm = [
-      "---",
-      `title: ${title}`,
-      "source: agent-selfaware",
-      `agent: 观己 (selfaware v${VERSION})`,
-      "author: 观己(自主 agent)",
-      "agent-written: true",
-      `learned_at: ${now.toISOString().slice(0, 10)}`,
-      `mission: ${mission.active?.title || "无"}`,
-      `tags: [${tags.join(", ")}]`,
-      "---",
-      "",
-      banner(),
-      "",
-      `# ${title}`,
-      "",
-      body,
-      "",
-    ].join("\n");
-    fs.writeFileSync(file, fm);
-    text = `已写入知识库:${path.basename(file)}`;
-  }
-  // git 自动提交(本地;push 默认关)
-  let git = { committed: false };
-  const root = cfg.knowledgeBase?.path;
-  if (cfg.knowledgeBase?.autoCommit) {
-    git = kbGitCommit(root, `agent(观己): 学习记录 ${title}`);
-    if (cfg.knowledgeBase?.autoPush && git.committed) {
-      try {
-        execSync("git push", { cwd: root, timeout: 60000, stdio: "pipe" });
-        git.pushed = true;
-      } catch (e) {
-        git.reason = `push 失败:${String(e?.message || e).slice(0, 120)}`;
-      }
-    }
-  }
   return {
-    text: `${text}${git.committed ? "(已 git 提交)" : git.reason ? `(git 未提交:${git.reason})` : ""}。知识库累计 ${kbStats(cfg).total} 条。`,
-    structured: { kb: kbStats(cfg), file: path.basename(file), title, git },
+    text: `${rec.mode === "append" ? `已补充到已有笔记:${rec.file}(同题补学)` : `已写入知识库:${rec.file}`}${rec.git.committed ? "(已 git 提交)" : rec.git.reason ? `(git 未提交:${rec.git.reason})` : ""}。知识库累计 ${kbStats(cfg).total} 条。`,
+    structured: { kb: kbStats(cfg), file: rec.file, title, git: rec.git },
   };
 }
 

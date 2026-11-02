@@ -851,6 +851,42 @@ console.log("\n[T34] self_learn list + self_state 知识库统计");
   fs.rmSync(kb, { recursive: true, force: true });
 }
 
+// ---------- T35 困难队列:入队/研究消化/知识库双写 ----------
+
+console.log("\n[T35] self_mission obstacle/resolve:困难变成知识库条目");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const kb = fs.mkdtempSync(path.join(os.tmpdir(), "sa-kb-"));
+  fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify({ knowledgeBase: { path: kb } }));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    return { text: m?.result?.content?.[0]?.text || "", sc: m?.result?.structuredContent, isError: !!m?.result?.isError };
+  };
+  call("self_mission", { action: "start", title: "自主运营测试场", autonomy: "full" });
+  let r = call("self_mission", { action: "obstacle", text: "dy_queue_run 报 queue locked,原因未知,已重试 2 次" });
+  check("困难入队得 d001", !r.isError && r.text.includes("d001"), r.text.slice(0, 150));
+  check("structured 带待研究队列", r.sc?.mission?.openDifficulties?.length === 1 && r.sc.mission.openDifficulties[0].status === "open");
+  // missionText 体现待研究
+  const g = call("self_mission", { action: "get" });
+  check("get 文本列出待研究", g.text.includes("待研究困难(1 条") && g.text.includes("queue locked"), g.text.slice(0, 300));
+  // resolve:研究完成 → 知识库 + 队列消化
+  r = call("self_mission", { action: "resolve", id: "d001", title: "dy_queue_run 队列锁机制研究", body: "机制:队列文件被并发进程持有 flock;为什么会这样:两个开工循环并发;下次:开工前先 dy_queue_status 检测锁。来源:源码 dy-queue.mjs + 复现实验。", tags: "douyin" });
+  check("resolve 写入知识库", !r.isError && r.text.includes("已研究消化") && r.text.includes("写入知识库"), r.text.slice(0, 200));
+  const kbDir = path.join(kb, "观己学习");
+  const kbFiles = fs.readdirSync(kbDir).filter((f) => f.endsWith(".md"));
+  check("KB 笔记带 troubleshooting 标签", kbFiles.length === 1 && fs.readFileSync(path.join(kbDir, kbFiles[0]), "utf8").includes("troubleshooting"));
+  check("队列条目标记 learned", r.sc?.mission?.openDifficulties?.length === 0);
+  // 无 id 的 resolve 报错
+  r = call("self_mission", { action: "resolve", body: "x" });
+  check("resolve 无待研究条目时报错", r.isError && r.text.includes("未找到待研究的困难"), r.text.slice(0, 150));
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(kb, { recursive: true, force: true });
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);

@@ -155,18 +155,28 @@ export function listEventSids() {
 // ---------- 使命(0.9.0:跨会话的持久目标意识——自主运营场景的地基) ----------
 
 const MISSION_LOG_CAP = 200;
+const MISSION_OPEN_CAP = 30;
 
 export function readMission() {
   try {
     const j = JSON.parse(fs.readFileSync(missionPath(), "utf8"));
-    if (j && typeof j === "object") return { active: j.active || null, log: Array.isArray(j.log) ? j.log : [] };
+    if (j && typeof j === "object")
+      return {
+        active: j.active || null,
+        log: Array.isArray(j.log) ? j.log : [],
+        open: Array.isArray(j.open) ? j.open : [], // 1.5.0:待研究困难队列
+      };
   } catch {}
-  return { active: null, log: [] };
+  return { active: null, log: [], open: [] };
 }
 
 export function writeMission(m) {
   fs.mkdirSync(dataRoot(), { recursive: true });
   m.log = (m.log || []).slice(-MISSION_LOG_CAP);
+  // 困难队列:open 全保留(封顶),已消化的留最近 20 条备查
+  const open = (m.open || []).filter((d) => d.status === "open").slice(-MISSION_OPEN_CAP);
+  const learned = (m.open || []).filter((d) => d.status !== "open").slice(-20);
+  m.open = [...learned, ...open];
   const tmp = missionPath() + ".tmp-" + process.pid;
   fs.writeFileSync(tmp, JSON.stringify(m, null, 2) + "\n");
   fs.renameSync(tmp, missionPath());

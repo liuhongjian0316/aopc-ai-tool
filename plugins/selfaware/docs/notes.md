@@ -109,6 +109,23 @@
 
 ## 〇、升级记录
 
+### v1.3.0(2026-11-03,无头请示落点 + 自扩展可见性)
+
+- **实测事故驱动**:无头会话卡在 B 类扫码请示上挂起 5 小时(stdout 0 字节,无人能回复)。根因 = 请示格式只在交互会话成立,无头会话没有"落点"。
+- **无头请示落点协议**:B/C 类请示写入 `self_mission` note(前缀【请示】)后**立即结束本轮**——不等待、不重试、不挂起;批复经面板/下次会话;"挂着等人的无头会话 = 事故"写进技能。
+- **自扩展资产可见性**:self_state 暴露 `opsScripts`(自造脚本)与 `playbookFiles`(含领域手册)——能力自扩展协议有了清单基础设施;self_config 白名单补 `retentionDays`。
+- 挂死会话已清(工作全在 journal,零损失)。冒烟 128 → 131 项全绿。
+
+### v1.4.0(2026-11-03,每日学习时刻——Obsidian 知识库)
+
+- **触发**:用户需求「自主进化要每天不断学新知识」,落点为其 Obsidian/github 仓库(`/Users/liuhongjian/Documents/知识库/AOPC/AOPC` = aopc-obsidian),要求带 agent 标识、路径可配置。
+- **self_learn 工具**(第 8 个):record/list;写入 `<KB>/观己学习/YYYY-MM-DD-<slug>.md`,三重 agent 标识(frontmatter `source: agent-selfaware` + `agent-written: true`、正文 🤖 横幅、git 提交信息 `agent(观己):`);同题补学追加「## 补充(时刻)」节不覆盖;autoCommit 默认开、autoPush 默认关(公开仓库,推送由用户决定)。
+- **knowledgeBase 配置节**(path/folder/dailyLearning/autoCommit/autoPush)入 self_config 白名单;真机已配置用户路径。
+- **autonomous-ops 日循环**加入"每日学习时刻"(第 5 步):≥1 条新知识入库存档,分寸 = 知识非流水账、来源必须真实——"知识库是公开仓库,你的署名就是你的信誉"。
+- **面板**新增每日学习卡(今日/累计/最近条目/路径)。
+- **事故与修复**:callTool switch 丢失 self_mission case + self_journal 重复(多轮编辑的历史遗留,表现为 self_mission 报 unknown tool 而部分测试仍绿——已修并加 141 项锁定);测试侧 T33 日期断言 UTC/本地口径修正。
+- 冒烟测试 128 → **141 项**全绿;面板重建;宿主校验通过。
+
 ### v1.2.0(2026-11-03,通用自主——领域无关化)
 
 - **触发**:用户澄清「抖音只是一个场景」——要的是**通用自主 agent**,不是抖音专用机。自检发现 v1.1 的 autonomous-ops 里循环/周进化硬编码了 dy_* 工具与抖音字段,换领域即失效。

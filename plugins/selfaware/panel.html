@@ -416,6 +416,10 @@ const { App } = GUANJI_SDK;
             ? `<div class="big" style="margin-bottom:4px"><span class="num" style="font-size:16px">「${esc(m.active.title)}」</span><span class="sub">第 ${m.active.day} 天</span><span class="tag ${m.active.autonomy === "full" ? "ok" : "dim"}">${m.active.autonomy === "full" ? "完全自主" : "受监督"}</span></div>
                ${m.active.goal ? `<div class="narr" style="margin-left:0">目标:${esc(m.active.goal)}</div>` : ""}`
             : `<div class="empty">无进行中的使命(self_mission 工具可立项)</div>`}
+          ${Array.isArray(m.openDifficulties) && m.openDifficulties.length
+            ? `<div style="margin-top:6px"><span class="tag warn">待研究困难 ${m.openDifficulties.length}</span>
+               ${m.openDifficulties.slice(-3).map((dd) => `<div class="narr" style="margin-left:0">[${esc(dd.id)}] ${esc(String(dd.text).slice(0, 60))}</div>`).join("")}</div>`
+            : ""}
           ${(m.recentLog || []).length
             ? `<div style="margin-top:6px">${m.recentLog.map((e2) => `<div class="narr" style="margin-left:0"><span class="tag dim">${esc(e2.kind)}</span> ${fmtT(e2.t)} — ${esc(String(e2.text).slice(0, 70))}</div>`).join("")}</div>`
             : ""}

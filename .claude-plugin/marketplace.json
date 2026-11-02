@@ -371,7 +371,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "1.4.0",
+      "version": "1.5.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -386,6 +386,16 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "1.5.0",
+          "date": "2026-11-03",
+          "changes": [
+            "困难驱动的自主学习(用户需求:自主学习自己遇到困难的相关知识):self_mission 新增 obstacle/resolve 动作——遇到新困难先入队,每日学习时刻研究其机制(为什么/底层原理/变体),写透后写入知识库并消化队列",
+            "学习时刻升级双源:① 困难研究(队列非空时优先,禁止只记怎么修不记为什么——操作会过期,机制才可迁移)② 新知识(队列空时)",
+            "面板使命卡显示待研究困难队列;kbRecord 抽取复用(self_learn 与 resolve 共用知识库写入)",
+            "定时任务内层指令同步困难研究条款;冒烟测试 141 → 148 项全绿"
+          ]
+        },
         {
           "version": "1.4.0",
           "date": "2026-11-03",
