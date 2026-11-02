@@ -14,7 +14,11 @@
 | 文件改动累计 10 处 | 一次性提醒:收尾前派 critic 对抗审查 |
 | 复盘债积累(≥8 段且 ≥3 败) | Stop 时建议跑 /reflect;会话收尾仍有未复盘失败则并入**跨会话复盘债**,下次开场提醒清账 |
 | 慢性错误(同签名跨 ≥3 会话复发) | self_errors 标记为习惯性问题,**自动记入 playbook 提案**(同签名去重) |
-| 主动查询 | MCP 工具:`self_state`(含**自我档案健康度**:五段完整性/教训条数/最后变更) / `self_errors`(含慢性错误检测:同签名跨 ≥3 会话复发会标记为习惯性问题,并自动记入 playbook 提案) / `self_usage` / `self_history`(跨会话自传体记忆,含"最近在做"叙事) / `self_journal`(超 7 天未落地的提案会带 ⚠ 提醒) |
+| 主动查询 | MCP 工具:`self_state`(含**自我档案健康度**:五段完整性/教训条数/最后变更) / `self_errors`(含慢性错误检测:同签名跨 ≥3 会话复发会标记为习惯性问题,并自动记入 playbook 提案) / `self_usage` / `self_history`(跨会话自传体记忆,含"最近在做"叙事) / `self_journal`(超 7 天未落地的提案会带 ⚠ 提醒) / `self_config` |
+| **会话面板** | 桌面/Web 会话侧栏出现「观己 · 自我仪表盘」:上下文预算进度条(provider 实测)、会话统计、**使命卡**(跨会话持久目标 + 第 N 天)、**三张趋势图**(近 14 天活动柱状/失败率折线/会话预算曲线,零依赖手写 SVG)、自我档案健康度、慢性错误、跨会话历史与叙事、反思日志——查询工具均带 structuredContent,主 agent 调用时面板实时刷新 |
+| **使命(自主运营)** | `self_mission` 工具:立项(**自主等级 full=完全自主 / supervised=受监督**)/记日志/结项;进行中的使命出现在**每次会话开场横幅**(第 N 天 + 自主等级)——完全自主下日常发布与数据分析无需逐条请示,删号/改定位/敏感内容/大额投放仍须请示 |
+| **自主运营节律技能** | `autonomous-ops`(完全自主版):完整日循环(唤醒自检 → 数据回收 → 内容生产+合规自检 → 发布 → 互动 → 收工记账)+ **熔断器**(连续 3 天发布失败/失败率>50%/数据断崖 → 停发请示)+ **每周进化循环**(数据 → 洞察 → 固化 playbook → guanji 周检 → 周报);以 douyin-pilot 运营抖音号为落地示例 |
+| **无人值守定时桥** | 配合宿主定时任务(如每日 09:30)拉起 `aopc -p` 无头会话执行日循环——她自己每天醒来干活,面板与 self_history 留下全部痕迹 |
 | 技能 | `metacognition`(置信度自评/反幻觉检查单/失败复盘)、`self-review`(周期复盘流程) |
 | 子代理 | `critic`(对抗性审查,只读)、`guanji`(深度自省,只读) |
 | 命令 | `/reflect [lite]` — 深度复盘或清积压;`/selfcheck` — 真机自检(hook 注入/数据流/子代理观测/派发名逐项核对) |
@@ -81,6 +85,7 @@ self/playbooks/       自我改写规则手册(agent 修改必经权限审批)
 ## 开发与测试
 
 ```bash
-node scripts/smoke.mjs   # 本地冒烟(85 项,零 token,全伪造)
-node scripts/e2e.mjs     # 真机回归(走真实宿主,消耗少量 token;需已安装 ≥0.4.0;--skip-subagent 省 token)
+node scripts/smoke.mjs        # 本地冒烟(121 项,零 token,全伪造)
+node scripts/e2e.mjs          # 真机回归(走真实宿主,消耗少量 token;需已安装 ≥0.4.0;--skip-subagent 省 token)
+node scripts/build-panel.mjs  # 面板改动后重新组装 panel.html(ext-apps SDK + panel/ 拼接,自检)
 ```

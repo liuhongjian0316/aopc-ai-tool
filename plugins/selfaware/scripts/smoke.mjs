@@ -201,7 +201,7 @@ console.log("\n[T7] MCP server:握手 / 工具列表 / 四工具调用");
   check("initialize 回显协议版本", byId.get(1)?.result?.protocolVersion === "2025-06-18", JSON.stringify(byId.get(1)));
   check("serverInfo=selfaware", byId.get(1)?.result?.serverInfo?.name === "selfaware");
   const tools = byId.get(2)?.result?.tools || [];
-  check("6 个工具", tools.length === 6 && ["self_state", "self_errors", "self_usage", "self_history", "self_config", "self_journal"].every((n) => tools.some((t) => t.name === n)), JSON.stringify(tools.map((t) => t.name)));
+  check("7 个工具", tools.length === 7 && ["self_state", "self_errors", "self_usage", "self_history", "self_config", "self_mission", "self_journal"].every((n) => tools.some((t) => t.name === n)), JSON.stringify(tools.map((t) => t.name)));
   const stTxt = byId.get(3)?.result?.content?.[0]?.text || "";
   check("self_state 返回主会话状态", stTxt.includes("sess_t7") && stTxt.includes("<self-state>"), stTxt.slice(0, 200));
   const jApp = byId.get(4)?.result?.content?.[0]?.text || "";
@@ -586,6 +586,161 @@ console.log("\n[T23] self_history 时间按本地时区展示");
   const txt = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).map((m) => m?.result?.content?.[0]?.text || "").join("");
   check(`本地时区时间入列(${localStr})`, txt.includes(localStr), txt.slice(0, 200));
   check("不再是 UTC 串(18:30Z→02:30 本地)", !txt.includes("11-02 18:30"), txt.slice(0, 200));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ---------- T24 面板资源(ui.surfaces / mcp-app) ----------
+
+console.log("\n[T24] resources/list+read:panel.html 以 mcp-app MIME 分发");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const rpc = [
+    { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } },
+    { jsonrpc: "2.0", id: 2, method: "resources/list" },
+    { jsonrpc: "2.0", id: 3, method: "resources/read", params: { uri: "ui://selfaware/panel.html" } },
+    { jsonrpc: "2.0", id: 4, method: "resources/read", params: { uri: "ui://selfaware/nope.html" } },
+  ].map((m) => JSON.stringify(m)).join("\n") + "\n";
+  const r = spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000 });
+  const replies = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  const byId = new Map(replies.filter((m) => m.id !== undefined).map((m) => [m.id, m]));
+  check("initialize 声明 resources 能力", !!byId.get(1)?.result?.capabilities?.resources, JSON.stringify(byId.get(1)?.result?.capabilities));
+  const res = byId.get(2)?.result?.resources || [];
+  check("resources/list 列出面板", res.length === 1 && res[0].uri === "ui://selfaware/panel.html", JSON.stringify(res));
+  check("面板 MIME 为 mcp-app", res[0]?.mimeType === "text/html;profile=mcp-app");
+  const content = byId.get(3)?.result?.contents?.[0];
+  check("resources/read 返回自包含面板", content?.mimeType === "text/html;profile=mcp-app" && content?.text?.startsWith("<!DOCTYPE html>"), String(content?.text || "").slice(0, 80));
+  check("面板内联 SDK 与面板逻辑", content?.text?.includes("GUANJI_SDK") && content?.text?.includes("callServerTool") && content?.text?.includes("自我仪表盘"));
+  check("未知资源报 -32602", byId.get(4)?.error?.code === -32602, JSON.stringify(byId.get(4)?.error));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ---------- T25 工具 structuredContent ----------
+
+console.log("\n[T25] 查询工具附带 structuredContent(面板数据通道)");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  // 先造旧会话(较早活跃),再造当前会话——currentSid 应选后者
+  runObserver(dir, { session_id: "sess_t25old", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  runObserver(dir, { session_id: "sess_t25old", hook_event_name: "PostToolUseFailure", tool_name: "Bash", tool_input: {}, error: "boom", is_interrupt: false });
+  runObserver(dir, { session_id: "sess_t25", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  runObserver(dir, { session_id: "sess_t25", hook_event_name: "PostToolUse", tool_name: "Agent", tool_input: {}, tool_response: {} });
+  const rpc = [
+    { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "self_state", arguments: {} } },
+    { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "self_errors", arguments: { limit: 10 } } },
+    { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "self_history", arguments: { limit: 5 } } },
+  ].map((m) => JSON.stringify(m)).join("\n") + "\n";
+  const r = spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000 });
+  const replies = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  const sc1 = replies.find((m) => m.id === 1)?.result?.structuredContent;
+  check("self_state 带结构化会话", sc1?.session?.sid === "sess_t25" && sc1?.session?.dispatches === 1, JSON.stringify(sc1?.session));
+  check("健康度与 playbook 规则入结构", typeof sc1?.health === "string" && Array.isArray(sc1?.playbookRules) && sc1?.paths?.data, JSON.stringify(sc1?.health));
+  const sc2 = replies.find((m) => m.id === 2)?.result?.structuredContent;
+  check("self_errors 带分组数组", Array.isArray(sc2?.groups) && sc2.groups[0]?.tool === "Bash", JSON.stringify(sc2));
+  const sc3 = replies.find((m) => m.id === 3)?.result?.structuredContent;
+  check("self_history 带会话数组与累计", sc3?.totalSessions === 2 && sc3?.totals?.calls === 1 && sc3?.totals?.errors === 1 && Array.isArray(sc3?.sessions), JSON.stringify(sc3?.totals));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ---------- T26 使命机制 ----------
+
+console.log("\n[T26] self_mission:立项/记日志/结项;横幅带使命");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    return { text: m?.result?.content?.[0]?.text || "", sc: m?.result?.structuredContent, isError: !!m?.result?.isError };
+  };
+  let r = call("self_mission", { action: "note", text: "无使命时记日志应失败" });
+  check("无使命时 note 拒绝", r.isError && r.text.includes("start"), r.text.slice(0, 120));
+  r = call("self_mission", { action: "start", title: "自主运营抖音号", goal: "日更 1 条 + 评论 24h 回复" });
+  check("立项成功", !r.isError && r.sc?.mission?.active?.title === "自主运营抖音号" && r.sc.mission.active.day === 1, JSON.stringify(r.sc?.mission));
+  r = call("self_mission", { action: "note", text: "开工:今日发 1 条 + 回评论" });
+  check("note 记日志", !r.isError && r.sc?.mission?.recentLog?.[0]?.kind === "note");
+  // 横幅带使命
+  const rb = runObserver(dir, { session_id: "sess_t26", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  const banner = parseOut(rb.stdout)?.additionalContext || "";
+  check("横幅含使命与天数", banner.includes("当前使命") && banner.includes("自主运营抖音号") && banner.includes("第 1 天"), banner.slice(0, 300));
+  // self_state 结构化带使命
+  const st = call("self_state", {});
+  check("self_state 带使命结构", st.sc?.mission?.active?.title === "自主运营抖音号", JSON.stringify(st.sc?.mission));
+  r = call("self_mission", { action: "close", text: "验收完成" });
+  check("结项后无 active", !r.isError && r.sc?.mission?.active === null);
+  const rb2 = runObserver(dir, { session_id: "sess_t26b", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  check("结项后横幅无使命", !(parseOut(rb2.stdout)?.additionalContext || "").includes("当前使命"));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ---------- T27 预算轨迹 ----------
+
+console.log("\n[T27] UserPromptSubmit 累积预算轨迹(封顶)");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const rd = fs.mkdtempSync(path.join(os.tmpdir(), "sa-roll-"));
+  fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify({ rolloutDir: rd, contextWindow: 200000 }));
+  const sid = "sess_t27";
+  for (let i = 0; i < 6; i++) {
+    // 必须 append:同字节数的整行重写会让增量读以为无新内容(rolloutOffset 语义)
+    fs.appendFileSync(path.join(rd, `model-io-${sid}.jsonl`), JSON.stringify({ response: { usage: { inputTokens: 20000 * (i + 1) } } }) + "\n");
+    runObserver(dir, { session_id: sid, hook_event_name: "UserPromptSubmit", prompt: "hi" });
+  }
+  const st = readState(dir)?.sessions?.[sid];
+  check("轨迹累积 6 点且递增", st?.trail?.length === 6 && st.trail[5].pct === 60 && st.trail[0].pct === 10, JSON.stringify(st?.trail));
+  // rpc: self_state structured 带 trail
+  const rpc = [{ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "self_state", arguments: {} } }]
+    .map((m) => JSON.stringify(m)).join("\n") + "\n";
+  const r = spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000 });
+  const sc = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).map((m) => m?.result?.structuredContent)[0];
+  check("structured 带 trail", Array.isArray(sc?.session?.trail) && sc.session.trail.length === 6);
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(rd, { recursive: true, force: true });
+}
+
+// ---------- T28 按天聚合 ----------
+
+console.log("\n[T28] self_history 按本地日聚合 daily(图表数据)");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  runObserver(dir, { session_id: "sess_t28", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  runObserver(dir, { session_id: "sess_t28", hook_event_name: "UserPromptSubmit", prompt: "hi" });
+  runObserver(dir, { session_id: "sess_t28", hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: {}, tool_response: {} });
+  runObserver(dir, { session_id: "sess_t28", hook_event_name: "PostToolUseFailure", tool_name: "Bash", tool_input: {}, error: "x 42", is_interrupt: false });
+  const rpc = [{ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "self_history", arguments: { limit: 5 } } }]
+    .map((m) => JSON.stringify(m)).join("\n") + "\n";
+  const r = spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000 });
+  const sc = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).map((m) => m?.result?.structuredContent)[0];
+  check("daily ≥1 天且当日聚合正确", Array.isArray(sc?.daily) && sc.daily.length >= 1 && sc.daily.at(-1).calls === 1 && sc.daily.at(-1).errors === 1 && sc.daily.at(-1).turns === 1, JSON.stringify(sc?.daily));
+  check("text 附近 N 天活跃行", (r.stdout || "").includes("近 1 天活跃"));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ---------- T29 使命自主等级 ----------
+
+console.log("\n[T29] mission autonomy:full 受横幅与结构化携带;默认 supervised");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    return { text: m?.result?.content?.[0]?.text || "", sc: m?.result?.structuredContent };
+  };
+  runObserver(dir, { session_id: "sess_t29", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  const r1 = call("self_mission", { action: "start", title: "自主运营抖音号", goal: "日更", autonomy: "full" });
+  check("full 立项回显完全自主", r1.text.includes("完全自主") && r1.sc?.mission?.active?.autonomy === "full", r1.text.slice(0, 150));
+  const banner = parseOut(runObserver(dir, { session_id: "sess_t29b", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" }).stdout)?.additionalContext;
+  check("横幅带完全自主标记", (banner || "").includes("(完全自主)"), (banner || "").slice(0, 200));
+  const st = call("self_state", {});
+  check("self_state 结构带 autonomy=full", st.sc?.mission?.active?.autonomy === "full");
+  // 结项再立一个默认受监督的
+  call("self_mission", { action: "close", text: "换等级" });
+  const r2 = call("self_mission", { action: "start", title: "受监督使命" });
+  check("默认 supervised", r2.sc?.mission?.active?.autonomy === "supervised" && r2.text.includes("受监督"));
   fs.rmSync(dir, { recursive: true, force: true });
 }
 

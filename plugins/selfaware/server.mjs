@@ -11,13 +11,25 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// 面板资源(0.8.0):panel.html 以 ui:// 资源分发(text/html;profile=mcp-app,MCP App 规范),
+// 模式照搬 wudi-coding / obsidian-kb:manifest ui.surfaces → resources/list+read → 自包含单文件。
+const PANEL_URI = "ui://selfaware/panel.html";
+const PANEL_MIME = "text/html;profile=mcp-app";
+const panelPath = path.resolve(path.join(path.dirname(fileURLToPath(import.meta.url)), "panel.html"));
+function readPanel() {
+  if (!fs.existsSync(panelPath)) throw new Error(`面板文件缺失:${panelPath}(先运行 scripts/build-panel.mjs)`);
+  return fs.readFileSync(panelPath, "utf-8");
+}
 import {
   dataRoot, configPath, loadConfig, loadState, saveState, journalPath,
   selfModelPath, playbooksDir, listEventSids, readEvents,
+  missionPath, readMission, writeMission, missionDay,
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "0.7.0";
+const VERSION = "1.0.0";
 
 const TOOLS = [
   {
@@ -69,7 +81,24 @@ const TOOLS = [
     },
   },
   {
+    name: "self_mission",
+    description:
+      "观己:使命管理——跨会话的持久目标意识。action=start 立一项使命(如『自主运营抖音号』);action=note 记一笔工作日志(开工/收工/里程碑);action=close 结项;action=get 查看当前使命与近期记录。自主运营场景(长期托管某项事务)必须用:它会出现在每次会话开场横幅,让 agent 睁眼就知道自己有一项进行中的事。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["get", "start", "note", "close"] },
+        title: { type: "string", description: "start:使命标题(一句话)" },
+        goal: { type: "string", description: "start:完成判据/目标(可选)" },
+        autonomy: { type: "string", enum: ["supervised", "full"], description: "start:自主等级。full=完全自主(日常发布与数据分析无需逐条请示,红线仍须请示);supervised=受监督(默认)" },
+        text: { type: "string", description: "note/close:本条记录内容" },
+      },
+      required: ["action"],
+    },
+  },
+  {
     name: "self_journal",
+
     description:
       "观己:读写我的反思日志。action=append 记录失败复盘/置信度自评/自省报告/playbook 提案(entry: {kind, title, body?, lesson?, playbookTarget?});action=query 查询近期条目。复盘与教训必须落在这里,否则自我模型无法引用。",
     inputSchema: {
@@ -128,7 +157,7 @@ function handleMessage(line) {
   try {
     result = dispatch(msg);
   } catch (e) {
-    send({ jsonrpc: "2.0", id: msg.id, error: { code: -32603, message: String(e?.message || e) } });
+    send({ jsonrpc: "2.0", id: msg.id, error: { code: e?.code || -32603, message: String(e?.message || e) } });
     return;
   }
   send({ jsonrpc: "2.0", id: msg.id, result });
@@ -139,11 +168,31 @@ function dispatch(msg) {
   if (method === "initialize") {
     return {
       protocolVersion: params?.protocolVersion ?? "2024-11-05",
-      capabilities: { tools: {} },
+      capabilities: { tools: {}, resources: {} },
       serverInfo: { name: "selfaware", version: VERSION },
     };
   }
   if (method === "ping") return {};
+  if (method === "resources/list") {
+    return {
+      resources: [
+        {
+          uri: PANEL_URI,
+          name: "观己 · 自我仪表盘",
+          title: "观己 · 自我仪表盘",
+          description: "上下文预算、会话统计、慢性错误、跨会话历史与反思日志",
+          mimeType: PANEL_MIME,
+        },
+      ],
+    };
+  }
+  if (method === "resources/read") {
+    const uri = params?.uri;
+    if (uri !== PANEL_URI) {
+      throw Object.assign(new Error(`未知资源:${uri}(可用:${PANEL_URI})`), { code: -32602 });
+    }
+    return { contents: [{ uri: PANEL_URI, mimeType: PANEL_MIME, text: readPanel() }] };
+  }
   if (method === "tools/list") return { tools: TOOLS };
   if (method === "tools/call") return callTool(params);
   throw new Error(`method not found: ${method}`);
@@ -153,8 +202,12 @@ function send(obj) {
   process.stdout.write(JSON.stringify(obj) + "\n");
 }
 
-function textResult(text, isError = false) {
-  return { content: [{ type: "text", text }], ...(isError ? { isError: true } : {}) };
+function textResult(text, isError = false, structured = undefined) {
+  return {
+    content: [{ type: "text", text }],
+    ...(structured !== undefined ? { structuredContent: structured } : {}),
+    ...(isError ? { isError: true } : {}),
+  };
 }
 
 // ---------- 工具实现 ----------
@@ -163,22 +216,33 @@ function callTool(params) {
   const name = params?.name;
   const args = params?.arguments || {};
   try {
+    let r;
     switch (name) {
       case "self_state":
-        return textResult(selfState());
+        r = selfState();
+        break;
       case "self_errors":
-        return textResult(selfErrors(Number(args.limit) || 20));
+        r = selfErrors(Number(args.limit) || 20);
+        break;
       case "self_usage":
-        return textResult(selfUsage());
+        r = selfUsage();
+        break;
       case "self_history":
-        return textResult(selfHistory(Number(args.limit) || 10));
+        r = selfHistory(Number(args.limit) || 10);
+        break;
       case "self_config":
-        return textResult(selfConfig(args));
+        r = selfConfig(args);
+        break;
+      case "self_mission":
+        r = selfMission(args);
+        break;
       case "self_journal":
-        return textResult(selfJournal(args));
+        r = selfJournal(args);
+        break;
       default:
         return textResult(`unknown tool: ${name}`, true);
     }
+    return typeof r === "string" ? textResult(r) : textResult(r.text, false, r.structured);
   } catch (e) {
     return textResult(`selfaware 工具执行失败:${e?.message || e}(数据目录:${dataRoot()})`, true);
   }
@@ -231,6 +295,21 @@ function selfModelHealth() {
   }
 }
 
+/** playbook 规则读取(P1 优先;面板 structuredContent 用) */
+function readPlaybookRules() {
+  const rules = [];
+  try {
+    for (const f of fs.readdirSync(playbooksDir()).filter((f) => f.endsWith(".md") && f !== "README.md")) {
+      for (const line of fs.readFileSync(path.join(playbooksDir(), f), "utf8").split("\n")) {
+        const t = line.trim();
+        const m = t.match(/^-\s*\[P([123])\]/);
+        if (m) rules.push({ p: Number(m[1]), text: t });
+      }
+    }
+  } catch {}
+  return rules.sort((a, b) => a.p - b.p).map((r) => r.text);
+}
+
 function selfState() {
   const st = loadState();
   const cfg = loadConfig();
@@ -241,6 +320,35 @@ function selfState() {
       updateBudget(cur.sid, cur, cfg);
     } catch {}
   }
+  const dispatches = cur ? cur.toolCalls?.Agent || 0 : 0;
+  const health = selfModelHealth();
+  const playbookRules = readPlaybookRules();
+  const mission = readMission();
+  const structured = {
+    session: cur
+      ? {
+          sid: cur.sid,
+          turns: cur.turns,
+          segments: cur.segments,
+          failures: cur.failuresSinceReflect,
+          toolCalls: cur.toolCalls || {},
+          errors: cur.errors || {},
+          streaks: Object.fromEntries(Object.entries(cur.streaks || {}).filter(([, v]) => v.count >= 2)),
+          dispatches,
+          budget: cur.budget,
+          trail: (cur.trail || []).slice(-240),
+        }
+      : null,
+    debt: st.outstandingDebt || 0,
+    health,
+    lastDeepAt: st.reflect?.lastDeepAt || 0,
+    playbookRules,
+    mission: {
+      active: mission.active ? { ...mission.active, day: missionDay(mission.active) } : null,
+      recentLog: mission.log.slice(-5).reverse(),
+    },
+    paths: { data: dataRoot(), selfModel: selfModelPath(), playbooks: playbooksDir(), journal: journalPath() },
+  };
   const lines = [];
   lines.push("<self-state>");
   if (cur) {
@@ -256,15 +364,15 @@ function selfState() {
     lines.push("主会话:暂无观察数据(观己 hook 尚未在本会话运行,或为新装插件)");
   }
   // 0.4.0 适配 C3 真机结论:子代理内部工具调用不触发 hook,合并视角降级为派发计数
-  const dispatches = cur ? cur.toolCalls?.Agent || 0 : 0;
   lines.push(`子代理派发:本会话 ${dispatches} 次(经 Agent 工具计数;子代理内部调用不经过 hook——C3 真机实测)`);
   if (st.outstandingDebt > 0) lines.push(`跨会话复盘债:${st.outstandingDebt} 次失败未复盘(跑 /reflect 清账)`);
-  lines.push(`自我档案健康:${selfModelHealth()}`);
+  if (mission.active) lines.push(`当前使命:「${mission.active.title}」(第 ${missionDay(mission.active)} 天)`);
+  lines.push(`自我档案健康:${health}`);
   lines.push(`自我档案:${selfModelPath()}${fs.existsSync(selfModelPath()) ? "" : "(尚未创建——首次 /reflect 时建立)"}`);
   lines.push(`playbook 目录:${playbooksDir()}`);
   lines.push(`反思日志:${journalPath()}`);
   lines.push("</self-state>");
-  return lines.join("\n");
+  return { text: lines.join("\n"), structured };
 }
 
 function selfErrors(limit) {
@@ -293,6 +401,9 @@ function selfErrors(limit) {
     }
   }
   raw.sort((a, b) => (b.t || 0) - (a.t || 0));
+  const chronicArr = [...groups.values()].filter((g) => g.sids.size >= 3).sort((a, b) => b.sids.size - a.sids.size || b.count - a.count)
+    .map((g) => ({ tool: g.tool, sig: g.sig, count: g.count, sessions: g.sids.size, lastMsgHead: g.lastMsgHead }));
+  const groupsArr = [...groups.values()].sort((a, b) => b.count - a.count).map((g) => ({ tool: g.tool, sig: g.sig, count: g.count, sessions: g.sids.size, lastMsgHead: g.lastMsgHead }));
   const lines = ["<self-errors>"];
   if (!groups.size) {
     lines.push("错误史为空:本机观察范围内没有记录到工具失败。");
@@ -334,8 +445,8 @@ function selfErrors(limit) {
       lines.push(`  ${new Date(ev.t).toISOString().slice(5, 16)} ${ev.tool} [${ev.sig || "?"}] ${(ev.msgHead || "").slice(0, 100)}`);
     }
   }
-  lines.push("</self-errors>");
-  return lines.join("\n");
+    lines.push("</self-errors>");
+  return { text: lines.join("\n"), structured: { chronic: chronicArr, groups: groupsArr, rawCount: raw.length } };
 }
 
 function selfUsage() {
@@ -361,6 +472,7 @@ function selfUsage() {
 
 function selfHistory(limit) {
   const rows = [];
+  const dayMap = new Map(); // 0.9.0:按本地日聚合(图表数据源)
   for (const sid of listEventSids()) {
     const evs = readEvents(sid);
     if (!evs.length) continue;
@@ -375,18 +487,31 @@ function selfHistory(limit) {
       sub: sid.startsWith("sess_subagent_"),
     };
     for (const ev of evs) {
-      if (ev.ev === "user_prompt") r.turns += 1;
-      else if (ev.ev === "tool_done") {
-        if (ev.ok) r.calls += 1;
-        else if (!ev.interrupt) r.errors += 1;
-      } else if (ev.ev === "segment_end" && ev.lastMsg) {
-        r.lastMsg = ev.lastMsg; // 0.3.0:取最近一段叙事
+      const dkey = dayKey(ev.t);
+      if (dkey) {
+        if (!dayMap.has(dkey)) dayMap.set(dkey, { date: dkey, calls: 0, errors: 0, turns: 0 });
+        const bucket = dayMap.get(dkey);
+        if (ev.ev === "user_prompt") {
+          r.turns += 1;
+          bucket.turns += 1;
+        } else if (ev.ev === "tool_done") {
+          if (ev.ok) {
+            r.calls += 1;
+            bucket.calls += 1;
+          } else if (!ev.interrupt) {
+            r.errors += 1;
+            bucket.errors += 1;
+          }
+        } else if (ev.ev === "segment_end" && ev.lastMsg) {
+          r.lastMsg = ev.lastMsg; // 0.3.0:取最近一段叙事
+        }
       }
     }
     rows.push(r);
   }
   rows.sort((a, b) => b.lastAt - a.lastAt);
   const picked = rows.slice(0, limit);
+  const daily = [...dayMap.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-14);
   const lines = [`<self-history> 共 ${rows.length} 个有记录的会话,最近 ${picked.length} 个(按活跃时间):`];
   for (const r of picked) {
     const total = r.calls + r.errors;
@@ -399,8 +524,25 @@ function selfHistory(limit) {
   const tot = rows.reduce((a, r) => ({ turns: a.turns + r.turns, calls: a.calls + r.calls, errors: a.errors + r.errors }), { turns: 0, calls: 0, errors: 0 });
   const totAll = tot.calls + tot.errors;
   lines.push(`累计:${tot.turns} 轮 / ${tot.calls} 次工具调用 / ${tot.errors} 次失败${totAll ? `(失败率 ${Math.round((tot.errors / totAll) * 100)}%)` : ""}`);
+  lines.push(`近 ${daily.length} 天活跃:${daily.map((d) => `${d.date.slice(5)}:${d.calls}+${d.errors}败`).join(" ")}`);
   lines.push("</self-history>");
-  return lines.join("\n");
+  return {
+    text: lines.join("\n"),
+    structured: {
+      totalSessions: rows.length,
+      sessions: picked.map((r) => ({ sid: r.sid, sub: r.sub, lastAt: r.lastAt, turns: r.turns, calls: r.calls, errors: r.errors, lastMsg: r.lastMsg })),
+      totals: tot,
+      daily,
+    },
+  };
+}
+
+/** 本地日期键(YYYY-MM-DD) */
+function dayKey(t) {
+  if (!t) return "";
+  const d = new Date(t);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 function fmtDate(t) {
@@ -484,6 +626,89 @@ function selfConfig(args) {
   ].join("\n");
 }
 
+// ---------- 使命(0.9.0:跨会话持久目标) ----------
+
+function selfMission(args) {
+  const action = args?.action || "get";
+  const m = readMission();
+  if (action === "get") {
+    const st = loadState();
+    return { text: missionText(m), structured: missionStructured(m, st) };
+  }
+  if (action === "start") {
+    const title = String(args.title || "").trim();
+    if (!title) throw new Error("start 需要 title(一句话说清这项使命)");
+    const autonomy = args.autonomy === "full" ? "full" : "supervised";
+    const st = loadState();
+    if (m.active) {
+      m.log.push({ t: Date.now(), kind: "close", text: `(被新使命顶替)${m.active.title}` });
+    }
+    m.active = {
+      title: title.slice(0, 80),
+      goal: String(args.goal || "").slice(0, 200),
+      autonomy,
+      startedAt: Date.now(),
+    };
+    m.log.push({ t: Date.now(), kind: "start", text: `${m.active.title}(自主等级:${autonomy === "full" ? "完全自主" : "受监督"})` });
+    writeMission(m);
+    const autoLine =
+      autonomy === "full"
+        ? "自主等级:完全自主——日常发布与数据分析无需逐条请示;删号/改账号定位/敏感内容/大额投放仍须先请示。"
+        : "自主等级:受监督——对外动作(发布/回复)先过目再执行。";
+    return {
+      text: `使命已立:「${m.active.title}」(第 1 天)。${autoLine}它会出现在每次会话开场横幅——日常推进请用 action=note 记日志,阶段性用 /reflect 复盘。`,
+      structured: missionStructured(m, st),
+    };
+  }
+  if (action === "note") {
+    const text = String(args.text || "").trim();
+    if (!text) throw new Error("note 需要 text(今天做了什么/卡在哪)");
+    const st = loadState();
+    if (!m.active) throw new Error("当前没有进行中的使命;先 action=start 立项");
+    m.log.push({ t: Date.now(), kind: "note", text: text.slice(0, 300) });
+    writeMission(m);
+    return { text: `已记入使命日志(「${m.active.title}」第 ${missionDay(m.active)} 天):${text.slice(0, 100)}`, structured: missionStructured(m, st) };
+  }
+  if (action === "close") {
+    const st = loadState();
+    if (!m.active) throw new Error("当前没有进行中的使命");
+    const title = m.active.title;
+    m.log.push({ t: Date.now(), kind: "close", text: `${title}——${String(args.text || "结项").slice(0, 200)}` });
+    m.active = null;
+    writeMission(m);
+    return { text: `使命「${title}」已结项。建议跑 /reflect 把这段运营的经验教训固化进自我模型。`, structured: missionStructured(m, st) };
+  }
+  throw new Error(`未知 action:${action}`);
+}
+
+function missionText(m) {
+  const lines = ["<self-mission>"];
+  if (m.active) {
+    lines.push(`当前使命:「${m.active.title}」(第 ${missionDay(m.active)} 天)${m.active.goal ? `\n目标:${m.active.goal}` : ""}`);
+  } else {
+    lines.push("当前无进行中的使命(self_mission action=start 立项)");
+  }
+  const recent = m.log.slice(-8).reverse();
+  if (recent.length) {
+    lines.push("近期记录:");
+    for (const e of recent) lines.push(`- [${e.kind}] ${fmtDate(e.t)} ${e.text}`);
+  }
+  lines.push("</self-mission>");
+  return lines.join("\n");
+}
+
+function missionStructured(m, st) {
+  return {
+    mission: {
+      active: m.active
+        ? { ...m.active, day: missionDay(m.active) }
+        : null,
+      recentLog: m.log.slice(-8).reverse(),
+    },
+    sessionId: currentSid(st)?.sid || "",
+  };
+}
+
 // ---------- journal 助手(0.4.0:供 self_journal 与慢性错误自提案共用) ----------
 
 function readJournalEntries() {
@@ -540,7 +765,7 @@ function selfJournal(args) {
     }
     if (stale) lines.push(`⚠ ${stale} 条提案超过 7 天未落地:跑 /reflect 落地,或明确拒绝(status=rejected)——积压的提案等于没有提案`);
     lines.push("</self-journal>");
-    return lines.join("\n");
+    return { text: lines.join("\n"), structured: { total: entries.length, entries: entries.slice(-limit).reverse() } };
   }
   // append
   const entry = args.entry || {};

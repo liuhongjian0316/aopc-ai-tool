@@ -178,7 +178,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "0.7.0",
+      "version": "1.0.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -193,6 +193,37 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "1.0.0",
+          "date": "2026-11-02",
+          "changes": [
+            "完全自主运营版本:使命新增自主等级(full=完全自主/supervised=受监督),横幅与面板携带等级标记",
+            "autonomous-ops 升级完全自主版:完整日循环(唤醒自检→数据回收→内容生产+合规自检→发布→互动→收工记账)+ 熔断器(连续 3 天发布失败/失败率>50%/数据断崖 → 停发请示)+ 每周进化循环(数据→洞察→固化 playbook→guanji 周检→周报)",
+            "无人值守定时桥:配合宿主定时任务每日拉起 aopc -p 无头会话执行日循环(落地示例:自主运营抖音号,配合 douyin-pilot)",
+            "冒烟测试 121 → 125 项全绿;自 0.1.0 起 9 轮迭代,功能面闭环"
+          ]
+        },
+        {
+          "version": "0.9.0",
+          "date": "2026-11-02",
+          "changes": [
+            "使命机制(自主运营地基):self_mission 工具立项/记日志/结项;进行中的使命进入每次会话开场横幅(第 N 天)——agent 跨会话保持目标意识",
+            "面板三张零依赖 SVG 图:近 14 天活动柱状(调用/失败)、失败率折线、会话上下文占用曲线(预算轨迹 trail)",
+            "新增 autonomous-ops 技能:自主运营节律(立项/开工收工仪式/失败即复盘/周度 guanji 自检),以 douyin-pilot 运营抖音号为落地示例",
+            "self_history 增加按本地日聚合 daily;冒烟测试 110 → 121 项全绿"
+          ]
+        },
+        {
+          "version": "0.8.0",
+          "date": "2026-11-02",
+          "changes": [
+            "新增会话面板「观己 · 自我仪表盘」(ui.surfaces + MCP Apps):上下文预算进度条(provider 实测)、会话统计、自我档案健康度、慢性错误、跨会话历史与叙事、反思日志;主题跟随宿主亮/暗",
+            "四个查询工具补 structuredContent(wudi 同款模式):主 agent 调用时面板经 Gen UI 绑定实时刷新",
+            "MCP server 增加 resources/list+read(panel.html 以 text/html;profile=mcp-app 自包含分发,ext-apps SDK 内联)",
+            "真机验收:e2e 14/14 全绿(0.4.0 预算修复最终确认)、/selfcheck 功能 6/6(子代理视图适配生效)",
+            "冒烟测试 100 → 110 项全绿"
+          ]
+        },
         {
           "version": "0.7.0",
           "date": "2026-11-02",

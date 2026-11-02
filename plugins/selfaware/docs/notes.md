@@ -99,9 +99,43 @@
 | C5 MCP 工具 | **✓ 真实宿主端到端可用**;MCP 工具真实命名空间实测为 `mcp__plugin_selfaware_selfaware__self_state`(plugin_插件名_服务名__工具名) | V3:主 agent 调 `self_state` 并完整回传结构化结果;事件日志记下真实工具名 |
 | C6 预算来源 | **✓ provider 实测**(confidence=high,"39.7k/200k,19.8%")——V1 的 null 纯属时序,非估算失真 | V3 self_state 原文 |
 
-另:/selfcheck 命令(宿主按文件名注册,非 /self-check)作为产品化自检保留,2026-11-02 已在真实宿主完成首次 dogfood:**5/6 PASS**(C3 为已知宿主事实,报告中引的是当时安装的 0.2.0 措辞,0.4.0+ 已适配派发计数);C5 见证 self_history 积累到 5 个真实会话。
+另:/selfcheck 命令(宿主按文件名注册,非 /self-check)作为产品化自检保留。
+
+**最终验收(2026-11-02,0.7.0 已安装)**:
+- `scripts/e2e.mjs` 真机 **14/14 全绿**——含此前在 0.2.0 上必然失败的"Stop 刷新预算: src=provider"(0.4.0 修复的最终确认)、Agent 派发计数、C3 无子代理事件复现、MCP 端到端。
+- `/selfcheck` 功能上 **6/6**:C1/C2/C4/C5/C6 PASS(C6 provider 实测 21.3%·42.6k);C3 报告标 FAIL 系沿用旧严格判据,但其正文实测确认"**self_state 计数由 0 变 1(经 Agent 工具计数)**"——0.4.0 适配生效,并自行判断"已知设计限制而非 bug"。若未来宿主在 Agent 工具派发层开放子代理事件,可再升级完整画像。
+- self_history 已积累 **9 个真实会话(累计 28 次工具/0 败)**——自传体记忆开始生长。
+- 至此开发侧进化完成;后续进化输入 = P6 周级真实使用(慢性错误/复盘债/critic 提醒的实际观感)。
 
 ## 〇、升级记录
+
+### v1.0.0(2026-11-02,完全自主运营版)
+
+- **场景**:「让她自己完全操作——发抖音视频、自己分析数据、不断进化」。要补的三块:
+- **自主等级**:self_mission start 新增 `autonomy`(full/supervised,默认 supervised);横幅带「(完全自主)」标记,面板使命卡显示等级 tag。full 语义:日常发布与数据分析无需逐条请示;删号/改定位/敏感内容/大额投放仍须请示(红线不豁免)。
+- **autonomous-ops 完全自主版**:完整日循环(唤醒自检 → 数据回收 → 内容生产+合规自检 → 发布 → 互动 → 收工记账)+ **熔断器**(连续 3 天发布失败/单日失败率>50%/数据断崖 → 停发并向用户请示)+ **每周进化循环**(7 日数据 top/bottom → 洞察 note → 反复出现的洞察固化进 douyin-content.md playbook → guanji 周检 → 周报)——"不断进化"的机械形态:数据→洞察→规则→影响下一个选题。
+- **无人值守定时桥**:宿主定时任务(每日 09:30)拉起 `aopc -p` 无头会话执行日循环(内层指令自包含:熔断检查→前提检查→日循环→周日进化分支;失败只重试一次如实上报)。她自己每天醒来干活。
+- 冒烟测试 121 → **125 项**全绿;面板重建;宿主校验通过。
+- 待真机验证:首日无人值守运行(RPA 登录态/内容管线前提由内层指令自检,缺前提会 note 记录而非硬发)。
+
+### v0.9.0(2026-11-02,使命与图表——自主运营场景)
+
+- **场景驱动**:「我想让她自己运营抖音号」——自主运营缺的不是执行力,是**跨会话的目标意识与汇报纪律**。由此新增:
+- **使命机制**:`self_mission` 工具(start/note/close/get,mission.json 持久化);进行中的使命进入**每次会话开场横幅**(「当前使命:『自主运营抖音号』(第 N 天)」)——agent 睁眼即知使命;note 是对用户的汇报义务,连续不写视为运营失控。使命与 AOPC 原生 memory 分离:memory 存知识与偏好,mission 存进行中的承诺。
+- **面板三张零依赖 SVG 图**:近 14 天活动柱状(蓝调用/红失败)、失败率折线、本会话上下文占用曲线(新预算轨迹 trail,UserPromptSubmit 时累积,封顶 240 点);颜色走 CSS 变量随主题。
+- **self_history 按本地日聚合 daily**(图表数据源),text 侧同步加"近 N 天活跃"行。
+- **autonomous-ops 技能**:自主运营节律——立项(与用户确认目标)→ 每日开工/收工仪式(note 是接力棒)→ 失败即复盘 → 边界红线(删内容/改定位/投放先请示,写进 autonomy-boundaries.md playbook)→ 周度 guanji 自检;以 douyin-pilot 的 dy_* 工具链为落地示例。
+- **教训(T26)**:selfMission 首版在函数内直接 return textResult(...),callTool 对非字符串再包一层导致 text 丢失——返回值约定统一为"字符串或 {text, structured}",已文档化在代码注释。
+- 冒烟测试 110 → **121 项**全绿;面板重建(408KB);宿主校验通过。
+
+### v0.8.0(2026-11-02,自我仪表盘)
+
+- **会话面板**:manifest `ui.surfaces`(availability=session)→ MCP server `resources/list+read`(panel.html 以 `text/html;profile=mcp-app` 自包含分发)→ 面板「观己 · 自我仪表盘」五卡:此刻(预算进度条/统计/连败/复盘债)、健康(档案健康度 + playbook 规则)、慢性错误、跨会话历史(含叙事)、反思日志(含超期 ⚠)。主题跟随宿主亮/暗,60s 轮询 + 刷新按钮。
+- **工具 structuredContent**:self_state/self_errors/self_history/self_journal(query) 附结构化数据(wudi 同款模式)——面板数据通道,同时让主 agent 调用经 Gen UI 绑定(`ontoolresult`)实时刷新面板;文本输出不变,向后兼容。
+- **实现照搬**:vendor ext-apps SDK(与 wudi 同一份 app-with-deps)+ build-panel.mjs 组装自检(export→const 转换 + node --check + 实跑 ReferenceError 探测);resources/read 未知 URI 走 -32602(handler 增加 error.code 透传)。
+- **真机最终验收(0.7.0 安装后)**:e2e 14/14 全绿(0.4.0 预算修复最终确认);/selfcheck 功能 6/6(C3 报告 FAIL 系旧严格判据,正文实测派发计数生效);self_history 积累 9 个真实会话。
+- **面板渲染验证边界**:resources/read 契约 + 冒烟 110 项已锁;iframe 内的视觉呈现需桌面/Web 会话侧栏人工查看(headless 不可见)——待用户下次会话确认。
+- 冒烟测试 100 → **110 项**全绿;宿主校验含 ui.surfaces 通过。
 
 ### v0.7.0(2026-11-02,长期卫生)
 

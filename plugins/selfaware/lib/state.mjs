@@ -24,6 +24,7 @@ export const eventsDir = () => path.join(dataRoot(), "events");
 export const statePath = () => path.join(dataRoot(), "state.json");
 export const configPath = () => path.join(dataRoot(), "config.json");
 export const journalPath = () => path.join(dataRoot(), "journal.jsonl");
+export const missionPath = () => path.join(dataRoot(), "mission.json");
 export const selfDir = () => path.join(dataRoot(), "self");
 export const selfModelPath = () => path.join(selfDir(), "self-model.md");
 export const playbooksDir = () => path.join(selfDir(), "playbooks");
@@ -84,6 +85,7 @@ export function emptySession(sid) {
     failuresSinceReflect: 0,
     carried: 0,
     fileEdits: 0,
+    trail: [], // 0.9.0:本会话预算轨迹 [{t, pct}](UserPromptSubmit 时追加,封顶 240 点)
     sub: false,
   };
 }
@@ -145,4 +147,29 @@ export function listEventSids() {
   } catch {
     return [];
   }
+}
+
+// ---------- 使命(0.9.0:跨会话的持久目标意识——自主运营场景的地基) ----------
+
+const MISSION_LOG_CAP = 200;
+
+export function readMission() {
+  try {
+    const j = JSON.parse(fs.readFileSync(missionPath(), "utf8"));
+    if (j && typeof j === "object") return { active: j.active || null, log: Array.isArray(j.log) ? j.log : [] };
+  } catch {}
+  return { active: null, log: [] };
+}
+
+export function writeMission(m) {
+  fs.mkdirSync(dataRoot(), { recursive: true });
+  m.log = (m.log || []).slice(-MISSION_LOG_CAP);
+  const tmp = missionPath() + ".tmp-" + process.pid;
+  fs.writeFileSync(tmp, JSON.stringify(m, null, 2) + "\n");
+  fs.renameSync(tmp, missionPath());
+}
+
+export function missionDay(active) {
+  if (!active?.startedAt) return 0;
+  return Math.max(1, Math.floor((Date.now() - active.startedAt) / 86400000) + 1);
 }

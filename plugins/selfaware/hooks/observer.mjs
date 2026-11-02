@@ -12,7 +12,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   loadConfig, loadState, saveState, appendEvent, emptySession,
-  selfModelPath, playbooksDir, eventsDir,
+  selfModelPath, playbooksDir, eventsDir, readMission, missionDay,
 } from "../lib/state.mjs";
 import { updateBudget } from "../lib/budget.mjs";
 import { redact, errorSignature } from "../lib/redact.mjs";
@@ -73,6 +73,10 @@ function run() {
       sess.turns += 1;
       appendEvent(sid, { ev: "user_prompt", turn: sess.turns, chars: String(input.prompt ?? "").length });
       updateBudget(sid, sess, cfg);
+      if (sess.budget) {
+        // 0.9.0:预算轨迹(面板曲线数据源),封顶 240 点
+        sess.trail = [...(sess.trail || []), { t: Date.now(), pct: sess.budget.percent }].slice(-240);
+      }
       appendEvent(sid, { ev: "budget", used: sess.budget?.used ?? 0, src: sess.budget?.src ?? "none" });
       if (cfg.injectBudget) inject = budgetLine(sess, cfg);
       break;
@@ -226,9 +230,18 @@ function startBanner(st, bootstrapped) {
     : "尚无深度复盘记录(跑 /reflect 可建立与修订自我档案)。";
   const debt = st.outstandingDebt || 0;
   const debtLine = debt > 0 ? `跨会话未复盘失败累计 ${debt} 次(跑 /reflect 清账)。` : "";
+  // 0.9.0:持久使命——自主运营场景下,agent 睁眼就知道自己有一项进行中的事
+  let missionLine = "";
+  try {
+    const m = readMission();
+    if (m.active) {
+      const auto = m.active.autonomy === "full" ? "(完全自主)" : "(受监督)";
+      missionLine = `当前使命:「${String(m.active.title).slice(0, 40)}」(第 ${missionDay(m.active)} 天)${auto}——按 autonomous-ops 节律执行,收工记得 self_mission note。`;
+    }
+  } catch {}
   const init = bootstrapped ? "首次挂载,已自动初始化自我档案与 playbooks 骨架。" : "";
   return (
-    `<self-state> 观己已挂载:本会话中我能感知自己的状态。${init}${last}${debtLine}` +
+    `<self-state> 观己已挂载:本会话中我能感知自己的状态。${init}${last}${debtLine}${missionLine}` +
     `自我档案与 playbook 在 ${selfModelPath()}(按需 Read;更新只走复盘)。` +
     `查自身状态/错误史/上下文/跨会话历史:调 self_state / self_errors / self_usage / self_history。` +
     `${digest}${playbookDigest()}</self-state>`
