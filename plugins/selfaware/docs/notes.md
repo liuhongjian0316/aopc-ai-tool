@@ -4,6 +4,14 @@
 
 ## 〇、升级记录(按版本倒序)
 
+### v2.1.0(2026-11-04,超长单行 usage 提取——e2e 回归驱动)
+
+- **e2e 回归抓出**:v2.0.0 的 e2e(V1 断言)src=estimate 回退。定位:单条 model_io 可达数百 KB 且为**单行 JSON**,256KB 尾部读取切掉行头 → JSON.parse 必败 → 唯一的 provider usage 锚点丢失。
+- **修复**:extractUsage 增加正则兜底(`"inputTokens":\s*(\d+)`)——usage 位于记录尾部(response 在 request 之后)必在 tail 内;inputTokens 仅出现于 usage 对象,无误配风险。
+- **T45**:300KB 单行 + 行尾 usage,offset-0 尾部读取仍提取 provider 实测。
+- **测试侧跨午夜教训**:T34 硬编码日期("2026-11-03-测试知识.md")跨午夜后"今日"计数归零——改动态本地日期。
+- 冒烟测试 177 → **185 项**全绿。
+
 ### v1.9.0(2026-11-03,提案生命周期闭环 + recall 全库模式)
 
 - **账务断点修复**:self_review 要求"落地后回写 landed",但 self_journal 没有 update 动作——提案永远停在 proposed,⚠ 过期提醒会永远挂着。新增 `action=update`(id + status=landed/rejected + note,原子重写 journal)——L4 账务闭环(T41)。
