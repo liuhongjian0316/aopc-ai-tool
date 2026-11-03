@@ -4,6 +4,13 @@
 
 ## 〇、升级记录(按版本倒序)
 
+### v1.9.0(2026-11-03,提案生命周期闭环 + recall 全库模式)
+
+- **账务断点修复**:self_review 要求"落地后回写 landed",但 self_journal 没有 update 动作——提案永远停在 proposed,⚠ 过期提醒会永远挂着。新增 `action=update`(id + status=landed/rejected + note,原子重写 journal)——L4 账务闭环(T41)。
+- **recall 全库模式(可选)**:`knowledgeBase.searchScope=own|all`(默认 own 保守)。all 时 self_recall 递归召回**整个 Obsidian 库**的既有知识(跳过 .obsidian/.git/隐藏,文件数 300 与单文件 512KB 封顶,结果带「知识库(全库)」来源标注)——agent 能站在用户已有知识上工作,而不只是自己写的笔记(T42)。
+- **self_state 新增仪表**:提案生命周期(proposed/stale/landed)与困难队列老化天数(最老挂 N 天)——L4 的度量面补齐。
+- 冒烟测试 168 → **177 项**全绿;面板重建;宿主校验通过。
+
 ### v1.8.0(2026-11-03,内容实验台账 + 召回全域化)
 
 - **真机里程碑(驱动本版)**:首条视频《让AI一句话给浏览器写了个黑洞》**已自主发布并核验上架**(RPA 15s);RPA 数据链路自愈升级(挂载已登录 profile + 网络拦截,推翻此前"无法自动化"的自我判定);96 条数据驱动的定位纠偏落地(撤回错选题)。日循环全链路真实跑通。
