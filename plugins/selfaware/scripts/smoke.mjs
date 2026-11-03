@@ -1182,6 +1182,27 @@ console.log("\n[T46] self_mission void:作废假阳性,聚合排除,无 reason �
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// ---------- T47 用户反馈即时入库 ----------
+
+console.log("\n[T47] journal user_feedback:记录/召回/learn 关联");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    return { text: m?.result?.content?.[0]?.text || "", isError: !!m?.result?.isError };
+  };
+  const r1 = call("self_journal", { action: "append", entry: { kind: "user_feedback", title: "用户纠正:发布前必须给预览", body: "用户说『发之前给我看看成片』。场景:直接入队发布。修正:发布前先出预览。", lesson: "发布前先出预览给用户" } });
+  check("user_feedback 记录成功", !r1.isError, r1.text.slice(0, 150));
+  const r2 = call("self_recall", { query: "预览" });
+  check("反馈可被召回", r2.text.includes("发布前先出预览给用户"), r2.text.slice(0, 300));
+  check("反馈条目带来源标注", r2.text.includes("反思日志"), r2.text.slice(0, 300));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);

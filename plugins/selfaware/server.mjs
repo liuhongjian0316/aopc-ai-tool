@@ -31,7 +31,7 @@ import {
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "2.2.0";
+const VERSION = "2.3.0";
 
 const TOOLS = [
   {
@@ -156,7 +156,7 @@ const TOOLS = [
           type: "object",
           description: "append 时的条目内容",
           properties: {
-            kind: { type: "string", enum: ["failure_postmortem", "confidence_review", "critic_verdict", "guanji_report", "playbook_proposal", "playbook_landed"] },
+            kind: { type: "string", enum: ["failure_postmortem", "confidence_review", "critic_verdict", "guanji_report", "playbook_proposal", "playbook_landed", "user_feedback"] },
             title: { type: "string" },
             body: { type: "string" },
             lesson: { type: "string", description: "提炼出的一条可执行规则" },
@@ -893,13 +893,16 @@ function missionText(m) {
 function missionStructured(m, st) {
   const now = Date.now();
   const ledger = m.ledger || [];
+  const openD = (m.open || []).filter((d) => d.status === "open");
+  const agingD = openD.length ? Math.floor((now - Math.min(...openD.map((d) => d.t || now))) / 86400000) : 0;
   return {
     mission: {
       active: m.active
         ? { ...m.active, day: missionDay(m.active) }
         : null,
       recentLog: m.log.slice(-8).reverse(),
-      openDifficulties: (m.open || []).filter((d) => d.status === "open"),
+      openDifficulties: openD,
+      difficultyAgingDays: agingD,
       ledger: {
         awaiting: ledger.filter((l) => l.status === "awaiting").length,
         due: ledger.filter((l) => l.status === "awaiting" && now - l.t >= 48 * 3600000).map((l) => ({ id: l.id, title: l.title, t: l.t })),
