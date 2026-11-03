@@ -201,7 +201,7 @@ console.log("\n[T7] MCP server:握手 / 工具列表 / 四工具调用");
   check("initialize 回显协议版本", byId.get(1)?.result?.protocolVersion === "2025-06-18", JSON.stringify(byId.get(1)));
   check("serverInfo=selfaware", byId.get(1)?.result?.serverInfo?.name === "selfaware");
   const tools = byId.get(2)?.result?.tools || [];
-  check("8 个工具", tools.length === 8 && ["self_state", "self_errors", "self_usage", "self_history", "self_config", "self_mission", "self_learn", "self_journal"].every((n) => tools.some((t) => t.name === n)), JSON.stringify(tools.map((t) => t.name)));
+  check("9 个工具", tools.length === 9 && ["self_state", "self_errors", "self_usage", "self_history", "self_config", "self_mission", "self_learn", "self_recall", "self_journal"].every((n) => tools.some((t) => t.name === n)), JSON.stringify(tools.map((t) => t.name)));
   const stTxt = byId.get(3)?.result?.content?.[0]?.text || "";
   check("self_state 返回主会话状态", stTxt.includes("sess_t7") && stTxt.includes("<self-state>"), stTxt.slice(0, 200));
   const jApp = byId.get(4)?.result?.content?.[0]?.text || "";
@@ -930,6 +930,59 @@ console.log("\n[T36] self_learn type=experience + close 自动沉淀经验");
   const before = fs.readdirSync(kbDir).length;
   const r4 = call("self_mission", { action: "close", text: "无经验正文" });
   check("无 experience 时 close 不写 KB", !r4.isError && fs.readdirSync(kbDir).length === before);
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(kb, { recursive: true, force: true });
+}
+
+// ---------- T37/T38 知识复利:recall 召回 + 自动关联 ----------
+
+console.log("\n[T37] self_recall:关键词召回与评分");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const kb = fs.mkdtempSync(path.join(os.tmpdir(), "sa-kb-"));
+  fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify({ knowledgeBase: { path: kb } }));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    return { text: m?.result?.content?.[0]?.text || "", sc: m?.result?.structuredContent, isError: !!m?.result?.isError };
+  };
+  call("self_learn", { action: "record", title: "playwright chromium 自愈安装", body: "npx playwright install chromium 可自愈 RPA 前提。" });
+  call("self_learn", { action: "record", title: "队列锁机制", body: "flock 并发互斥。" });
+  const r1 = call("self_recall", { query: "chromium 安装" });
+  check("命中含 chromium 笔记(标题+正文多行累计 5 分)", !r1.isError && r1.text.includes("chromium-自愈安装") && r1.text.includes("[5 分]"), r1.text.slice(0, 300));
+  check("不相关的队列锁排在后面或不出现", r1.sc?.matches?.[0]?.file?.includes("playwright"), JSON.stringify(r1.sc?.matches?.map((m) => m.file)));
+  const r2 = call("self_recall", { query: "完全无关的词汇表" });
+  check("无命中给出学习候选指引", r2.text.includes("还没学过") || r2.text.includes("无命中"), r2.text.slice(0, 200));
+  const r3 = call("self_recall", { query: "锁" });
+  check("中文短词命中队列锁", r3.text.includes("队列锁机制"), r3.text.slice(0, 300));
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(kb, { recursive: true, force: true });
+}
+
+console.log("\n[T38] self_learn 自动关联旧笔记(双链)");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const kb = fs.mkdtempSync(path.join(os.tmpdir(), "sa-kb-"));
+  fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify({ knowledgeBase: { path: kb } }));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    return { text: m?.result?.content?.[0]?.text || "", sc: m?.result?.structuredContent };
+  };
+  call("self_learn", { action: "record", title: "playwright chromium 安装要点", body: "x" });
+  const r2 = call("self_learn", { action: "record", title: "playwright 截图与超时", body: "y" });
+  check("新笔记带相关笔记双链", r2.sc !== undefined && (() => {
+    const kbDir = path.join(kb, "观己学习");
+    const files = fs.readdirSync(kbDir).filter((f) => f.includes("截图"));
+    return files.length === 1 && fs.readFileSync(path.join(kbDir, files[0]), "utf8").includes("相关笔记: [[");
+  })(), JSON.stringify(r2));
+  check("structured 返回条目", r2.sc?.file?.includes("playwright"));
   fs.rmSync(dir, { recursive: true, force: true });
   fs.rmSync(kb, { recursive: true, force: true });
 }

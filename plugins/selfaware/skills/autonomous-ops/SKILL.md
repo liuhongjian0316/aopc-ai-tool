@@ -56,12 +56,12 @@ when_to_use: "用户授权 agent 完全自主运营任何长期事务并已 self
 
 ## 每日循环(骨架;血肉是 <domain>-ops.md)
 
-1. **唤醒自检**:`self_state` + `self_mission get` + 读 `<domain>-ops.md`。昨日有「熔断」→ 只整理证据请示并结束。预算 >85% → 先收敛。
+1. **唤醒自检**:`self_state` + `self_mission get` + 读 `<domain>-ops.md`;用今日任务关键词 `self_recall` 回查知识库——**昨天学的今天用**(知识不复利,等于白学)。昨日有「熔断」→ 只整理证据请示并结束。预算 >85% → 先收敛。
 2. **前提自愈**:缺口先过三分类;**"全部阻塞所以什么都没干"是反模式**——总有不依赖缺失前提的工作(数据分析/复盘/沉淀/自扩展)。
 3. **执行领域日循环**。
 4. **收工记账与强制学习**:`self_mission` note(做了什么/数据/明日);**每日强制提炼 ≥1 条规则直接落 playbook**——解决过的问题进 ops-fixes,发现的模式进领域手册,边界进 autonomy-boundaries。零学习汇报是失职;连续 3 天零学习 = 进化停滞,周报自我检讨。
 5. **每日学习时刻(1.5:双源,困难研究优先)**:
-   - **源① 困难研究(队列非空时优先)**:从使命的待研究队列挑一条(最老优先),用文档/搜索/`--help`/源码研究它的**机制**——为什么会发生、底层原理、同类场景还有哪些变体;写透后两步落地:`self_learn` action=record(tags 加 troubleshooting)写入知识库 → `self_mission` action=resolve(id/title/body/tags) 消化本条。**禁止只记"怎么修"不记"为什么"——操作步骤会过期,机制才可迁移。**
+   - **源① 困难研究(队列非空时优先)**:从使命的待研究队列挑一条(最老优先);**研究前先 `self_recall` 相关关键词**——已学过就直接复用并把重复研究转为同题补学;没学过再用文档/搜索/`--help`/源码研究它的**机制**——为什么会发生、底层原理、同类场景还有哪些变体;写透后两步落地:`self_learn` action=record(tags 加 troubleshooting)写入知识库 → `self_mission` action=resolve(id/title/body/tags) 消化本条。**禁止只记"怎么修"不记"为什么"——操作步骤会过期,机制才可迁移。**
    - **源② 新知识(队列空时)**:从今天查过的资料、领域文档、数据模式中挑 ≥1 条新知识,`self_learn` action=record 写入知识库。
    - 两者都自动带 agent 标识(frontmatter `source: agent-selfaware` + 🤖 横幅)并 git 提交。路径未配置就先用 self_config 配好。**分寸:写入的是知识,不是流水账;来源必须真实,不许编造——知识库是公开仓库,你的署名就是你的信誉。**
 6. 当日失败走 metacognition 复盘 + `self_journal` 落账。
@@ -82,7 +82,7 @@ when_to_use: "用户授权 agent 完全自主运营任何长期事务并已 self
 
 ## 每周进化循环(周日或每第 7 个工作日)
 
-领域指标 top/bottom 对照当日动作 → 洞察(note 前缀「洞察:」)→ **反复出现 ≥2 次的洞察固化进领域手册**(如 douyin-content.md)→ 派 `guanji` 周度自省(必答三问:本周把几个问题变成了能力?ops-fixes 长了几条?自扩展了什么?)→ 本周学习清单(知识库新条目,`self_learn` action=list)随周报给用户。
+领域指标 top/bottom 对照当日动作 → 洞察(note 前缀「洞察:」)→ **反复出现 ≥2 次的洞察固化进领域手册**(如 douyin-content.md)→ 派 `guanji` 周度自省(必答三问:本周把几个问题变成了能力?ops-fixes 长了几条?自扩展了什么?)→ **知识整理**(`self_learn` action=list 全量过一遍:合并重复、过时的退役为 P3 或删除并留去向)→ 本周学习清单(知识库新条目,`self_learn` action=list)随周报给用户。
 
 ## 红线(完全自主也不豁免)
 

@@ -371,7 +371,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "1.6.0",
+      "version": "1.7.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -386,6 +386,16 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "1.7.0",
+          "date": "2026-11-03",
+          "changes": [
+            "知识复利闭环(此前知识库只写不读):新增 self_recall 工具——按关键词召回自己写入的笔记(评分=多行命中累计,零依赖扫描);autonomous-ops 三处接线:开工回查今日任务相关经验、困难研究前先查已学(重复研究转同题补学)、每周知识整理(合并重复/退役过时)",
+            "self_learn record 自动关联:标题与既有笔记求 2-gram 交集,自动追加 Obsidian 双链 [[相关笔记]]",
+            "kbTokens 分词修正:中文单字是合法查询,不再被 ASCII 长度规则过滤(T37)",
+            "冒烟测试 156 → 162 项全绿"
+          ]
+        },
         {
           "version": "1.6.0",
           "date": "2026-11-03",

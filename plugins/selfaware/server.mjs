@@ -31,7 +31,7 @@ import {
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "1.6.0";
+const VERSION = "1.7.0";
 
 const TOOLS = [
   {
@@ -105,7 +105,7 @@ const TOOLS = [
   {
     name: "self_learn",
     description:
-      "观己:每日学习时刻——把学到的新知识/亲历的经验写入用户的 Obsidian 知识库(带 agent 标识 frontmatter + git 自动提交)。每天至少 1 条。type=knowledge:机制/原理/资料要点(来源必须真实);type=experience:亲历经验——背景/做法/结果/教训(来自使命与日常运营)。action=list 查看已写入的。知识库路径未配置时,先用 self_config 设 knowledgeBase.path。",
+      "观己:每日学习时刻——把学到的新知识/亲历的经验写入用户的 Obsidian 知识库(带 agent 标识 frontmatter + git 自动提交 + 自动关联相关旧笔记)。每天至少 1 条。type=knowledge:机制/原理/资料要点(来源必须真实);type=experience:亲历经验——背景/做法/结果/教训(来自使命与日常运营)。写入前建议先 self_recall 查重。action=list 查看已写入的。知识库路径未配置时,先用 self_config 设 knowledgeBase.path。",
     inputSchema: {
       type: "object",
       properties: {
@@ -116,6 +116,19 @@ const TOOLS = [
         tags: { type: "string", description: "record:附加标签,逗号分隔(自动附加 观己/agent-written,experience 另加 agent-experience)" },
       },
       required: ["action"],
+    },
+  },
+  {
+    name: "self_recall",
+    description:
+      "观己:知识复利——从我自己写入知识库的笔记里按关键词召回相关内容。开工时用今日任务关键词回查(昨天学的今天用);研究困难前先查(可能已经学过相关);避免重复学习已掌握的内容。返回按匹配度排序的笔记标题、路径与命中行。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "关键词(可多个,空格/逗号分隔;命中任一即计分,命中越多越靠前)" },
+        limit: { type: "number", description: "返回条数,默认 5" },
+      },
+      required: ["query"],
     },
   },
   {
@@ -257,6 +270,9 @@ function callTool(params) {
         break;
       case "self_learn":
         r = selfLearn(args);
+        break;
+      case "self_recall":
+        r = selfRecall(args);
         break;
       case "self_mission":
         r = selfMission(args);
@@ -867,7 +883,62 @@ function kbStats(cfg) {
   };
 }
 
-/** 知识库写入(1.5.0 抽取;1.6.0 支持 type=knowledge|experience;同题补学追加,git 按 autoCommit/autoPush) */
+/** 标题/查询分词(中英文通用:按标点与空白切;ASCII 片段 ≥2,非 ASCII(中文单字)≥1——T37 教训:"锁"是有意义的查询) */
+function kbTokens(text) {
+  return String(text || "")
+    .split(/[\s,，。;；:：!！?？、()()【】\[\]{}"'`·…—/\\|]+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2 || /[^\x00-\x7F]/.test(t));
+}
+
+/** 1.7.0:知识复利——按关键词召回自己写入的笔记(零依赖扫描,KB 规模内 O(n) 足够) */
+function selfRecall(args) {
+  const cfg = loadConfig();
+  const dir = kbDir(cfg);
+  const query = String(args?.query || "").trim();
+  if (!query) throw new Error("recall 需要 query(关键词,可多个)");
+  if (!dir) return { text: `<self-recall> 知识库未配置(knowledgeBase.path)。配置后我的学习笔记才能被召回。</self-recall>`, structured: { query, matches: [] } };
+  const tokens = kbTokens(query);
+  let files = [];
+  try {
+    files = fs.readdirSync(dir).filter((f) => f.endsWith(".md"));
+  } catch {}
+  const scored = [];
+  for (const f of files) {
+    let content = "";
+    try {
+      content = fs.readFileSync(path.join(dir, f), "utf8");
+    } catch {
+      continue;
+    }
+    let score = 0;
+    const hitLines = [];
+    for (const line of content.split("\n")) {
+      const hits = tokens.filter((t) => line.toLowerCase().includes(t.toLowerCase())).length;
+      if (hits > 0) {
+        score += hits;
+        if (hitLines.length < 2 && !line.startsWith("#") && line.trim()) hitLines.push(line.trim().slice(0, 100));
+      }
+    }
+    if (score > 0) scored.push({ file: f, title: f.replace(/^\d{4}-\d{2}-\d{2}-/, "").replace(/\.md$/, ""), score, hitLines });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  const limit = Number(args?.limit) || 5;
+  const picked = scored.slice(0, limit);
+  const lines = [`<self-recall> 关键词「${query}」在知识库(共 ${files.length} 条)中命中 ${scored.length} 条:`];
+  if (!picked.length) lines.push("无命中——这个主题我还没学过,值得作为今日学习时刻的候选。");
+  for (const s of picked) {
+    lines.push(`- [${s.score} 分] ${s.title}(${s.file})`);
+    for (const hl of s.hitLines) lines.push(`    · ${hl}`);
+  }
+  lines.push("</self-recall>");
+  return {
+    text: lines.join("\n"),
+    structured: { query, totalNotes: files.length, matches: picked },
+  };
+}
+
+/** 知识库写入(1.5.0 抽取;1.6.0 支持 type=knowledge|experience;1.7.0 自动关联旧笔记;同题补学追加,git 按 autoCommit/autoPush) */
 function kbRecord(cfg, { title, body, tags, type }) {
   const kind = type === "experience" ? "experience" : "knowledge";
   const dir = kbDir(cfg);
@@ -906,6 +977,24 @@ function kbRecord(cfg, { title, body, tags, type }) {
     ].join("\n");
     fs.writeFileSync(file, fm);
     mode = "create";
+    // 1.7.0:自动关联——标题与既有笔记文件名求 2-gram 交集,Obsidian 双链串起知识网络
+    try {
+      const grams = (s) => {
+        const out = [];
+        const t = s.toLowerCase();
+        for (let i = 0; i < t.length - 1; i++) out.push(t.slice(i, i + 2));
+        return out;
+      };
+      const titleGrams = new Set(kbTokens(title).flatMap(grams));
+      const related = fs
+        .readdirSync(dir)
+        .filter((f) => f.endsWith(".md") && path.basename(file) !== f)
+        .filter((f) => kbTokens(f).some((t) => grams(t).some((g) => titleGrams.has(g))))
+        .slice(0, 4);
+      if (related.length) {
+        fs.appendFileSync(file, `\n相关笔记: ${related.map((f) => `[[${f.replace(/\.md$/, "")}]]`).join(" · ")}\n`);
+      }
+    } catch {}
   }
   let git = { committed: false };
   const root = cfg.knowledgeBase?.path;
