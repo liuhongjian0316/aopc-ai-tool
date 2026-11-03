@@ -887,6 +887,53 @@ console.log("\n[T35] self_mission obstacle/resolve:困难变成知识库条目")
   fs.rmSync(kb, { recursive: true, force: true });
 }
 
+// ---------- T36 经验条目与结项沉淀 ----------
+
+console.log("\n[T36] self_learn type=experience + close 自动沉淀经验");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const kb = fs.mkdtempSync(path.join(os.tmpdir(), "sa-kb-"));
+  spawnSync("git", ["init"], { cwd: kb, encoding: "utf8" });
+  spawnSync("git", ["config", "user.email", "agent@test"], { cwd: kb, encoding: "utf8" });
+  spawnSync("git", ["config", "user.name", "guanji-test"], { cwd: kb, encoding: "utf8" });
+  fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify({ knowledgeBase: { path: kb } }));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    return { text: m?.result?.content?.[0]?.text || "", sc: m?.result?.structuredContent, isError: !!m?.result?.isError };
+  };
+  // ① experience 类型条目
+  const r1 = call("self_learn", { action: "record", type: "experience", title: "首日三阻塞的自愈经验", body: "背景:开工循环遇 chromium 缺失/账号未授权/client_key 未配。做法:A 类自己装,凭据发请示。结果:chromium 自愈成功。教训:先分类再行动。", tags: "douyin" });
+  check("experience 写入成功", !r1.isError && r1.text.includes("已写入知识库") && r1.text.includes("已 git 提交"), r1.text.slice(0, 200));
+  const kbDir = path.join(kb, "观己学习");
+  let files = fs.readdirSync(kbDir).filter((f) => f.endsWith(".md"));
+  const md = fs.readFileSync(path.join(kbDir, files[0]), "utf8");
+  check("frontmatter type: experience", md.includes("type: experience"), md.slice(0, 300));
+  check("tags 含 agent-experience", md.includes("agent-experience"));
+  check("git 提交信息为 经验沉淀", (spawnSync("git", ["log", "--oneline", "--grep=经验沉淀"], { cwd: kb, encoding: "utf8" }).stdout || "").length > 0);
+  // ② knowledge 与 experience 文件并存(slug 不同)
+  call("self_learn", { action: "record", title: "队列锁机制", body: "来源:源码。学习:flock 并发互斥。" });
+  files = fs.readdirSync(kbDir).filter((f) => f.endsWith(".md"));
+  check("knowledge 与 experience 并存", files.length === 2, JSON.stringify(files));
+  // ③ close 带 experience → 自动沉淀
+  call("self_mission", { action: "start", title: "测试使命", autonomy: "full" });
+  const r3 = call("self_mission", { action: "close", text: "验收完成", experience: "背景:测试使命。做法:跑通队列。结果:全绿。教训:测试先行。" });
+  check("close 自动沉淀经验", !r3.isError && r3.text.includes("经验已沉淀到知识库"), r3.text.slice(0, 250));
+  files = fs.readdirSync(kbDir).filter((f) => f.endsWith(".md"));
+  const closeNote = files.find((f) => f.includes("使命经验"));
+  check("结项经验条目存在且带 mission-close 标签", !!closeNote && fs.readFileSync(path.join(kbDir, closeNote), "utf8").includes("mission-close"), JSON.stringify(files));
+  // ④ close 不带 experience → 不写 KB
+  call("self_mission", { action: "start", title: "第二个使命" });
+  const before = fs.readdirSync(kbDir).length;
+  const r4 = call("self_mission", { action: "close", text: "无经验正文" });
+  check("无 experience 时 close 不写 KB", !r4.isError && fs.readdirSync(kbDir).length === before);
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(kb, { recursive: true, force: true });
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);

@@ -31,7 +31,7 @@ import {
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "1.5.0";
+const VERSION = "1.6.0";
 
 const TOOLS = [
   {
@@ -94,6 +94,7 @@ const TOOLS = [
         goal: { type: "string", description: "start:完成判据/目标(可选)" },
         autonomy: { type: "string", enum: ["supervised", "full"], description: "start:自主等级。full=完全自主(日常发布与数据分析无需逐条请示,红线仍须请示);supervised=受监督(默认)" },
         text: { type: "string", description: "note/close/obstacle:本条记录内容(obstacle 描述遇到的困难与已尝试的方案)" },
+        experience: { type: "string", description: "close:本使命的经验总结(背景/做法/结果/教训)——提供时自动写入知识库(type=experience,带 agent 标识)" },
         id: { type: "string", description: "resolve:要消化的困难条目 id(d001…)" },
         body: { type: "string", description: "resolve:研究正文——机制是什么、为什么会这样、下次怎么更快(写入知识库)" },
         tags: { type: "string", description: "resolve:附加标签(自动追加 troubleshooting)" },
@@ -104,14 +105,15 @@ const TOOLS = [
   {
     name: "self_learn",
     description:
-      "观己:每日学习时刻——把学到的新知识写入用户的 Obsidian 知识库(带 agent 标识 frontmatter + git 自动提交)。每天至少 1 条:解决问题时查的资料、领域文档要点、数据里的新模式,都算。action=record 需要 title + body(body 必须写清来源与证据,不编造);action=list 查看已写入的。知识库路径未配置时,先用 self_config 设 knowledgeBase.path。",
+      "观己:每日学习时刻——把学到的新知识/亲历的经验写入用户的 Obsidian 知识库(带 agent 标识 frontmatter + git 自动提交)。每天至少 1 条。type=knowledge:机制/原理/资料要点(来源必须真实);type=experience:亲历经验——背景/做法/结果/教训(来自使命与日常运营)。action=list 查看已写入的。知识库路径未配置时,先用 self_config 设 knowledgeBase.path。",
     inputSchema: {
       type: "object",
       properties: {
         action: { type: "string", enum: ["record", "list"] },
-        title: { type: "string", description: "record:知识条目标题(一句话说清学到了什么)" },
-        body: { type: "string", description: "record:知识正文——学到了什么、来源/证据、怎么用" },
-        tags: { type: "string", description: "record:附加标签,逗号分隔(会自动附加 观己/agent-written)" },
+        type: { type: "string", enum: ["knowledge", "experience"], description: "record:条目类型,默认 knowledge" },
+        title: { type: "string", description: "record:条目标题(一句话说清学到了什么/这条经验关于什么)" },
+        body: { type: "string", description: "record:正文。knowledge 写来源/证据/怎么用;experience 写背景/做法/结果/教训与下次怎么做" },
+        tags: { type: "string", description: "record:附加标签,逗号分隔(自动附加 观己/agent-written,experience 另加 agent-experience)" },
       },
       required: ["action"],
     },
@@ -704,10 +706,30 @@ function selfMission(args) {
     const st = loadState();
     if (!m.active) throw new Error("当前没有进行中的使命");
     const title = m.active.title;
+    const startedAt = m.active.startedAt;
+    const autonomy = m.active.autonomy;
     m.log.push({ t: Date.now(), kind: "close", text: `${title}——${String(args.text || "结项").slice(0, 200)}` });
     m.active = null;
     writeMission(m);
-    return { text: `使命「${title}」已结项。建议跑 /reflect 把这段运营的经验教训固化进自我模型。`, structured: missionStructured(m, st) };
+    // 1.6.0:结项自动沉淀经验到知识库(用户提供 experience 正文时)
+    let kbLine = "";
+    const exp = String(args.experience || "").trim();
+    if (exp) {
+      try {
+        const cfg = loadConfig();
+        const rec = kbRecord(cfg, {
+          title: `使命经验:「${title}」(运行 ${missionDay({ startedAt })} 天)`,
+          body: exp,
+          tags: "mission-close",
+          type: "experience",
+        });
+        kbLine = `\n经验已沉淀到知识库:${rec.file}${rec.git.committed ? "(已 git 提交)" : ""}`;
+      } catch (e) {
+        kbLine = `\n经验入库失败:${String(e?.message || e).slice(0, 120)}(正文已保留在本 note,可稍后手动 self_learn 补录)`;
+      }
+    }
+    const autoLine = autonomy === "full" ? "本次为完全自主运行。" : "";
+    return { text: `使命「${title}」已结项。${autoLine}建议跑 /reflect 把这段运营的经验教训固化进自我模型。${kbLine}`, structured: missionStructured(m, loadState()) };
   }
   if (action === "obstacle") {
     // 1.5.0:困难入队——遇到没把握的困难先记录,学习时刻研究消化
@@ -845,8 +867,9 @@ function kbStats(cfg) {
   };
 }
 
-/** 知识库写入(1.5.0 抽取:self_learn 与困难研究共用;同题补学追加,git 按 autoCommit/autoPush) */
-function kbRecord(cfg, { title, body, tags }) {
+/** 知识库写入(1.5.0 抽取;1.6.0 支持 type=knowledge|experience;同题补学追加,git 按 autoCommit/autoPush) */
+function kbRecord(cfg, { title, body, tags, type }) {
+  const kind = type === "experience" ? "experience" : "knowledge";
   const dir = kbDir(cfg);
   if (!dir) throw new Error("知识库路径未配置:self_config set knowledgeBase.path=<Obsidian 仓库本地路径>");
   fs.mkdirSync(dir, { recursive: true });
@@ -855,7 +878,7 @@ function kbRecord(cfg, { title, body, tags }) {
   const now = new Date();
   const p2 = (n) => String(n).padStart(2, "0");
   const time = `${p2(now.getHours())}:${p2(now.getMinutes())}`;
-  const tagArr = ["观己", "agent-written", ...String(tags || "").split(/[,，\s]+/).filter(Boolean)];
+  const tagArr = ["观己", "agent-written", ...(kind === "experience" ? ["agent-experience"] : []), ...String(tags || "").split(/[,，\s]+/).filter(Boolean)];
   let mode;
   if (fs.existsSync(file)) {
     fs.appendFileSync(file, `\n\n## 补充(${time})\n\n${body}\n`);
@@ -868,6 +891,7 @@ function kbRecord(cfg, { title, body, tags }) {
       `agent: 观己 (selfaware v${VERSION})`,
       "author: 观己(自主 agent)",
       "agent-written: true",
+      `type: ${kind}`,
       `learned_at: ${now.toISOString().slice(0, 10)}`,
       `mission: ${mission.active?.title || "无"}`,
       `tags: [${tagArr.join(", ")}]`,
@@ -876,7 +900,7 @@ function kbRecord(cfg, { title, body, tags }) {
       banner(),
       "",
       `# ${title}`,
-      "",
+      kind === "experience" ? "\n> 经验条目 = 亲历的「做法 → 结果 → 教训」,与知识条目(机制原理)互补;请结合上下文取用。\n" : "",
       body,
       "",
     ].join("\n");
@@ -886,7 +910,7 @@ function kbRecord(cfg, { title, body, tags }) {
   let git = { committed: false };
   const root = cfg.knowledgeBase?.path;
   if (cfg.knowledgeBase?.autoCommit) {
-    git = kbGitCommit(root, `agent(观己): 学习记录 ${title}`);
+    git = kbGitCommit(root, `agent(观己): ${kind === "experience" ? "经验沉淀" : "学习记录"} ${title}`);
     if (cfg.knowledgeBase?.autoPush && git.committed) {
       try {
         execSync("git push", { cwd: root, timeout: 60000, stdio: "pipe" });
@@ -920,7 +944,7 @@ function selfLearn(args) {
   const body = String(args?.body || "").trim();
   if (!title) throw new Error("record 需要 title(一句话说清学到了什么)");
   if (!body) throw new Error("record 需要 body(学到了什么、来源/证据、怎么用——不编造)");
-  const rec = kbRecord(cfg, { title, body, tags: args?.tags });
+  const rec = kbRecord(cfg, { title, body, tags: args?.tags, type: args?.type });
   const st = loadState();
   return {
     text: `${rec.mode === "append" ? `已补充到已有笔记:${rec.file}(同题补学)` : `已写入知识库:${rec.file}`}${rec.git.committed ? "(已 git 提交)" : rec.git.reason ? `(git 未提交:${rec.git.reason})` : ""}。知识库累计 ${kbStats(cfg).total} 条。`,

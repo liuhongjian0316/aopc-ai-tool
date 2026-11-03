@@ -371,7 +371,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "1.5.0",
+      "version": "1.6.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -386,6 +386,16 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "1.6.0",
+          "date": "2026-11-03",
+          "changes": [
+            "经验入库(用户需求:经验也写到知识库):self_learn 新增 type=experience——亲历的「背景/做法/结果/教训」条目,frontmatter 带 type: experience + agent-experience 标签,git 提交信息区分 经验沉淀/学习记录",
+            "self_mission close 新增 experience 参数:结项时自动把使命全程经验沉淀进知识库(带运行天数),入库失败自动降级为 note 保留正文",
+            "autonomous-ops 新增经验入库节(无结果数据的经验不写);self-review 产出第 4 通道补录",
+            "冒烟测试 148 → 156 项全绿"
+          ]
+        },
         {
           "version": "1.5.0",
           "date": "2026-11-03",
