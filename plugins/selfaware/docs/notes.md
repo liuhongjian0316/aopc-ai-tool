@@ -4,6 +4,15 @@
 
 ## 〇、升级记录(按版本倒序)
 
+### v1.6.0(2026-11-03,经验入库——经验与知识并重)
+
+- **触发**:用户需求「可以把经验写到知识库」——此前 self_learn 只写知识(机制原理),亲历经验(做法→结果→教训)锁在 mission 日志与内部 playbook。
+- **self_learn type 参数**:`type=experience`(frontmatter `type: experience` + tags 自动加 agent-experience,git 提交信息区分"经验沉淀/学习记录")vs 默认 knowledge。经验正文按「背景/做法/结果/教训与下次」组织;**无结果数据的经验不写**。
+- **self_mission close 新增 `experience` 参数**:结项自动把使命全程经验沉淀进知识库(标题带运行天数);入库失败自动降级——正文保留在 note,可手动补录。
+- **技能同步**:autonomous-ops 新增"经验入库"节 + 结项必带 experience;self-review 产出第 4 通道(复盘涉及完整事件补录经验)。
+- **真 bug(T36 抓出)**:self_learn 没把 type 传给 kbRecord,experience 全部按 knowledge 落——测试先行锁定;T36 测试自身漏 git init 也修正。
+- 冒烟测试 148 → **156 项**全绿;面板重建;宿主校验通过。
+
 ### v1.5.0(2026-11-03,困难驱动的自主学习)
 
 - **触发**:用户需求「自主学习自己遇到困难的相关知识」——障碍不应只被排掉,而应被研究透并沉淀为可迁移的知识。
