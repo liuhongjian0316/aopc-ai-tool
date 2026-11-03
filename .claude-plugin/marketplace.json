@@ -371,7 +371,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "2.5.0",
+      "version": "2.6.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -386,6 +386,16 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "2.6.0",
+          "date": "2026-11-04",
+          "changes": [
+            "插件进化提案通道(外环闭环:她的运行经验 → 插件本身的升级):journal 新增 kind=plugin_proposal(问题+建议方案),插件层摩擦不再 silence 里反复发生;随周报交用户与开发者",
+            "学习食谱仪表:self_state 暴露 journal kind 分布——只复盘不学新知识/不征询反馈 = 偏食,自我提醒",
+            "guanji 周度自省加第四维:插件层摩擦分析;autonomous-ops 三分类后新增 plugin_proposal 出口;周检必答四问",
+            "冒烟测试 200 → 204 项全绿"
+          ]
+        },
         {
           "version": "2.5.0",
           "date": "2026-11-04",

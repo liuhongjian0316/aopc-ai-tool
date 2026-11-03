@@ -31,7 +31,7 @@ import {
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "2.5.0";
+const VERSION = "2.6.0";
 
 const TOOLS = [
   {
@@ -157,7 +157,7 @@ const TOOLS = [
           type: "object",
           description: "append 时的条目内容",
           properties: {
-            kind: { type: "string", enum: ["failure_postmortem", "confidence_review", "critic_verdict", "guanji_report", "playbook_proposal", "playbook_landed", "user_feedback"] },
+            kind: { type: "string", enum: ["failure_postmortem", "confidence_review", "critic_verdict", "guanji_report", "playbook_proposal", "playbook_landed", "user_feedback", "plugin_proposal"] },
             title: { type: "string" },
             body: { type: "string" },
             lesson: { type: "string", description: "提炼出的一条可执行规则" },
@@ -382,6 +382,10 @@ function selfState() {
   const openDifficulties = (mission.open || []).filter((d) => d.status === "open");
   // 1.9.0:提案生命周期 + 困难老化——L4 账务仪表
   const journalEntries = readJournalEntries();
+  const journalDiet = journalEntries.reduce((acc, e) => {
+    acc[e.kind] = (acc[e.kind] || 0) + 1;
+    return acc;
+  }, {});
   const proposedEntries = journalEntries.filter((e) => e.status === "proposed");
   const staleProposals = proposedEntries.filter((e) => Date.now() - (e.t || 0) > 7 * 86400000).length;
   const oldestOpen = openDifficulties.slice().sort((a, b) => (a.t || 0) - (b.t || 0))[0];
@@ -452,6 +456,8 @@ function selfState() {
     playbookFiles,
     knowledge,
     journal: { total: journalEntries.length, proposed: proposedEntries.length, staleProposals, landed: journalEntries.filter((e) => e.status === "landed").length },
+    journalDiet,
+    pluginProposals: journalEntries.filter((e) => e.kind === "plugin_proposal").slice(-5).reverse(),
     difficultyAgingDays,
     evolution: { modelChanges: modelChangeLines, rulesByFile, journalLanded: journalEntries.filter((e) => e.status === "landed").length },
     opsScripts,
@@ -483,6 +489,8 @@ function selfState() {
   if (mission.active) lines.push(`当前使命:「${mission.active.title}」(第 ${missionDay(mission.active)} 天)`);
   if (openDifficulties.length) lines.push(`待研究困难:${openDifficulties.length} 条(最老已挂 ${difficultyAgingDays} 天)——每日学习时刻消化`);
   lines.push(`提案生命周期:proposed ${proposedEntries.length}${staleProposals ? `(⚠ 超 7 天 ${staleProposals} 条)` : ""} / landed ${journalEntries.filter((e) => e.status === "landed").length}——update 流转闭环`);
+  const diet = Object.entries(journalDiet).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}×${n}`).join(", ");
+  lines.push(`学习食谱(${journalEntries.length} 条):${diet || "空"}——${(journalDiet["failure_postmortem"] || 0) > (journalDiet["user_feedback"] || 0) + (journalDiet["plugin_proposal"] || 0) + (journalDiet["guanji_report"] || 0) && journalEntries.length >= 6 ? "⚠ 偏食:失败复盘占比过高,该主动学习与征询反馈了" : "均衡"}`);
   lines.push(`自扩展资产:自造脚本 ${opsScripts.length} 个 / playbook ${playbookFiles.length} 个(含 ${playbookFiles.filter((f) => f.endsWith("-ops.md")).length} 份领域手册);明细见 structured`);
   lines.push(`知识库:${knowledge.configured ? `累计 ${knowledge.total} 条 / 今日 ${knowledge.today} 条(${knowledge.path})` : "未配置——self_config set knowledgeBase.path 后,每日学习写入 Obsidian"}`);
   const rulesTotal = Object.values(rulesByFile).reduce((a, b) => a + b, 0);

@@ -1248,6 +1248,30 @@ console.log("\n[T49] self_state 暴露进化时间线(自我模型变更/规则�
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// ---------- T50 插件进化提案 + 学习食谱 ----------
+
+console.log("\n[T50] journal plugin_proposal:入档/召回/学习食谱仪表");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    return { text: m?.result?.content?.[0]?.text || "", sc: m?.result?.structuredContent, isError: !!m?.result?.isError };
+  };
+  call("self_journal", { action: "append", entry: { kind: "plugin_proposal", title: "面板增加内容实验趋势卡", body: "运行 5 天后台账已有结构化数据,建议面板加 SVG 趋势。", lesson: "" } });
+  call("self_journal", { action: "append", entry: { kind: "failure_postmortem", title: "测试复盘", body: "x" } });
+  const st = call("self_state", {}).sc;
+  check("journalDiet 分布统计", st?.journalDiet?.plugin_proposal === 1 && st.journalDiet.failure_postmortem === 1, JSON.stringify(st?.journalDiet));
+  check("pluginProposals 列表可见", st?.pluginProposals?.[0]?.title === "面板增加内容实验趋势卡", JSON.stringify(st?.pluginProposals));
+  const r = call("self_recall", { query: "面板 趋势" });
+  check("提案可被召回", r.text.includes("面板增加内容实验趋势卡"), r.text.slice(0, 300));
+  check("食谱标注非空(均衡判定执行)", r.text.includes("") && (st?.journalDiet ? Object.keys(st.journalDiet).length >= 2 : true));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);
