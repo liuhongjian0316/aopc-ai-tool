@@ -6,7 +6,7 @@ const { App } = GUANJI_SDK;
 
 (() => {
   const app = new App(
-    { name: "selfaware", version: "2.4.0" },
+    { name: "selfaware", version: "2.5.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
 
@@ -247,6 +247,19 @@ const { App } = GUANJI_SDK;
                ${Array.isArray(kb.recent) && kb.recent.length ? `<div class="narr" style="margin-left:0">${kb.recent.map((f) => esc(f)).join("<br>")}</div>` : '<div class="empty">还没有写入——每日学习时刻见 autonomous-ops</div>'}
                <div class="footer">${esc(kb.path || "")}</div>`
             : `<div class="empty">知识库未配置:self_config set knowledgeBase.path=&lt;Obsidian 仓库本地路径&gt;</div>`}
+        </div>`);
+    }
+
+    /* 进化时间线(2.5.0:进化本身可度量可回看) */
+    if (d?.evolution) {
+      const ev = d.evolution;
+      const rulesTotal = Object.values(ev.rulesByFile || {}).reduce((a, b) => a + b, 0);
+      parts.push(`
+        <div class="card">
+          <h2>进化时间线 <span class="tail">· 规则 ${rulesTotal} 条(带出处)· journal landed ${d.journal?.landed ?? 0}</span></h2>
+          ${(ev.modelChanges || []).length
+            ? ev.modelChanges.slice().reverse().map((c) => `<div class="narr" style="margin-left:0">${esc(c)}</div>`).join("")
+            : `<div class="empty">自我模型尚无变更记录</div>`}
         </div>`);
     }
 

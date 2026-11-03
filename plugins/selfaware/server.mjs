@@ -31,7 +31,7 @@ import {
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "2.4.0";
+const VERSION = "2.5.0";
 
 const TOOLS = [
   {
@@ -387,6 +387,26 @@ function selfState() {
   const oldestOpen = openDifficulties.slice().sort((a, b) => (a.t || 0) - (b.t || 0))[0];
   const difficultyAgingDays = oldestOpen ? Math.floor((Date.now() - (oldestOpen.t || 0)) / 86400000) : 0;
   const nowMs = Date.now();
+  // 2.5.0:进化时间线——自我模型变更 + playbook 规则增长 + journal 流转,进化本身可度量可回看
+  const modelChangeLines = (() => {
+    try {
+      const md = fs.readFileSync(selfModelPath(), "utf8");
+      const sec = md.split("\n");
+      const start = sec.findIndex((l) => l.trim() === "## 变更记录");
+      if (start < 0) return [];
+      return sec.slice(start + 1).filter((l) => /^- /.test(l.trim())).slice(-5);
+    } catch {
+      return [];
+    }
+  })();
+  const rulesByFile = {};
+  try {
+    for (const f of fs.readdirSync(playbooksDir()).filter((f) => f.endsWith(".md") && f !== "README.md")) {
+      // 规则计数:P 规则行(出处格式 v1.1 起多样化——journal#/日期+证据均合法)
+      const n = (fs.readFileSync(path.join(playbooksDir(), f), "utf8").match(/^[-*] \[P[123]\]/gm) || []).length;
+      if (n) rulesByFile[f] = n;
+    }
+  } catch {}
   const ledgerAll = mission.ledger || [];
   const ledgerView = {
     awaiting: ledgerAll.filter((l) => l.status === "awaiting").length,
@@ -433,6 +453,7 @@ function selfState() {
     knowledge,
     journal: { total: journalEntries.length, proposed: proposedEntries.length, staleProposals, landed: journalEntries.filter((e) => e.status === "landed").length },
     difficultyAgingDays,
+    evolution: { modelChanges: modelChangeLines, rulesByFile, journalLanded: journalEntries.filter((e) => e.status === "landed").length },
     opsScripts,
     mission: {
       active: mission.active ? { ...mission.active, day: missionDay(mission.active) } : null,
@@ -464,6 +485,8 @@ function selfState() {
   lines.push(`提案生命周期:proposed ${proposedEntries.length}${staleProposals ? `(⚠ 超 7 天 ${staleProposals} 条)` : ""} / landed ${journalEntries.filter((e) => e.status === "landed").length}——update 流转闭环`);
   lines.push(`自扩展资产:自造脚本 ${opsScripts.length} 个 / playbook ${playbookFiles.length} 个(含 ${playbookFiles.filter((f) => f.endsWith("-ops.md")).length} 份领域手册);明细见 structured`);
   lines.push(`知识库:${knowledge.configured ? `累计 ${knowledge.total} 条 / 今日 ${knowledge.today} 条(${knowledge.path})` : "未配置——self_config set knowledgeBase.path 后,每日学习写入 Obsidian"}`);
+  const rulesTotal = Object.values(rulesByFile).reduce((a, b) => a + b, 0);
+  lines.push(`进化时间线:playbook 规则 ${rulesTotal} 条(带出处)/ journal landed ${journalEntries.filter((e) => e.status === "landed").length} / 自我模型变更 ${modelChangeLines.length} 次(明细见 structured)`);
   lines.push(`自我档案健康:${health}`);
   lines.push(`自我档案:${selfModelPath()}${fs.existsSync(selfModelPath()) ? "" : "(尚未创建——首次 /reflect 时建立)"}`);
   lines.push(`playbook 目录:${playbooksDir()}`);

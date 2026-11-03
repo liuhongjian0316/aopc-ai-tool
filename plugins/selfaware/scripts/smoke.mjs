@@ -1228,6 +1228,26 @@ console.log("\n[T48] publish hypothesis:记录/缺失警告/度量对照");
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// ---------- T49 进化时间线 ----------
+
+console.log("\n[T49] self_state 暴露进化时间线(自我模型变更/规则增长/journal 流转)");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  runObserver(dir, { session_id: "sess_t49", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  // 骨架播种后,给自我模型变更记录加一条 + playbook 落一条带出处规则
+  const sm = path.join(dir, "self", "self-model.md");
+  fs.writeFileSync(sm, fs.readFileSync(sm, "utf8") + "- [2026-11-04] 测试变更条目 ← journal#j099\n");
+  fs.writeFileSync(path.join(dir, "self", "playbooks", "ops-fixes.md"), fs.readFileSync(path.join(dir, "self", "playbooks", "ops-fixes.md"), "utf8") + "- [P2][2026-11-04] 测试规则 ← journal#j098\n");
+  const rpc = [{ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "self_state", arguments: {} } }]
+    .map((m) => JSON.stringify(m)).join("\n") + "\n";
+  const r = spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000 });
+  const sc = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).map((m) => m?.result?.structuredContent)[0];
+  check("自我模型变更入时间线", sc?.evolution?.modelChanges?.some((c) => c.includes("测试变更条目")), JSON.stringify(sc?.evolution?.modelChanges));
+  check("playbook 规则计数(ops-fixes 种子 4 条 + 1)", sc?.evolution?.rulesByFile?.["ops-fixes.md"] === 5, JSON.stringify(sc?.evolution?.rulesByFile));
+  check("text 含进化时间线行", (r.stdout || "").includes("进化时间线"));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);

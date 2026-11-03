@@ -488,6 +488,19 @@ const { App } = GUANJI_SDK;
         </div>`);
     }
 
+    /* 进化时间线(2.5.0:进化本身可度量可回看) */
+    if (d?.evolution) {
+      const ev = d.evolution;
+      const rulesTotal = Object.values(ev.rulesByFile || {}).reduce((a, b) => a + b, 0);
+      parts.push(`
+        <div class="card">
+          <h2>进化时间线 <span class="tail">· 规则 ${rulesTotal} 条(带出处)· journal landed ${d.journal?.landed ?? 0}</span></h2>
+          ${(ev.modelChanges || []).length
+            ? ev.modelChanges.slice().reverse().map((c) => `<div class="narr" style="margin-left:0">${esc(c)}</div>`).join("")
+            : `<div class="empty">自我模型尚无变更记录</div>`}
+        </div>`);
+    }
+
     /* 慢性错误 */
     const e = state.errors;
     if (e) {
