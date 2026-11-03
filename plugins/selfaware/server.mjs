@@ -31,7 +31,7 @@ import {
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "2.6.0";
+const VERSION = "2.7.0";
 
 const TOOLS = [
   {

@@ -371,7 +371,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "2.6.0",
+      "version": "2.7.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -386,6 +386,15 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "2.7.0",
+          "date": "2026-11-04",
+          "changes": [
+            "使命对齐度(guanji 第五维,防自主 agent 最隐蔽的失败模式——目标漂移):本周动作与 mission.goal 逐条对照,持续偏离轻则记疑点、重则提案调整;对齐不是僵化,是让漂移可见后再决定",
+            "面板可见性:使命卡带困难老化 tag(最老挂 N 天);学习卡带偏食 tag(复盘多/主动学习与反馈少)",
+            "冒烟测试 204 → 208 项全绿"
+          ]
+        },
         {
           "version": "2.6.0",
           "date": "2026-11-04",

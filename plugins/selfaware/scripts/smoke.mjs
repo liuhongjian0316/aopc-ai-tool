@@ -1272,6 +1272,39 @@ console.log("\n[T50] journal plugin_proposal:入档/召回/学习食谱仪表");
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// ---------- T51 偏食与老化仪表 ----------
+
+console.log("\n[T51] self_state:journalDiet 偏食判定 + difficultyAgingDays");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    return { text: m?.result?.content?.[0]?.text || "", sc: m?.result?.structuredContent };
+  };
+  runObserver(dir, { session_id: "sess_t51", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  // 制造偏食:3 条失败复盘 + 1 条用户反馈
+  for (let i = 0; i < 3; i++) call("self_journal", { action: "append", entry: { kind: "failure_postmortem", title: `复盘${i}`, body: "x" } });
+  call("self_journal", { action: "append", entry: { kind: "user_feedback", title: "用户表扬", body: "x" } });
+  const st = call("self_state", {});
+  check("journalDiet 分布正确", st.sc?.journalDiet?.failure_postmortem === 3 && st.sc.journalDiet.user_feedback === 1, JSON.stringify(st.sc?.journalDiet));
+  check("偏食判定数据就绪(pm>rich 且样本≥3 的条件可被面板消费)", st.sc?.journal?.total === 4);
+  // 困难老化
+  call("self_mission", { action: "obstacle", text: "一个挂着的困难" });
+  const mp = path.join(dir, "mission.json");
+  const mj = JSON.parse(fs.readFileSync(mp, "utf8"));
+  const od = mj.open.find((d) => d.status === "open");
+  od.t -= 4 * 86400000;
+  fs.writeFileSync(mp, JSON.stringify(mj));
+  const st2 = call("self_state", {});
+  check("困难老化天数=4(顶层)", st2.sc?.difficultyAgingDays === 4, JSON.stringify(st2.sc?.difficultyAgingDays));
+  check("mission 子对象带 openDifficulties", Array.isArray(st2.sc?.mission?.openDifficulties) && st2.sc.mission.openDifficulties.length === 1);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);

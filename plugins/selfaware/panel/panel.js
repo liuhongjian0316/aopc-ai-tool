@@ -6,7 +6,7 @@ const { App } = GUANJI_SDK;
 
 (() => {
   const app = new App(
-    { name: "selfaware", version: "2.6.0" },
+    { name: "selfaware", version: "2.7.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
 
@@ -182,10 +182,10 @@ const { App } = GUANJI_SDK;
             ? `<div style="margin-top:6px"><span class="tag warn">待研究困难 ${m.openDifficulties.length}</span>
                ${m.openDifficulties.slice(-3).map((dd) => `<div class="narr" style="margin-left:0">[${esc(dd.id)}] ${esc(String(dd.text).slice(0, 60))}</div>`).join("")}</div>`
             : ""}
-          ${m.ledger
-            ? `<div style="margin-top:6px"><span class="tag ${m.ledger.due?.length ? "warn" : "dim"}">内容台账:待度量 ${m.ledger.awaiting ?? 0}${m.ledger.due?.length ? `(⚠ ${m.ledger.due.length} 条到期)` : ""}</span>
-               ${(m.ledger.recent || []).slice(0, 3).map((l) => `<div class="narr" style="margin-left:0">[${esc(l.id)}] ${l.status === "void" ? `<s>${esc(String(l.title).slice(0, 40))}</s> <span class="tag err">已作废</span>` : esc(String(l.title).slice(0, 46))} — ${l.status === "measured" ? esc(String(l.stats || "").slice(0, 40)) : l.status === "void" ? esc(String(l.voidReason || "").slice(0, 40)) : "待度量"}${l.hypothesis ? `<br>假设:${esc(String(l.hypothesis).slice(0, 50))}` : ""}</div>`).join("")}</div>`
-            : ""}
+          ${m.active
+            ? `<div class="big" style="margin-bottom:4px"><span class="num" style="font-size:16px">「${esc(m.active.title)}」</span><span class="sub">第 ${m.active.day} 天</span><span class="tag ${m.active.autonomy === "full" ? "ok" : "dim"}">${m.active.autonomy === "full" ? "完全自主" : "受监督"}</span>${d.difficultyAgingDays > 0 ? `<span class="tag warn">困难最老挂 ${d.difficultyAgingDays} 天</span>` : ""}</div>
+               ${m.active.goal ? `<div class="narr" style="margin-left:0">目标:${esc(m.active.goal)}</div>` : ""}`
+            : `<div class="empty">无进行中的使命(self_mission 工具可立项)</div>`}
           ${m.ledger?.measuredAgg
             ? (() => {
                 const agg = m.ledger.measuredAgg;
@@ -239,11 +239,15 @@ const { App } = GUANJI_SDK;
     /* 知识库(1.4.0:每日学习时刻的落点) */
     if (d?.knowledge) {
       const kb = d.knowledge;
+      const diet = d.journalDiet || {};
+      const pm = diet.failure_postmortem || 0;
+      const rich = (diet.user_feedback || 0) + (diet.plugin_proposal || 0) + (diet.guanji_report || 0);
+      const dietTag = kb.total >= 3 && pm > rich ? `<span class="tag warn">偏食:复盘多/主动学习与反馈少</span>` : "";
       parts.push(`
         <div class="card">
           <h2>每日学习 <span class="tail">· 写入 Obsidian 知识库(带 agent 标识)</span></h2>
           ${kb.configured
-            ? `<div style="margin-bottom:4px"><span class="tag ok">今日 ${kb.today} 条</span><span class="tag dim">累计 ${kb.total} 条</span></div>
+            ? `<div style="margin-bottom:4px"><span class="tag ok">今日 ${kb.today} 条</span><span class="tag dim">累计 ${kb.total} 条</span>${dietTag}</div>
                ${Array.isArray(kb.recent) && kb.recent.length ? `<div class="narr" style="margin-left:0">${kb.recent.map((f) => esc(f)).join("<br>")}</div>` : '<div class="empty">还没有写入——每日学习时刻见 autonomous-ops</div>'}
                <div class="footer">${esc(kb.path || "")}</div>`
             : `<div class="empty">知识库未配置:self_config set knowledgeBase.path=&lt;Obsidian 仓库本地路径&gt;</div>`}
