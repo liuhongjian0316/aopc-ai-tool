@@ -31,7 +31,7 @@ import {
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "2.3.0";
+const VERSION = "2.4.0";
 
 const TOOLS = [
   {
@@ -95,6 +95,7 @@ const TOOLS = [
         autonomy: { type: "string", enum: ["supervised", "full"], description: "start:自主等级。full=完全自主(日常发布与数据分析无需逐条请示,红线仍须请示);supervised=受监督(默认)" },
         text: { type: "string", description: "note/close/obstacle:本条记录内容(obstacle 描述遇到的困难与已尝试的方案)" },
         ref: { type: "string", description: "publish:内容引用标识(视频 ID/链接/文件名)" },
+        hypothesis: { type: "string", description: "publish:本条内容要验证的定位假设与预期(如『悬念评测钩子→高完播,验证 j001 定位』)——无假设的发布无法得出结论" },
         id: { type: "string", description: "resolve:要消化的困难条目 id(d001…);measure:要回访度量的台账条目 id(v001…)" },
         stats: { type: "string", description: "measure:度量结果(一段话;若能拿到数字,优先用下面的结构化字段)" },
         views: { type: "number", description: "measure:播放数(结构化,面板趋势用)" },
@@ -814,13 +815,15 @@ function selfMission(args) {
     // 1.8.0:内容实验台账——发布即立"假设",48h 后回访度量,周进化找模式
     const title = String(args.title || "").trim();
     if (!title) throw new Error("publish 需要 title(发布的内容标题)");
-    const seq = m.ledgerSeq = (m.ledgerSeq || 0) + 1;
+    const seq = (m.ledgerSeq = (m.ledgerSeq || 0) + 1);
     m.ledger = m.ledger || [];
-    const item = { id: `v${String(seq).padStart(3, "0")}`, t: Date.now(), title: title.slice(0, 120), ref: String(args.ref || "").slice(0, 160), status: "awaiting" };
+    const hypothesis = String(args.hypothesis || "").trim().slice(0, 200);
+    const item = { id: `v${String(seq).padStart(3, "0")}`, t: Date.now(), title: title.slice(0, 120), ref: String(args.ref || "").slice(0, 160), hypothesis, status: "awaiting" };
     m.ledger.push(item);
     m.log.push({ t: Date.now(), kind: "publish", text: `${item.id} ${title.slice(0, 100)}` });
     writeMission(m);
-    return { text: `台账已记(${item.id}):${title.slice(0, 80)}。≥48h 后用 action=measure(id=${item.id},stats=播放/完播/互动)回访度量——发布不是终点,度量出结论才是。`, structured: missionStructured(m, loadState()) };
+    const warn = hypothesis ? "" : "\n⚠ 本条无假设——无假设的发布得不出结论,下条请补 hypothesis(预期什么、验证什么)。";
+    return { text: `台账已记(${item.id}):${title.slice(0, 80)}。${hypothesis ? `假设:${hypothesis.slice(0, 80)}` : ""}≥48h 后用 action=measure(id=${item.id}) 回访度量,对照原假设下结论。${warn}`, structured: missionStructured(m, loadState()) };
   }
   if (action === "measure") {
     const item = (m.ledger || []).find((l) => l.id === String(args.id || "") && l.status === "awaiting");
@@ -878,7 +881,8 @@ function missionText(m) {
   const voided = (m.ledger || []).filter((l) => l.status === "void");
   if (awaiting.length) {
     lines.push(`内容台账:待度量 ${awaiting.length} 条${due.length ? `(其中 ${due.length} 条已 ≥48h,优先回访)` : ""}:`);
-    for (const l of awaiting.slice(-3)) lines.push(`- [${l.id}] ${l.title.slice(0, 60)}(发布于 ${fmtDate(l.t)})`);
+    for (const l of awaiting.slice(-3))
+      lines.push(`- [${l.id}] ${l.title.slice(0, 50)}(发布于 ${fmtDate(l.t)})${l.hypothesis ? `\n    假设:${l.hypothesis.slice(0, 70)}` : " ⚠ 无假设"}`);
   }
   if (voided.length) lines.push(`已作废 ${voided.length} 条(假阳性,不计入模式分析):${voided.slice(-3).map((l) => `${l.id}(${(l.voidReason || "").slice(0, 30)})`).join("; ")}`);
   const recent = m.log.slice(-8).reverse();

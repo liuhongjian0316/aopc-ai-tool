@@ -1203,6 +1203,31 @@ console.log("\n[T47] journal user_feedback:记录/召回/learn 关联");
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// ---------- T48 发布假设追踪 ----------
+
+console.log("\n[T48] publish hypothesis:记录/缺失警告/度量对照");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    return { text: m?.result?.content?.[0]?.text || "", sc: m?.result?.structuredContent, isError: !!m?.result?.isError };
+  };
+  call("self_mission", { action: "start", title: "测试使命", autonomy: "full" });
+  const withH = call("self_mission", { action: "publish", title: "带假设的发布", hypothesis: "悬念钩子 → 高完播,验证 j001 定位" });
+  check("带假设记录成功且回显", !withH.isError && withH.text.includes("假设:悬念钩子"), withH.text.slice(0, 200));
+  const noH = call("self_mission", { action: "publish", title: "无假设的发布" });
+  check("无假设发布带 ⚠ 提醒", !noH.isError && noH.text.includes("⚠ 本条无假设"), noH.text.slice(0, 200));
+  const g = call("self_mission", { action: "get" });
+  check("get 展示假设与无假设标记", g.text.includes("假设:悬念钩子") && g.text.includes("⚠ 无假设"), g.text.slice(0, 400));
+  const mv = call("self_mission", { action: "measure", id: "v001", stats: "数据回收", views: 9000 });
+  check("度量回执含对照定位假设指引", !mv.isError && mv.text.includes("对照定位假设"), mv.text.slice(0, 200));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);

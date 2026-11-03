@@ -371,7 +371,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "2.3.0",
+      "version": "2.4.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -386,6 +386,16 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "2.4.0",
+          "date": "2026-11-04",
+          "changes": [
+            "假设追踪(实验方法论最后一环):publish 必带 hypothesis(本条要验证什么/预期什么)——无假设的发布带 ⚠ 提醒(无假设得不出结论);台账/面板展示假设;measure 回执对照定位假设",
+            "每周进化升级『假设胜率统计』:跨已度量条目对照各自 hypothesis,验证的复制、证伪的撤",
+            "学习时刻升级三源:① 困难研究 ② 新知识 ③ 主动学习(每周 ≥2 次主动选题学新本事,先 self_recall 避免重复)——进化不只补短板,还长新本事",
+            "冒烟测试 193 → 197 项全绿"
+          ]
+        },
         {
           "version": "2.3.0",
           "date": "2026-11-04",
