@@ -6,7 +6,7 @@ const { App } = GUANJI_SDK;
 
 (() => {
   const app = new App(
-    { name: "selfaware", version: "2.1.0" },
+    { name: "selfaware", version: "2.2.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
 
@@ -184,7 +184,7 @@ const { App } = GUANJI_SDK;
             : ""}
           ${m.ledger
             ? `<div style="margin-top:6px"><span class="tag ${m.ledger.due?.length ? "warn" : "dim"}">内容台账:待度量 ${m.ledger.awaiting ?? 0}${m.ledger.due?.length ? `(⚠ ${m.ledger.due.length} 条到期)` : ""}</span>
-               ${(m.ledger.recent || []).slice(0, 3).map((l) => `<div class="narr" style="margin-left:0">[${esc(l.id)}] ${esc(String(l.title).slice(0, 46))} — ${l.status === "measured" ? esc(String(l.stats || "").slice(0, 40)) : "待度量"}</div>`).join("")}</div>`
+               ${(m.ledger.recent || []).slice(0, 3).map((l) => `<div class="narr" style="margin-left:0">[${esc(l.id)}] ${l.status === "void" ? `<s>${esc(String(l.title).slice(0, 40))}</s> <span class="tag err">已作废</span>` : esc(String(l.title).slice(0, 46))} — ${l.status === "measured" ? esc(String(l.stats || "").slice(0, 40)) : l.status === "void" ? esc(String(l.voidReason || "").slice(0, 40)) : "待度量"}</div>`).join("")}</div>`
             : ""}
           ${m.ledger?.measuredAgg
             ? (() => {

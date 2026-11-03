@@ -1149,6 +1149,39 @@ console.log("\n[T45] >256KB 超长单行 rollout:尾部截断后仍提取 provid
   fs.rmSync(rd, { recursive: true, force: true });
 }
 
+// ---------- T46 台账 void:假阳性作废与诚实账本 ----------
+
+console.log("\n[T46] self_mission void:作废假阳性,聚合排除,无 reason 拒绝");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    return { text: m?.result?.content?.[0]?.text || "", sc: m?.result?.structuredContent, isError: !!m?.result?.isError };
+  };
+  call("self_mission", { action: "start", title: "测试使命", autonomy: "full" });
+  call("self_mission", { action: "publish", title: "假阳性的发布" });
+  call("self_mission", { action: "publish", title: "真实首条发布" });
+  // v001 度量并给数字,再作废——验证 void 后聚合排除
+  call("self_mission", { action: "measure", id: "v001", stats: "自以为发布成功", views: 99999 });
+  const v = call("self_mission", { action: "void", id: "v001", reason: "管理页实测无此卡片,note 声称已发布为假阳性" });
+  check("void 成功且要求 reason", !v.isError && v.text.includes("已作废"), v.text.slice(0, 150));
+  const noReason = call("self_mission", { action: "void", id: "v002" });
+  check("无 reason 拒绝", noReason.isError && noReason.text.includes("reason"), noReason.text.slice(0, 150));
+  const g = call("self_mission", { action: "get" });
+  check("get 如实展示作废条目", g.text.includes("已作废 1 条") && g.text.includes("假阳性"), g.text.slice(0, 400));
+  const st = call("self_state", {});
+  check("voided 结构化可见", st.sc?.mission?.ledger?.voided?.[0]?.id === "v001");
+  // v002 度量后聚合应只含 v002(void 的 99999 不污染)
+  call("self_mission", { action: "measure", id: "v002", stats: "真实数据", views: 500 });
+  const agg = call("self_state", {}).sc?.mission?.ledger?.measuredAgg;
+  check("void 的 99999 不污染聚合", agg?.count === 1 && agg?.avgViews === 500 && agg?.best?.views === 500, JSON.stringify(agg));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);

@@ -371,7 +371,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "2.1.0",
+      "version": "2.2.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -386,6 +386,15 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "2.2.0",
+          "date": "2026-11-04",
+          "changes": [
+            "台账 void 状态(实战账目驱动:v001『已发布』实为假阳性,当时无状态可标):action=void(id, reason 必填)——聚合排除假阳性,面板划线展示,get 如实列出作废依据;诚实账本 > 好看账本",
+            "断点续跑协议成文化(1.9 实战验证有效后入技能):阶段转换必写 note=断点存档/下轮从最后 note 续跑/假阳性如实作废/领域产物与可复用工具的存放区分",
+            "冒烟测试 185 → 190 项全绿"
+          ]
+        },
         {
           "version": "2.1.0",
           "date": "2026-11-04",

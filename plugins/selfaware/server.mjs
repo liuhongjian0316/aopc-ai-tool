@@ -31,7 +31,7 @@ import {
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "2.1.0";
+const VERSION = "2.2.0";
 
 const TOOLS = [
   {
@@ -89,7 +89,7 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["get", "start", "note", "close", "obstacle", "resolve", "publish", "measure"] },
+        action: { type: "string", enum: ["get", "start", "note", "close", "obstacle", "resolve", "publish", "measure", "void"] },
         title: { type: "string", description: "start:使命标题(一句话);resolve:已研究的困难知识标题(将写入知识库);publish:发布的内容标题" },
         goal: { type: "string", description: "start:完成判据/目标(可选)" },
         autonomy: { type: "string", enum: ["supervised", "full"], description: "start:自主等级。full=完全自主(日常发布与数据分析无需逐条请示,红线仍须请示);supervised=受监督(默认)" },
@@ -390,6 +390,7 @@ function selfState() {
   const ledgerView = {
     awaiting: ledgerAll.filter((l) => l.status === "awaiting").length,
     due: ledgerAll.filter((l) => l.status === "awaiting" && nowMs - l.t >= 48 * 3600000).map((l) => ({ id: l.id, title: l.title, t: l.t })),
+    voided: ledgerAll.filter((l) => l.status === "void").map((l) => ({ id: l.id, reason: l.voidReason })),
     recent: ledgerAll.slice(-5).reverse(),
     measuredAgg: ledgerAgg(ledgerAll),
   };
@@ -842,6 +843,19 @@ function selfMission(args) {
     writeMission(m);
     return { text: `已度量 ${item.id}「${item.title.slice(0, 60)}」:${stats.slice(0, 120)}\n对照定位假设:胜出模式值得在下周复制,证伪的写「洞察:」note 进周进化。`, structured: missionStructured(m, loadState()) };
   }
+  if (action === "void") {
+    // 2.2.0:假阳性账目作废——账要平,更要真实(v002 首发时发现 v001 的"已发布"是假阳性,当时无状态可标)
+    const item = (m.ledger || []).find((l) => l.id === String(args.id || "") && l.status !== "void");
+    if (!item) throw new Error(`未找到可作废的台账条目:${args.id || "(未传 id)"}`);
+    const reason = String(args.reason || "").trim();
+    if (!reason) throw new Error("void 需要 reason(作废依据——管理页实测/证据),账面不容含糊");
+    item.status = "void";
+    item.voidedAt = Date.now();
+    item.voidReason = reason.slice(0, 200);
+    m.log.push({ t: Date.now(), kind: "void", text: `${item.id} ${reason.slice(0, 100)}` });
+    writeMission(m);
+    return { text: `台账 ${item.id} 已作废:${reason.slice(0, 100)}\n诚实账本 > 好看账本——假阳性留着会污染每一次模式分析。`, structured: missionStructured(m, loadState()) };
+  }
   throw new Error(`未知 action:${action}`);
 }
 
@@ -857,14 +871,16 @@ function missionText(m) {
     lines.push(`待研究困难(${openDiff.length} 条,每日学习时刻消化):`);
     for (const d of openDiff.slice(-5)) lines.push(`- [${d.id}] ${d.text.slice(0, 80)}`);
   }
-  // 1.8.0:内容实验台账——到期未度量的先回访
+  // 1.8.0:内容实验台账——到期未度量的先回访;2.2.0:void 条目如实展示(诚实账本)
   const now = Date.now();
   const awaiting = (m.ledger || []).filter((l) => l.status === "awaiting");
   const due = awaiting.filter((l) => now - l.t >= 48 * 3600000);
+  const voided = (m.ledger || []).filter((l) => l.status === "void");
   if (awaiting.length) {
     lines.push(`内容台账:待度量 ${awaiting.length} 条${due.length ? `(其中 ${due.length} 条已 ≥48h,优先回访)` : ""}:`);
     for (const l of awaiting.slice(-3)) lines.push(`- [${l.id}] ${l.title.slice(0, 60)}(发布于 ${fmtDate(l.t)})`);
   }
+  if (voided.length) lines.push(`已作废 ${voided.length} 条(假阳性,不计入模式分析):${voided.slice(-3).map((l) => `${l.id}(${(l.voidReason || "").slice(0, 30)})`).join("; ")}`);
   const recent = m.log.slice(-8).reverse();
   if (recent.length) {
     lines.push("近期记录:");
@@ -887,6 +903,7 @@ function missionStructured(m, st) {
       ledger: {
         awaiting: ledger.filter((l) => l.status === "awaiting").length,
         due: ledger.filter((l) => l.status === "awaiting" && now - l.t >= 48 * 3600000).map((l) => ({ id: l.id, title: l.title, t: l.t })),
+        voided: ledger.filter((l) => l.status === "void").map((l) => ({ id: l.id, reason: l.voidReason })),
         recent: ledger.slice(-5).reverse(),
         measuredAgg: ledgerAgg(ledger),
       },
@@ -1001,7 +1018,7 @@ function walkMarkdown(root, cap = 300) {
   return out;
 }
 
-/** 2.0.0:台账聚合——结构化度量数字 → 可计算的模式(周进化的燃料) */
+/** 2.0.0:台账聚合——结构化度量数字 → 可计算的模式(周进化的燃料);2.2.0 void 条目不计入 */
 function ledgerAgg(ledger) {
   const measured = (ledger || []).filter((l) => l.status === "measured" && l.m && Number.isFinite(l.m.views));
   if (!measured.length) return null;
