@@ -26,7 +26,7 @@ when_to_use: "Stop 提醒复盘债时;用户说『复盘一下』『你最近表
 
 1. **journal 条目**:调用 self_journal append,kind=`guanji_report`(深度复盘)或 `failure_postmortem`(清积压),body 写归纳结论。
 2. **自我模型修订**:若发现偏差,用 Edit 修改 `self/self-model.md` 对应段落;文件尾部的「变更记录」追加一行(日期+改动+依据 journal id)。
-3. **playbook 修订**:把 lesson 落成 `self/playbooks/<主题>.md` 里的一条规则,格式 `- [P1][日期] 规则 ← journal#<id>`;没有现成主题文件就新建一个(文件名用 kebab-case,如 `verification-habits.md`)。
+3. **playbook 修订**:把 lesson 落成 `self/playbooks/<主题>.md` 里的一条规则,格式 `- [P1][日期] 规则 ← journal#<id>`;没有现成主题文件就新建一个(文件名用 kebab-case,如 `verification-habits.md`)。**落地后必须回写状态**:`self_journal` action=update(id, status=landed, note=落到哪个文件)——否则 ⚠ 过期提醒会一直挂着。
 4. **经验入库(1.6.0)**:本次复盘涉及的完整事件(背景/做法/结果/教训)若尚未入知识库,用 `self_learn` action=record、`type: "experience"` 补录——知识讲机制,经验讲亲历验证,两者互补。
 
 **落地权限(v1.1)**:完全自主使命(`autonomy=full`)下,以上修订由 agent **自主落地**——每条带出处留痕,人事后通过面板、周报与 journal 审计,不再事前审批(用户明令:进化不能等人)。受监督使命仍走权限审批。

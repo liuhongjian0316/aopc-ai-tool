@@ -1020,6 +1020,63 @@ console.log("\n[T40] self_mission publish/measure:发布→到期→度量闭环
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// ---------- T41 提案生命周期:update 流转闭环 ----------
+
+console.log("\n[T41] self_journal update:proposed→landed/rejected;未知 id 拒绝");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    return { text: m?.result?.content?.[0]?.text || "", isError: !!m?.result?.isError };
+  };
+  call("self_journal", { action: "append", entry: { kind: "playbook_proposal", title: "提案甲", lesson: "规则A" } });
+  call("self_journal", { action: "append", entry: { kind: "playbook_proposal", title: "提案乙", lesson: "规则B" } });
+  const u1 = call("self_journal", { action: "update", id: "j001", status: "landed", note: "落到 verification-habits.md" });
+  check("landed 流转成功", !u1.isError && u1.text.includes("已落地"), u1.text.slice(0, 150));
+  const q = call("self_journal", { action: "query", limit: 10 });
+  check("query 显示 landed 与 proposed 并存", q.text.includes("(landed)") && q.text.includes("(proposed)"), q.text.slice(0, 300));
+  const u2 = call("self_journal", { action: "update", id: "j002", status: "rejected", note: "证据不足" });
+  check("rejected 流转成功", !u2.isError && u2.text.includes("已标记放弃"));
+  const u3 = call("self_journal", { action: "update", id: "j999", status: "landed" });
+  check("未知 id 拒绝", u3.isError && u3.text.includes("未找到条目"), u3.text.slice(0, 150));
+  const q2 = call("self_journal", { action: "query", limit: 10 });
+  check("⚠ 过期提醒不再提及已流转条目", !q2.text.split("⚠")[1]?.includes("提案甲"), q2.text.slice(0, 300));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ---------- T42 recall 全库模式 ----------
+
+console.log("\n[T42] knowledgeBase.searchScope:all 召回整库,own 只召回观己学习");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const kb = fs.mkdtempSync(path.join(os.tmpdir(), "sa-kb-"));
+  fs.mkdirSync(path.join(kb, "观己学习"), { recursive: true });
+  fs.writeFileSync(path.join(kb, "观己学习", "2026-11-03-观己笔记.md"), "# 观己\n");
+  fs.writeFileSync(path.join(kb, "用户既有知识-量子计算入门.md"), "# 量子计算\nShor 算法可以在多项式时间分解大整数。\n");
+  fs.mkdirSync(path.join(kb, ".obsidian"), { recursive: true });
+  fs.writeFileSync(path.join(kb, ".obsidian", "hidden.md"), "量子计算 secret");
+  const call = (name, args2, scope) => {
+    fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify({ knowledgeBase: { path: kb, searchScope: scope } }));
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000,
+    });
+    return (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).map((m) => m?.result?.content?.[0]?.text || "").join("");
+  };
+  const own = call("self_recall", { query: "量子计算" }, "own");
+  check("own 模式看不到库内既有知识", own.includes("无命中") || !own.includes("用户既有知识"), own.slice(0, 250));
+  const all = call("self_recall", { query: "量子计算" }, "all");
+  check("all 模式召回库内既有知识", all.includes("用户既有知识-量子计算入门"), all.slice(0, 300));
+  check("all 模式跳过 .obsidian 隐藏目录", !all.includes("secret"), all.slice(0, 300));
+  check("全库来源标注出现(知识库(全库))", all.includes("知识库(全库)"), all.slice(0, 300));
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(kb, { recursive: true, force: true });
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);

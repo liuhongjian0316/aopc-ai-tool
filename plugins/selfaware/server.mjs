@@ -31,7 +31,7 @@ import {
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "1.8.0";
+const VERSION = "1.9.0";
 
 const TOOLS = [
   {
@@ -139,11 +139,14 @@ const TOOLS = [
     name: "self_journal",
 
     description:
-      "观己:读写我的反思日志。action=append 记录失败复盘/置信度自评/自省报告/playbook 提案(entry: {kind, title, body?, lesson?, playbookTarget?});action=query 查询近期条目。复盘与教训必须落在这里,否则自我模型无法引用。",
+      "观己:读写我的反思日志。action=append 记录失败复盘/置信度自评/自省报告/playbook 提案;action=query 查询近期条目与提案状态;action=update 把提案状态流转为 landed/rejected(1.9.0 落地闭环:playbook 真正落进文件后必须回写状态,否则 ⚠ 过期提醒会一直挂着)。复盘与教训必须落在这里,否则自我模型无法引用。",
     inputSchema: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["append", "query"] },
+        action: { type: "string", enum: ["append", "query", "update"] },
+        id: { type: "string", description: "update:要流转状态的条目 id(j001…)" },
+        status: { type: "string", enum: ["landed", "rejected"], description: "update:目标状态(landed=已落进 playbook,rejected=评估后放弃)" },
+        note: { type: "string", description: "update:一句话说明(落到哪个文件/为何放弃)" },
         entry: {
           type: "object",
           description: "append 时的条目内容",
@@ -371,6 +374,12 @@ function selfState() {
   const mission = readMission();
   const knowledge = kbStats(cfg); // 1.4.0:知识库(每日学习时刻的落点)
   const openDifficulties = (mission.open || []).filter((d) => d.status === "open");
+  // 1.9.0:提案生命周期 + 困难老化——L4 账务仪表
+  const journalEntries = readJournalEntries();
+  const proposedEntries = journalEntries.filter((e) => e.status === "proposed");
+  const staleProposals = proposedEntries.filter((e) => Date.now() - (e.t || 0) > 7 * 86400000).length;
+  const oldestOpen = openDifficulties.slice().sort((a, b) => (a.t || 0) - (b.t || 0))[0];
+  const difficultyAgingDays = oldestOpen ? Math.floor((Date.now() - (oldestOpen.t || 0)) / 86400000) : 0;
   const nowMs = Date.now();
   const ledgerAll = mission.ledger || [];
   const ledgerView = {
@@ -414,6 +423,8 @@ function selfState() {
     playbookRules,
     playbookFiles,
     knowledge,
+    journal: { total: journalEntries.length, proposed: proposedEntries.length, staleProposals, landed: journalEntries.filter((e) => e.status === "landed").length },
+    difficultyAgingDays,
     opsScripts,
     mission: {
       active: mission.active ? { ...mission.active, day: missionDay(mission.active) } : null,
@@ -441,7 +452,8 @@ function selfState() {
   lines.push(`子代理派发:本会话 ${dispatches} 次(经 Agent 工具计数;子代理内部调用不经过 hook——C3 真机实测)`);
   if (st.outstandingDebt > 0) lines.push(`跨会话复盘债:${st.outstandingDebt} 次失败未复盘(跑 /reflect 清账)`);
   if (mission.active) lines.push(`当前使命:「${mission.active.title}」(第 ${missionDay(mission.active)} 天)`);
-  if (openDifficulties.length) lines.push(`待研究困难:${openDifficulties.length} 条(${openDifficulties.slice(-3).map((d) => d.id).join(",")}…)——每日学习时刻消化`);
+  if (openDifficulties.length) lines.push(`待研究困难:${openDifficulties.length} 条(最老已挂 ${difficultyAgingDays} 天)——每日学习时刻消化`);
+  lines.push(`提案生命周期:proposed ${proposedEntries.length}${staleProposals ? `(⚠ 超 7 天 ${staleProposals} 条)` : ""} / landed ${journalEntries.filter((e) => e.status === "landed").length}——update 流转闭环`);
   lines.push(`自扩展资产:自造脚本 ${opsScripts.length} 个 / playbook ${playbookFiles.length} 个(含 ${playbookFiles.filter((f) => f.endsWith("-ops.md")).length} 份领域手册);明细见 structured`);
   lines.push(`知识库:${knowledge.configured ? `累计 ${knowledge.total} 条 / 今日 ${knowledge.today} 条(${knowledge.path})` : "未配置——self_config set knowledgeBase.path 后,每日学习写入 Obsidian"}`);
   lines.push(`自我档案健康:${health}`);
@@ -673,6 +685,7 @@ function selfConfig(args) {
   }
   const v = args.value;
   if (rule.type === "boolean" && typeof v !== "boolean") throw new Error(`${key} 需要 boolean,收到:${JSON.stringify(v)}`);
+  if (rule.values && !rule.values.includes(v)) throw new Error(`${key} 只接受:${rule.values.join("/")},收到:${JSON.stringify(v)}`);
   if (rule.type === "int" && (!Number.isFinite(v) || !Number.isInteger(v) || v < rule.min)) throw new Error(`${key} 需要 ≥${rule.min} 的整数,收到:${JSON.stringify(v)}`);
   if (rule.type === "num" && (!Number.isFinite(v) || v < rule.min || v > rule.max)) throw new Error(`${key} 需要 ${rule.min}–${rule.max} 的数,收到:${JSON.stringify(v)}`);
   if (rule.type === "string" && typeof v !== "string") throw new Error(`${key} 需要 string,收到:${JSON.stringify(v)}`);
@@ -875,6 +888,7 @@ const CONFIG_SCHEMA = {
   injectCriticNudge: { type: "boolean" },
   contextWindow: { type: "int", min: 1000 },
   retentionDays: { type: "int", min: 0 },
+  "knowledgeBase.searchScope": { type: "string", values: ["own", "all"] },
   "budgetThrottle.mid": { type: "num", min: 0, max: 1 },
   "budgetThrottle.high": { type: "num", min: 0, max: 1 },
   "budgetThrottle.critical": { type: "num", min: 0, max: 1 },
@@ -942,7 +956,36 @@ function kbTokens(text) {
     .filter((t) => t.length >= 2 || /[^\x00-\x7F]/.test(t));
 }
 
-/** 1.7.0 知识复利;1.8.0 全域化——召回范围:知识库 + playbooks + 自我模型(自己写的知识资产全部可检索) */
+/** 递归收集目录下 .md(1.9.0 全库模式:跳过隐藏/node_modules/.git,文件数与单文件大小封顶) */
+function walkMarkdown(root, cap = 300) {
+  const out = [];
+  const skip = new Set([".git", "node_modules", ".obsidian", ".trash"]);
+  const walk = (dir, depth) => {
+    if (out.length >= cap || depth > 6) return;
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const ent of entries) {
+      if (out.length >= cap) return;
+      if (ent.name.startsWith(".")) continue;
+      const p = path.join(dir, ent.name);
+      if (ent.isDirectory()) {
+        if (!skip.has(ent.name)) walk(p, depth + 1);
+      } else if (ent.name.endsWith(".md")) {
+        try {
+          if (fs.statSync(p).size <= 512 * 1024) out.push(p);
+        } catch {}
+      }
+    }
+  };
+  walk(root, 0);
+  return out;
+}
+
+/** 1.7.0 知识复利;1.8.0 全域化;1.9.0 searchScope(own=只搜观己学习,all=整个知识库仓库)——自己写的知识资产全部可检索 */
 function selfRecall(args) {
   const cfg = loadConfig();
   const query = String(args?.query || "").trim();
@@ -950,12 +993,20 @@ function selfRecall(args) {
   const tokens = kbTokens(query);
   const docs = []; // {source, name, path}
   const kb = kbDir(cfg);
+  const scopeAll = cfg.knowledgeBase?.searchScope === "all" && cfg.knowledgeBase?.path;
   if (kb) {
     try {
       for (const f of fs.readdirSync(kb).filter((f) => f.endsWith(".md"))) docs.push({ source: "知识库", name: f, path: path.join(kb, f) });
     } catch {}
   } else if (cfg.knowledgeBase?.path) {
     // 配置了但目录还没建:不报错,其他源照扫
+  }
+  if (scopeAll && cfg.knowledgeBase?.path) {
+    // 全库模式:召回用户知识库的既有知识(观己学习已入列,去重靠 path)
+    const seen = new Set(docs.map((d) => d.path));
+    for (const p of walkMarkdown(cfg.knowledgeBase?.path)) {
+      if (!seen.has(p)) docs.push({ source: "知识库(全库)", name: path.relative(cfg.knowledgeBase.path, p), path: p });
+    }
   }
   try {
     for (const f of fs.readdirSync(playbooksDir()).filter((f) => f.endsWith(".md"))) docs.push({ source: "playbook", name: f, path: path.join(playbooksDir(), f) });
@@ -1146,6 +1197,25 @@ function clearReflectDebt(st) {
 }
 
 function selfJournal(args) {
+  if (args.action === "update") {
+    // 1.9.0:提案生命周期闭环——落地/放弃必须回写,⚠ 过期提醒才有意义
+    const id = String(args.id || "");
+    const status = String(args.status || "");
+    if (!id || !["landed", "rejected"].includes(status)) throw new Error("update 需要 id 与 status(landed|rejected)");
+    const entries = readJournalEntries();
+    const idx = entries.findIndex((e) => e.id === id);
+    if (idx < 0) throw new Error(`未找到条目:${id}(action=query 查看现有 id)`);
+    if (entries[idx].status === status) return `条目 ${id} 已是 ${status},无需变更。`;
+    entries[idx].status = status;
+    entries[idx].resolvedAt = Date.now();
+    if (args.note) entries[idx].resolution = String(args.note).slice(0, 200);
+    fs.mkdirSync(dataRoot(), { recursive: true });
+    const tmp = journalPath() + ".tmp-" + process.pid;
+    fs.writeFileSync(tmp, entries.map((e) => JSON.stringify(e)).join("\n") + "\n");
+    fs.renameSync(tmp, journalPath());
+    const line = status === "landed" ? `已落地${args.note ? `(${String(args.note).slice(0, 80)})` : ""}——⚠ 过期提醒随之解除` : `已标记放弃${args.note ? `(${String(args.note).slice(0, 80)})` : ""}`;
+    return `提案 ${id} ${line}。`;
+  }
   if (args.action === "query") {
     const limit = Number(args.limit) || 15;
     const entries = readJournalEntries();

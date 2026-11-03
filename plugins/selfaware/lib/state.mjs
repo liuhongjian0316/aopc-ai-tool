@@ -46,7 +46,7 @@ export const DEFAULT_CONFIG = {
   budgetThrottle: { mid: 0.3, high: 0.6, critical: 0.85, midEveryTurns: 10 },
   reflectNudge: { minSegments: 8, minFailures: 3 },
   criticNudge: { atEdits: 10 },
-  knowledgeBase: { path: "", folder: "观己学习", dailyLearning: true, autoCommit: true, autoPush: false },
+  knowledgeBase: { path: "", folder: "观己学习", searchScope: "own", dailyLearning: true, autoCommit: true, autoPush: false },
 };
 
 export function loadConfig() {

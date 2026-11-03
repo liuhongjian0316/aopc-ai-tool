@@ -371,7 +371,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "1.8.0",
+      "version": "1.9.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -386,6 +386,16 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "1.9.0",
+          "date": "2026-11-03",
+          "changes": [
+            "提案生命周期闭环(账务断点修复):self_journal 新增 action=update——playbook 落地后回写 landed/rejected,⚠ 过期提醒随之解除;此前提案永远停在 proposed",
+            "recall 全库模式(可选):knowledgeBase.searchScope=all 时召回整个 Obsidian 库的既有知识(递归扫描,跳过 .obsidian/.git,文件数与大小封顶)——agent 能站在用户已有知识上工作;默认 own 保守模式",
+            "self_state 新增提案生命周期仪表(proposed/stale/landed)与困难队列老化天数(最老挂 N 天)",
+            "冒烟测试 168 → 177 项全绿"
+          ]
+        },
         {
           "version": "1.8.0",
           "date": "2026-11-03",
