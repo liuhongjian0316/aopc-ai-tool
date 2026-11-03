@@ -31,7 +31,7 @@ import {
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "1.9.0";
+const VERSION = "2.0.0";
 
 const TOOLS = [
   {
@@ -96,7 +96,12 @@ const TOOLS = [
         text: { type: "string", description: "note/close/obstacle:本条记录内容(obstacle 描述遇到的困难与已尝试的方案)" },
         ref: { type: "string", description: "publish:内容引用标识(视频 ID/链接/文件名)" },
         id: { type: "string", description: "resolve:要消化的困难条目 id(d001…);measure:要回访度量的台账条目 id(v001…)" },
-        stats: { type: "string", description: "measure:度量结果(播放/完播/互动等,一段话)" },
+        stats: { type: "string", description: "measure:度量结果(一段话;若能拿到数字,优先用下面的结构化字段)" },
+        views: { type: "number", description: "measure:播放数(结构化,面板趋势用)" },
+        likes: { type: "number", description: "measure:点赞数" },
+        comments: { type: "number", description: "measure:评论数" },
+        completion: { type: "number", description: "measure:完播率 0-100(%)" },
+        follows: { type: "number", description: "measure:新增关注数" },
         body: { type: "string", description: "resolve:研究正文——机制是什么、为什么会这样、下次怎么更快(写入知识库)" },
         tags: { type: "string", description: "resolve:附加标签(自动追加 troubleshooting)" },
         id: { type: "string", description: "resolve:要消化的困难条目 id(d001…)" },
@@ -386,6 +391,7 @@ function selfState() {
     awaiting: ledgerAll.filter((l) => l.status === "awaiting").length,
     due: ledgerAll.filter((l) => l.status === "awaiting" && nowMs - l.t >= 48 * 3600000).map((l) => ({ id: l.id, title: l.title, t: l.t })),
     recent: ledgerAll.slice(-5).reverse(),
+    measuredAgg: ledgerAgg(ledgerAll),
   };
   // 1.3.0:自扩展资产清单——能力自扩展协议的可见性基础设施
   const playbookFiles = (() => {
@@ -819,9 +825,18 @@ function selfMission(args) {
     const item = (m.ledger || []).find((l) => l.id === String(args.id || "") && l.status === "awaiting");
     if (!item) throw new Error(`未找到待度量的台账条目:${args.id || "(未传 id)"}(action=get 查看台账)`);
     const stats = String(args.stats || "").trim();
-    if (!stats) throw new Error("measure 需要 stats(播放/完播/互动等度量结果)");
+    // 2.0.0:结构化度量——显式提供但非法的数字直接报错,不静默丢弃
+    const mtr = {};
+    for (const k of ["views", "likes", "comments", "completion", "follows"]) {
+      if (args[k] === undefined) continue;
+      const n = Number(args[k]);
+      if (args[k] === "" || !Number.isFinite(n)) throw new Error(`${k} 需要数字,收到:${JSON.stringify(args[k])}`);
+      mtr[k] = n;
+    }
+    if (!stats && !Object.keys(mtr).length) throw new Error("measure 需要 stats(自由文本)或结构化数字(views/likes/comments/completion/follows)");
     item.status = "measured";
     item.stats = stats.slice(0, 300);
+    if (Object.keys(mtr).length) item.m = mtr;
     item.measuredAt = Date.now();
     m.log.push({ t: Date.now(), kind: "measure", text: `${item.id} ${stats.slice(0, 100)}` });
     writeMission(m);
@@ -873,6 +888,7 @@ function missionStructured(m, st) {
         awaiting: ledger.filter((l) => l.status === "awaiting").length,
         due: ledger.filter((l) => l.status === "awaiting" && now - l.t >= 48 * 3600000).map((l) => ({ id: l.id, title: l.title, t: l.t })),
         recent: ledger.slice(-5).reverse(),
+        measuredAgg: ledgerAgg(ledger),
       },
     },
     sessionId: currentSid(st)?.sid || "",
@@ -985,6 +1001,19 @@ function walkMarkdown(root, cap = 300) {
   return out;
 }
 
+/** 2.0.0:台账聚合——结构化度量数字 → 可计算的模式(周进化的燃料) */
+function ledgerAgg(ledger) {
+  const measured = (ledger || []).filter((l) => l.status === "measured" && l.m && Number.isFinite(l.m.views));
+  if (!measured.length) return null;
+  const sorted = measured.slice().sort((a, b) => b.m.views - a.m.views);
+  return {
+    count: measured.length,
+    avgViews: Math.round(measured.reduce((a, l) => a + l.m.views, 0) / measured.length),
+    best: { id: sorted[0].id, title: sorted[0].title, views: sorted[0].m.views },
+    worst: { id: sorted[sorted.length - 1].id, title: sorted[sorted.length - 1].title, views: sorted[sorted.length - 1].m.views },
+  };
+}
+
 /** 1.7.0 知识复利;1.8.0 全域化;1.9.0 searchScope(own=只搜观己学习,all=整个知识库仓库)——自己写的知识资产全部可检索 */
 function selfRecall(args) {
   const cfg = loadConfig();
@@ -1012,16 +1041,30 @@ function selfRecall(args) {
     for (const f of fs.readdirSync(playbooksDir()).filter((f) => f.endsWith(".md"))) docs.push({ source: "playbook", name: f, path: path.join(playbooksDir(), f) });
   } catch {}
   if (fs.existsSync(selfModelPath())) docs.push({ source: "自我模型", name: "self-model.md", path: selfModelPath() });
+  // 2.0.0:反思日志入召回源(复盘标题与教训可检索)
+  try {
+    const jEntries = readJournalEntries();
+    if (jEntries.length) {
+      docs.push({
+        source: "反思日志",
+        name: `journal(${jEntries.length} 条)`,
+        path: null,
+        content: jEntries.map((e) => `${e.title}\n${e.lesson || ""}`).join("\n"),
+      });
+    }
+  } catch {}
   if (!docs.length) {
     return { text: `<self-recall> 暂无可检索的知识资产(知识库未配置且 playbook/自我模型未创建)。配置后我的学习笔记、规则手册与自我档案都能被召回。</self-recall>`, structured: { query, matches: [] } };
   }
   const scored = [];
   for (const doc of docs) {
-    let content = "";
-    try {
-      content = fs.readFileSync(doc.path, "utf8");
-    } catch {
-      continue;
+    let content = doc.content;
+    if (content === undefined) {
+      try {
+        content = fs.readFileSync(doc.path, "utf8");
+      } catch {
+        continue;
+      }
     }
     let score = 0;
     const hitLines = [];
@@ -1037,7 +1080,7 @@ function selfRecall(args) {
   scored.sort((a, b) => b.score - a.score);
   const limit = Number(args?.limit) || 5;
   const picked = scored.slice(0, limit);
-  const lines = [`<self-recall> 关键词「${query}」全域命中 ${scored.length} 条(知识库 ${docs.filter((d) => d.source === "知识库").length} + playbook ${docs.filter((d) => d.source === "playbook").length} + 自我模型 ${docs.filter((d) => d.source === "自我模型").length}):`];
+  const lines = [`<self-recall> 关键词「${query}」全域命中 ${scored.length} 条(知识库 ${docs.filter((d) => d.source === "知识库").length} + playbook ${docs.filter((d) => d.source === "playbook").length} + 自我模型 ${docs.filter((d) => d.source === "自我模型").length} + 反思日志 ${docs.filter((d) => d.source === "反思日志").length}):`];
   if (!picked.length) lines.push("无命中——这个主题我还没学过,值得作为今日学习时刻的候选。");
   for (const s of picked) {
     lines.push(`- [${s.score} 分][${s.source}] ${s.title}(${s.file})`);

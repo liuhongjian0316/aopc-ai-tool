@@ -371,7 +371,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "1.9.0",
+      "version": "2.0.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -386,6 +386,17 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "2.0.0",
+          "date": "2026-11-03",
+          "changes": [
+            "度量结构化(2.0.0 主题:实验数据成为一等公民):measure 支持结构化数字字段 views/likes/comments/completion/follows,显式非法输入直接报错不静默丢弃",
+            "ledgerAgg 聚合(条数/平均播放/最佳/最差)入 self_state 与 self_mission structured;面板新增内容实验卡(SVG 播放柱状 + 最佳标注)",
+            "self_recall 命中反思日志源(复盘标题与教训可检索)",
+            "修复:readMission 丢弃 ledgerSeq/openSeq 序号字段——第二次 publish/obstacle 会顶掉第一条(T43 抓出,两次发布测试锁定)",
+            "冒烟测试 177 → 184 项全绿"
+          ]
+        },
         {
           "version": "1.9.0",
           "date": "2026-11-03",

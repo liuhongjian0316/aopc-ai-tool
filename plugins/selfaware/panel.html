@@ -244,7 +244,7 @@ const { App } = GUANJI_SDK;
 
 (() => {
   const app = new App(
-    { name: "selfaware", version: "1.9.0" },
+    { name: "selfaware", version: "2.0.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
 
@@ -423,6 +423,23 @@ const { App } = GUANJI_SDK;
           ${m.ledger
             ? `<div style="margin-top:6px"><span class="tag ${m.ledger.due?.length ? "warn" : "dim"}">内容台账:待度量 ${m.ledger.awaiting ?? 0}${m.ledger.due?.length ? `(⚠ ${m.ledger.due.length} 条到期)` : ""}</span>
                ${(m.ledger.recent || []).slice(0, 3).map((l) => `<div class="narr" style="margin-left:0">[${esc(l.id)}] ${esc(String(l.title).slice(0, 46))} — ${l.status === "measured" ? esc(String(l.stats || "").slice(0, 40)) : "待度量"}</div>`).join("")}</div>`
+            : ""}
+          ${m.ledger?.measuredAgg
+            ? (() => {
+                const agg = m.ledger.measuredAgg;
+                const items = (m.ledger.recent || []).filter((l) => l.status === "measured" && l.m?.views !== undefined).reverse();
+                const max = Math.max(1, ...items.map((l) => l.m.views));
+                const bw = 560 / Math.max(1, items.length);
+                const bars = items
+                  .map((l, i) => {
+                    const hh = (l.m.views / max) * 70;
+                    const best = l.id === agg.best?.id;
+                    return `<rect x="${(i * bw + 2).toFixed(1)}" y="${(84 - hh).toFixed(1)}" width="${(bw - 4).toFixed(1)}" height="${Math.max(hh, 2).toFixed(1)}" fill="${best ? "var(--ok)" : "var(--accent)"}" rx="2"><title>${esc(l.title)}:${l.m.views} 播放</title></rect><text x="${(i * bw + bw / 2).toFixed(1)}" y="96" font-size="8" fill="var(--text-dim)" text-anchor="middle">${esc(l.id)}</text>`;
+                  })
+                  .join("");
+                return `<div style="margin-top:8px"><span class="tag ok">内容实验:${agg.count} 条已度量 · 平均播放 ${agg.avgViews}</span><span class="tag warn">最佳:${esc(String(agg.best?.title || "").slice(0, 24))}(${agg.best?.views})</span>
+                  <svg viewBox="0 0 560 100" width="100%" height="100" preserveAspectRatio="none">${bars}</svg></div>`;
+              })()
             : ""}
           ${(m.recentLog || []).length
             ? `<div style="margin-top:6px">${m.recentLog.map((e2) => `<div class="narr" style="margin-left:0"><span class="tag dim">${esc(e2.kind)}</span> ${fmtT(e2.t)} — ${esc(String(e2.text).slice(0, 70))}</div>`).join("")}</div>`

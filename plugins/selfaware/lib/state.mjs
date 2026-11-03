@@ -167,9 +167,13 @@ export function readMission() {
         log: Array.isArray(j.log) ? j.log : [],
         open: Array.isArray(j.open) ? j.open : [], // 1.5.0:待研究困难队列
         ledger: Array.isArray(j.ledger) ? j.ledger : [], // 1.8.0:内容实验台账
+        // 1.8.0 事故教训:readMission 必须透传序号字段,否则每次读取后 seq 从 1 重新计数,
+        // 第二条 publish/obstacle 会顶掉第一条(T43 抓出)
+        ledgerSeq: Number.isFinite(j.ledgerSeq) ? j.ledgerSeq : 0,
+        openSeq: Number.isFinite(j.openSeq) ? j.openSeq : 0,
       };
   } catch {}
-  return { active: null, log: [], open: [], ledger: [] };
+  return { active: null, log: [], open: [], ledger: [], ledgerSeq: 0, openSeq: 0 };
 }
 
 export function writeMission(m) {

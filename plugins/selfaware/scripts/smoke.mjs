@@ -1002,7 +1002,9 @@ console.log("\n[T40] self_mission publish/measure:发布→到期→度量闭环
   };
   call("self_mission", { action: "start", title: "测试使命", autonomy: "full" });
   const p1 = call("self_mission", { action: "publish", title: "让AI一句话给浏览器写黑洞", ref: "video_001" });
-  check("发布记账得 v001", !p1.isError && p1.text.includes("v001") && p1.sc?.mission?.ledger?.awaiting === 1, p1.text.slice(0, 150));
+  const p2 = call("self_mission", { action: "publish", title: "第二条测试视频", ref: "video_002" });
+  check("两次发布序号递增(v001/v002,seq 透传)", !p1.isError && !p2.isError && p2.text.includes("v002"), p2.text.slice(0, 150));
+  check("发布记账得 v001(p1 时点 awaiting=1)", !p1.isError && p1.text.includes("v001") && p1.sc?.mission?.ledger?.awaiting === 1, p1.text.slice(0, 150));
   // 未到 48h:due 为空
   check("48h 内不算到期", p1.sc?.mission?.ledger?.due?.length === 0);
   // 手动把台账时间拨回 3 天前,模拟到期
@@ -1014,7 +1016,7 @@ console.log("\n[T40] self_mission publish/measure:发布→到期→度量闭环
   check("get 显示到期回访提醒", g.text.includes("已 ≥48h,优先回访") && g.text.includes("v001"), g.text.slice(0, 300));
   const m1 = call("self_mission", { action: "measure", id: "v001", stats: "播放 1.2 万,完播 39%,点赞 400" });
   check("度量成功并给对照指引", !m1.isError && m1.text.includes("对照定位假设"), m1.text.slice(0, 200));
-  check("台账状态 measured", call("self_state", {}).sc?.mission?.ledger?.awaiting === 0);
+  check("台账状态 measured(仅剩 v002 待度量)", call("self_state", {}).sc?.mission?.ledger?.awaiting === 1);
   const e1 = call("self_mission", { action: "measure", id: "v001", stats: "重复度量" });
   check("重复度量拒绝", e1.isError && e1.text.includes("未找到待度量"), e1.text.slice(0, 150));
   fs.rmSync(dir, { recursive: true, force: true });
@@ -1075,6 +1077,54 @@ console.log("\n[T42] knowledgeBase.searchScope:all 召回整库,own 只召回观
   check("全库来源标注出现(知识库(全库))", all.includes("知识库(全库)"), all.slice(0, 300));
   fs.rmSync(dir, { recursive: true, force: true });
   fs.rmSync(kb, { recursive: true, force: true });
+}
+
+// ---------- T43 结构化度量与聚合 ----------
+
+console.log("\n[T43] measure 结构化数字 → measuredAgg 聚合");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    return { text: m?.result?.content?.[0]?.text || "", sc: m?.result?.structuredContent, isError: !!m?.result?.isError };
+  };
+  call("self_mission", { action: "start", title: "测试使命", autonomy: "full" });
+  call("self_mission", { action: "publish", title: "视频甲" });
+  call("self_mission", { action: "publish", title: "视频乙" });
+  call("self_mission", { action: "measure", id: "v001", stats: "数据回收", views: 12000, likes: 400, completion: 39 });
+  const r = call("self_mission", { action: "measure", id: "v002", stats: "数据回收", views: 3000, likes: 50, completion: 22 });
+  const agg = r.sc?.mission?.ledger?.measuredAgg;
+  check("聚合 count=2", agg?.count === 2, JSON.stringify(agg));
+  check("avgViews=7500", agg?.avgViews === 7500, JSON.stringify(agg));
+  check("最佳=视频甲(12000)", agg?.best?.title === "视频甲" && agg.best.views === 12000, JSON.stringify(agg?.best));
+  const st = call("self_state", {});
+  check("self_state 同步聚合", st.sc?.mission?.ledger?.measuredAgg?.avgViews === 7500);
+  const r2 = call("self_mission", { action: "measure", id: "v001", stats: "", views: "abc" });
+  check("非数字 views 拒绝(无 stats 无数字 → 报错)", r2.isError, r2.text.slice(0, 120));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ---------- T44 recall 反思日志源 ----------
+
+console.log("\n[T44] self_recall 命中反思日志(标题/教训)");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    return { text: m?.result?.content?.[0]?.text || "", isError: !!m?.result?.isError };
+  };
+  call("self_journal", { action: "append", entry: { kind: "failure_postmortem", title: "flock 队列锁并发互斥研究", lesson: "开工前先 dy_queue_status 检测锁" } });
+  const r = call("self_recall", { query: "flock 互斥" });
+  check("反思日志可被召回", !r.isError && r.text.includes("反思日志 1") && r.text.includes("flock 队列锁并发互斥研究"), r.text.slice(0, 300));
+  fs.rmSync(dir, { recursive: true, force: true });
 }
 
 // ---------- 汇总 ----------
