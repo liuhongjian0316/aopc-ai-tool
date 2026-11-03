@@ -836,7 +836,10 @@ console.log("\n[T34] self_learn list + self_state 知识库统计");
   fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify({ knowledgeBase: { path: kb } }));
   runObserver(dir, { session_id: "sess_t34", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
   fs.mkdirSync(path.join(kb, "观己学习"), { recursive: true });
-  fs.writeFileSync(path.join(kb, "观己学习", "2026-11-03-测试知识.md"), "# t\n");
+  const nowD2 = new Date();
+  const pd2 = (n) => String(n).padStart(2, "0");
+  const todayStr = `${nowD2.getFullYear()}-${pd2(nowD2.getMonth() + 1)}-${pd2(nowD2.getDate())}`; // 动态本地日期(跨午夜回归)
+  fs.writeFileSync(path.join(kb, "观己学习", `${todayStr}-测试知识.md`), "# t\n");
   const rpc = [
     { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "self_learn", arguments: { action: "list" } } },
     { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "self_state", arguments: {} } },
@@ -844,7 +847,7 @@ console.log("\n[T34] self_learn list + self_state 知识库统计");
   const r = spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000 });
   const replies = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
   const listTxt = replies.find((m) => m.id === 1)?.result?.content?.[0]?.text || "";
-  check("list 列出已写入笔记", listTxt.includes("2026-11-03-测试知识.md"), listTxt.slice(0, 200));
+  check("list 列出已写入笔记", listTxt.includes(`${todayStr}-测试知识.md`), listTxt.slice(0, 200));
   const sc2 = replies.find((m) => m.id === 2)?.result?.structuredContent;
   check("self_state 带知识库统计", sc2?.knowledge?.configured === true && sc2.knowledge.total === 1 && sc2.knowledge.today === 1, JSON.stringify(sc2?.knowledge));
   fs.rmSync(dir, { recursive: true, force: true });
@@ -1125,6 +1128,25 @@ console.log("\n[T44] self_recall 命中反思日志(标题/教训)");
   const r = call("self_recall", { query: "flock 互斥" });
   check("反思日志可被召回", !r.isError && r.text.includes("反思日志 1") && r.text.includes("flock 队列锁并发互斥研究"), r.text.slice(0, 300));
   fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ---------- T45 超长单行的 usage 提取(e2e 回归驱动) ----------
+
+console.log("\n[T45] >256KB 超长单行 rollout:尾部截断后仍提取 provider usage");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const rd = fs.mkdtempSync(path.join(os.tmpdir(), "sa-roll-"));
+  fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify({ rolloutDir: rd, contextWindow: 200000 }));
+  const sid = "sess_t45";
+  // 单行 300KB:pad 占位 + 行尾才是 usage(模拟真实 model_io:response 在 request 之后)
+  const pad = "x".repeat(300 * 1024);
+  const giantLine = JSON.stringify({ type: "model_io", request: { body: { pad } }, response: { usage: { inputTokens: 55000 } } });
+  fs.writeFileSync(path.join(rd, `model-io-${sid}.jsonl`), giantLine + "\n");
+  runObserver(dir, { session_id: sid, hook_event_name: "Stop", stop_hook_active: false, last_assistant_message: "done" });
+  const b = readState(dir)?.sessions?.[sid]?.budget;
+  check("截断单行仍提取 provider 实测", b?.src === "provider" && b?.used === 55000, JSON.stringify(b));
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(rd, { recursive: true, force: true });
 }
 
 // ---------- 汇总 ----------

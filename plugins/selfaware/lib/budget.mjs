@@ -19,6 +19,10 @@ function extractUsage(line) {
     const u = JSON.parse(line)?.response?.usage;
     if (u && Number.isFinite(u.inputTokens)) return u;
   } catch {}
+  // 2.1.0:尾部截断的超长单行(单条 model_io 可达数百 KB,JSON.parse 必败)用正则兜底——
+  // usage 位于记录尾部(response 在 request 之后),tail 读取必定覆盖;inputTokens 仅出现于 usage 对象,无误配风险
+  const m = line.match(/"inputTokens":\s*(\d+)/);
+  if (m) return { inputTokens: Number(m[1]) };
   return null;
 }
 

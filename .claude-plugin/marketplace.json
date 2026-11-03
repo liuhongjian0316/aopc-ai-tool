@@ -371,7 +371,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "2.0.0",
+      "version": "2.1.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -386,6 +386,14 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "2.1.0",
+          "date": "2026-11-04",
+          "changes": [
+            "修复(e2e 回归抓出):超长单行 model_io(单条可达数百 KB)在 256KB 尾部读取时头部被切,JSON.parse 必败导致 provider usage 锚点丢失回退 estimate——extractUsage 增加正则兜底(inputTokens 仅存在于 usage 对象,无误配风险),T45 用 300KB 单行锁定",
+            "冒烟测试 177 → 185 项全绿(另修 T34 跨午夜日期硬编码)"
+          ]
+        },
         {
           "version": "2.0.0",
           "date": "2026-11-03",
