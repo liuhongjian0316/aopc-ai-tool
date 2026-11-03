@@ -987,6 +987,39 @@ console.log("\n[T38] self_learn 自动关联旧笔记(双链)");
   fs.rmSync(kb, { recursive: true, force: true });
 }
 
+// ---------- T40 内容实验台账 ----------
+
+console.log("\n[T40] self_mission publish/measure:发布→到期→度量闭环");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    return { text: m?.result?.content?.[0]?.text || "", sc: m?.result?.structuredContent, isError: !!m?.result?.isError };
+  };
+  call("self_mission", { action: "start", title: "测试使命", autonomy: "full" });
+  const p1 = call("self_mission", { action: "publish", title: "让AI一句话给浏览器写黑洞", ref: "video_001" });
+  check("发布记账得 v001", !p1.isError && p1.text.includes("v001") && p1.sc?.mission?.ledger?.awaiting === 1, p1.text.slice(0, 150));
+  // 未到 48h:due 为空
+  check("48h 内不算到期", p1.sc?.mission?.ledger?.due?.length === 0);
+  // 手动把台账时间拨回 3 天前,模拟到期
+  const mp = path.join(dir, "mission.json");
+  const mj = JSON.parse(fs.readFileSync(mp, "utf8"));
+  mj.ledger[0].t -= 3 * 86400000;
+  fs.writeFileSync(mp, JSON.stringify(mj));
+  const g = call("self_mission", { action: "get" });
+  check("get 显示到期回访提醒", g.text.includes("已 ≥48h,优先回访") && g.text.includes("v001"), g.text.slice(0, 300));
+  const m1 = call("self_mission", { action: "measure", id: "v001", stats: "播放 1.2 万,完播 39%,点赞 400" });
+  check("度量成功并给对照指引", !m1.isError && m1.text.includes("对照定位假设"), m1.text.slice(0, 200));
+  check("台账状态 measured", call("self_state", {}).sc?.mission?.ledger?.awaiting === 0);
+  const e1 = call("self_mission", { action: "measure", id: "v001", stats: "重复度量" });
+  check("重复度量拒绝", e1.isError && e1.text.includes("未找到待度量"), e1.text.slice(0, 150));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);

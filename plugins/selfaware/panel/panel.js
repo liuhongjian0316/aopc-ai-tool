@@ -6,7 +6,7 @@ const { App } = GUANJI_SDK;
 
 (() => {
   const app = new App(
-    { name: "selfaware", version: "1.7.0" },
+    { name: "selfaware", version: "1.8.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
 
@@ -181,6 +181,10 @@ const { App } = GUANJI_SDK;
           ${Array.isArray(m.openDifficulties) && m.openDifficulties.length
             ? `<div style="margin-top:6px"><span class="tag warn">待研究困难 ${m.openDifficulties.length}</span>
                ${m.openDifficulties.slice(-3).map((dd) => `<div class="narr" style="margin-left:0">[${esc(dd.id)}] ${esc(String(dd.text).slice(0, 60))}</div>`).join("")}</div>`
+            : ""}
+          ${m.ledger
+            ? `<div style="margin-top:6px"><span class="tag ${m.ledger.due?.length ? "warn" : "dim"}">内容台账:待度量 ${m.ledger.awaiting ?? 0}${m.ledger.due?.length ? `(⚠ ${m.ledger.due.length} 条到期)` : ""}</span>
+               ${(m.ledger.recent || []).slice(0, 3).map((l) => `<div class="narr" style="margin-left:0">[${esc(l.id)}] ${esc(String(l.title).slice(0, 46))} — ${l.status === "measured" ? esc(String(l.stats || "").slice(0, 40)) : "待度量"}</div>`).join("")}</div>`
             : ""}
           ${(m.recentLog || []).length
             ? `<div style="margin-top:6px">${m.recentLog.map((e2) => `<div class="narr" style="margin-left:0"><span class="tag dim">${esc(e2.kind)}</span> ${fmtT(e2.t)} — ${esc(String(e2.text).slice(0, 70))}</div>`).join("")}</div>`

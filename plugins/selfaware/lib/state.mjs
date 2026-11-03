@@ -156,6 +156,7 @@ export function listEventSids() {
 
 const MISSION_LOG_CAP = 200;
 const MISSION_OPEN_CAP = 30;
+const MISSION_LEDGER_CAP = 60;
 
 export function readMission() {
   try {
@@ -165,9 +166,10 @@ export function readMission() {
         active: j.active || null,
         log: Array.isArray(j.log) ? j.log : [],
         open: Array.isArray(j.open) ? j.open : [], // 1.5.0:待研究困难队列
+        ledger: Array.isArray(j.ledger) ? j.ledger : [], // 1.8.0:内容实验台账
       };
   } catch {}
-  return { active: null, log: [], open: [] };
+  return { active: null, log: [], open: [], ledger: [] };
 }
 
 export function writeMission(m) {
@@ -177,6 +179,10 @@ export function writeMission(m) {
   const open = (m.open || []).filter((d) => d.status === "open").slice(-MISSION_OPEN_CAP);
   const learned = (m.open || []).filter((d) => d.status !== "open").slice(-20);
   m.open = [...learned, ...open];
+  // 内容实验台账:封顶(度量的留,未度量的全保留——那是欠账)
+  const ledMeasured = (m.ledger || []).filter((l) => l.status === "measured").slice(-MISSION_LEDGER_CAP / 2);
+  const ledAwaiting = (m.ledger || []).filter((l) => l.status !== "measured");
+  m.ledger = [...ledAwaiting, ...ledMeasured];
   const tmp = missionPath() + ".tmp-" + process.pid;
   fs.writeFileSync(tmp, JSON.stringify(m, null, 2) + "\n");
   fs.renameSync(tmp, missionPath());

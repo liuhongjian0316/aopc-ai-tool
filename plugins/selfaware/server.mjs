@@ -31,7 +31,7 @@ import {
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "1.7.0";
+const VERSION = "1.8.0";
 
 const TOOLS = [
   {
@@ -89,12 +89,16 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["get", "start", "note", "close", "obstacle", "resolve"] },
-        title: { type: "string", description: "start:使命标题(一句话);resolve:已研究的困难知识标题(将写入知识库)" },
+        action: { type: "string", enum: ["get", "start", "note", "close", "obstacle", "resolve", "publish", "measure"] },
+        title: { type: "string", description: "start:使命标题(一句话);resolve:已研究的困难知识标题(将写入知识库);publish:发布的内容标题" },
         goal: { type: "string", description: "start:完成判据/目标(可选)" },
         autonomy: { type: "string", enum: ["supervised", "full"], description: "start:自主等级。full=完全自主(日常发布与数据分析无需逐条请示,红线仍须请示);supervised=受监督(默认)" },
         text: { type: "string", description: "note/close/obstacle:本条记录内容(obstacle 描述遇到的困难与已尝试的方案)" },
-        experience: { type: "string", description: "close:本使命的经验总结(背景/做法/结果/教训)——提供时自动写入知识库(type=experience,带 agent 标识)" },
+        ref: { type: "string", description: "publish:内容引用标识(视频 ID/链接/文件名)" },
+        id: { type: "string", description: "resolve:要消化的困难条目 id(d001…);measure:要回访度量的台账条目 id(v001…)" },
+        stats: { type: "string", description: "measure:度量结果(播放/完播/互动等,一段话)" },
+        body: { type: "string", description: "resolve:研究正文——机制是什么、为什么会这样、下次怎么更快(写入知识库)" },
+        tags: { type: "string", description: "resolve:附加标签(自动追加 troubleshooting)" },
         id: { type: "string", description: "resolve:要消化的困难条目 id(d001…)" },
         body: { type: "string", description: "resolve:研究正文——机制是什么、为什么会这样、下次怎么更快(写入知识库)" },
         tags: { type: "string", description: "resolve:附加标签(自动追加 troubleshooting)" },
@@ -367,6 +371,13 @@ function selfState() {
   const mission = readMission();
   const knowledge = kbStats(cfg); // 1.4.0:知识库(每日学习时刻的落点)
   const openDifficulties = (mission.open || []).filter((d) => d.status === "open");
+  const nowMs = Date.now();
+  const ledgerAll = mission.ledger || [];
+  const ledgerView = {
+    awaiting: ledgerAll.filter((l) => l.status === "awaiting").length,
+    due: ledgerAll.filter((l) => l.status === "awaiting" && nowMs - l.t >= 48 * 3600000).map((l) => ({ id: l.id, title: l.title, t: l.t })),
+    recent: ledgerAll.slice(-5).reverse(),
+  };
   // 1.3.0:自扩展资产清单——能力自扩展协议的可见性基础设施
   const playbookFiles = (() => {
     try {
@@ -408,6 +419,7 @@ function selfState() {
       active: mission.active ? { ...mission.active, day: missionDay(mission.active) } : null,
       recentLog: mission.log.slice(-5).reverse(),
       openDifficulties,
+      ledger: ledgerView,
     },
     paths: { data: dataRoot(), selfModel: selfModelPath(), playbooks: playbooksDir(), journal: journalPath() },
   };
@@ -778,6 +790,30 @@ function selfMission(args) {
       structured: missionStructured(m, loadState()),
     };
   }
+  if (action === "publish") {
+    // 1.8.0:内容实验台账——发布即立"假设",48h 后回访度量,周进化找模式
+    const title = String(args.title || "").trim();
+    if (!title) throw new Error("publish 需要 title(发布的内容标题)");
+    const seq = m.ledgerSeq = (m.ledgerSeq || 0) + 1;
+    m.ledger = m.ledger || [];
+    const item = { id: `v${String(seq).padStart(3, "0")}`, t: Date.now(), title: title.slice(0, 120), ref: String(args.ref || "").slice(0, 160), status: "awaiting" };
+    m.ledger.push(item);
+    m.log.push({ t: Date.now(), kind: "publish", text: `${item.id} ${title.slice(0, 100)}` });
+    writeMission(m);
+    return { text: `台账已记(${item.id}):${title.slice(0, 80)}。≥48h 后用 action=measure(id=${item.id},stats=播放/完播/互动)回访度量——发布不是终点,度量出结论才是。`, structured: missionStructured(m, loadState()) };
+  }
+  if (action === "measure") {
+    const item = (m.ledger || []).find((l) => l.id === String(args.id || "") && l.status === "awaiting");
+    if (!item) throw new Error(`未找到待度量的台账条目:${args.id || "(未传 id)"}(action=get 查看台账)`);
+    const stats = String(args.stats || "").trim();
+    if (!stats) throw new Error("measure 需要 stats(播放/完播/互动等度量结果)");
+    item.status = "measured";
+    item.stats = stats.slice(0, 300);
+    item.measuredAt = Date.now();
+    m.log.push({ t: Date.now(), kind: "measure", text: `${item.id} ${stats.slice(0, 100)}` });
+    writeMission(m);
+    return { text: `已度量 ${item.id}「${item.title.slice(0, 60)}」:${stats.slice(0, 120)}\n对照定位假设:胜出模式值得在下周复制,证伪的写「洞察:」note 进周进化。`, structured: missionStructured(m, loadState()) };
+  }
   throw new Error(`未知 action:${action}`);
 }
 
@@ -793,6 +829,14 @@ function missionText(m) {
     lines.push(`待研究困难(${openDiff.length} 条,每日学习时刻消化):`);
     for (const d of openDiff.slice(-5)) lines.push(`- [${d.id}] ${d.text.slice(0, 80)}`);
   }
+  // 1.8.0:内容实验台账——到期未度量的先回访
+  const now = Date.now();
+  const awaiting = (m.ledger || []).filter((l) => l.status === "awaiting");
+  const due = awaiting.filter((l) => now - l.t >= 48 * 3600000);
+  if (awaiting.length) {
+    lines.push(`内容台账:待度量 ${awaiting.length} 条${due.length ? `(其中 ${due.length} 条已 ≥48h,优先回访)` : ""}:`);
+    for (const l of awaiting.slice(-3)) lines.push(`- [${l.id}] ${l.title.slice(0, 60)}(发布于 ${fmtDate(l.t)})`);
+  }
   const recent = m.log.slice(-8).reverse();
   if (recent.length) {
     lines.push("近期记录:");
@@ -803,6 +847,8 @@ function missionText(m) {
 }
 
 function missionStructured(m, st) {
+  const now = Date.now();
+  const ledger = m.ledger || [];
   return {
     mission: {
       active: m.active
@@ -810,6 +856,11 @@ function missionStructured(m, st) {
         : null,
       recentLog: m.log.slice(-8).reverse(),
       openDifficulties: (m.open || []).filter((d) => d.status === "open"),
+      ledger: {
+        awaiting: ledger.filter((l) => l.status === "awaiting").length,
+        due: ledger.filter((l) => l.status === "awaiting" && now - l.t >= 48 * 3600000).map((l) => ({ id: l.id, title: l.title, t: l.t })),
+        recent: ledger.slice(-5).reverse(),
+      },
     },
     sessionId: currentSid(st)?.sid || "",
   };
@@ -891,23 +942,33 @@ function kbTokens(text) {
     .filter((t) => t.length >= 2 || /[^\x00-\x7F]/.test(t));
 }
 
-/** 1.7.0:知识复利——按关键词召回自己写入的笔记(零依赖扫描,KB 规模内 O(n) 足够) */
+/** 1.7.0 知识复利;1.8.0 全域化——召回范围:知识库 + playbooks + 自我模型(自己写的知识资产全部可检索) */
 function selfRecall(args) {
   const cfg = loadConfig();
-  const dir = kbDir(cfg);
   const query = String(args?.query || "").trim();
   if (!query) throw new Error("recall 需要 query(关键词,可多个)");
-  if (!dir) return { text: `<self-recall> 知识库未配置(knowledgeBase.path)。配置后我的学习笔记才能被召回。</self-recall>`, structured: { query, matches: [] } };
   const tokens = kbTokens(query);
-  let files = [];
+  const docs = []; // {source, name, path}
+  const kb = kbDir(cfg);
+  if (kb) {
+    try {
+      for (const f of fs.readdirSync(kb).filter((f) => f.endsWith(".md"))) docs.push({ source: "知识库", name: f, path: path.join(kb, f) });
+    } catch {}
+  } else if (cfg.knowledgeBase?.path) {
+    // 配置了但目录还没建:不报错,其他源照扫
+  }
   try {
-    files = fs.readdirSync(dir).filter((f) => f.endsWith(".md"));
+    for (const f of fs.readdirSync(playbooksDir()).filter((f) => f.endsWith(".md"))) docs.push({ source: "playbook", name: f, path: path.join(playbooksDir(), f) });
   } catch {}
+  if (fs.existsSync(selfModelPath())) docs.push({ source: "自我模型", name: "self-model.md", path: selfModelPath() });
+  if (!docs.length) {
+    return { text: `<self-recall> 暂无可检索的知识资产(知识库未配置且 playbook/自我模型未创建)。配置后我的学习笔记、规则手册与自我档案都能被召回。</self-recall>`, structured: { query, matches: [] } };
+  }
   const scored = [];
-  for (const f of files) {
+  for (const doc of docs) {
     let content = "";
     try {
-      content = fs.readFileSync(path.join(dir, f), "utf8");
+      content = fs.readFileSync(doc.path, "utf8");
     } catch {
       continue;
     }
@@ -920,21 +981,21 @@ function selfRecall(args) {
         if (hitLines.length < 2 && !line.startsWith("#") && line.trim()) hitLines.push(line.trim().slice(0, 100));
       }
     }
-    if (score > 0) scored.push({ file: f, title: f.replace(/^\d{4}-\d{2}-\d{2}-/, "").replace(/\.md$/, ""), score, hitLines });
+    if (score > 0) scored.push({ source: doc.source, file: doc.name, title: doc.name.replace(/^\d{4}-\d{2}-\d{2}-/, "").replace(/\.md$/, ""), score, hitLines });
   }
   scored.sort((a, b) => b.score - a.score);
   const limit = Number(args?.limit) || 5;
   const picked = scored.slice(0, limit);
-  const lines = [`<self-recall> 关键词「${query}」在知识库(共 ${files.length} 条)中命中 ${scored.length} 条:`];
+  const lines = [`<self-recall> 关键词「${query}」全域命中 ${scored.length} 条(知识库 ${docs.filter((d) => d.source === "知识库").length} + playbook ${docs.filter((d) => d.source === "playbook").length} + 自我模型 ${docs.filter((d) => d.source === "自我模型").length}):`];
   if (!picked.length) lines.push("无命中——这个主题我还没学过,值得作为今日学习时刻的候选。");
   for (const s of picked) {
-    lines.push(`- [${s.score} 分] ${s.title}(${s.file})`);
+    lines.push(`- [${s.score} 分][${s.source}] ${s.title}(${s.file})`);
     for (const hl of s.hitLines) lines.push(`    · ${hl}`);
   }
   lines.push("</self-recall>");
   return {
     text: lines.join("\n"),
-    structured: { query, totalNotes: files.length, matches: picked },
+    structured: { query, totalDocs: docs.length, matches: picked },
   };
 }
 

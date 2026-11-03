@@ -371,7 +371,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "1.7.0",
+      "version": "1.8.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -386,6 +386,17 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "1.8.0",
+          "date": "2026-11-03",
+          "changes": [
+            "内容实验台账(真机里程碑驱动:首条视频已自主发布并上架,但发布后无人回访度量):self_mission 新增 publish/measure——发布即记假设,≥48h 到期回访度量,measure 给对照定位假设的指引",
+            "self_recall 全域化:召回范围从知识库扩展到 playbooks + 自我模型(自己写的知识资产全部可检索,结果带来源标注)",
+            "日循环接线:发布必记台账/唤醒先回访到期条目/每周跨条目找模式(胜出复制、证伪撤回);面板使命卡显示台账摘要与到期 ⚠",
+            "真机里程碑:首条视频《让AI一句话给浏览器写了个黑洞》已自主发布并核验上架;RPA 数据链路自愈升级(网络拦截方案,推翻此前『无法自动化』判定)",
+            "冒烟测试 162 → 168 项全绿"
+          ]
+        },
         {
           "version": "1.7.0",
           "date": "2026-11-03",
