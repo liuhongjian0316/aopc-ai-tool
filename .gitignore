@@ -9,3 +9,6 @@ plugins/*/.data/
 # hongguo 运行壳的 axios stub 必须随插件分发（重定向到 vendor/axios.cjs 单文件包）
 !plugins/hongguo-drama/runtime/node_modules/
 !plugins/hongguo-drama/runtime/node_modules/**
+# OpenPencil vendor 运行时闭包（css-tree/canvaskit-wasm 等）必须随插件分发
+!plugins/wudi-coding/vendor/openpencil/dist/node_modules/
+!plugins/wudi-coding/vendor/openpencil/dist/node_modules/**
