@@ -17,7 +17,7 @@ let opToolsCache = (() => {
   catch { return []; }
 })(); // 静态工具定义（117 个），后台动态刷新
 
-const SERVER_INFO = { name: "wudi-coding", version: "0.30.1" };
+const SERVER_INFO = { name: "wudi-coding", version: "0.30.2" };
 const PANEL_URI = "ui://wudi-coding/panel.html";
 const PANEL_MIME = "text/html;profile=mcp-app";
 const panelPath = resolve(join(dirname(fileURLToPath(import.meta.url)), "..", "panel.html"));

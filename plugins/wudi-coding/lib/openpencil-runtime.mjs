@@ -45,7 +45,8 @@ function ensureChild(env = {}) {
       } catch { /* 忽略非 JSON */ }
     }
   });
-  child.stderr.on("data", () => {});
+  let childStderr = "";
+  child.stderr.on("data", (d) => { childStderr += d; });
   child.on("exit", () => { child = null; initDone = null; });
   // 握手（一次性）
   initDone = request("initialize", {
@@ -62,8 +63,8 @@ function request(method, params) {
   const p = new Promise((res, rej) => {
     pending.set(id, { res, rej });
     setTimeout(() => {
-      if (pending.has(id)) { pending.delete(id); rej(new Error(`openpencil 子进程请求超时：${method}`)); }
-    }, 30_000);
+      if (pending.has(id)) { pending.delete(id); rej(new Error(`openpencil 子进程请求超时：${method}\nstderr: ${childStderr.slice(-300)}`)); }
+    }, 60_000);
   });
   child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
   return p.then((r) => {
