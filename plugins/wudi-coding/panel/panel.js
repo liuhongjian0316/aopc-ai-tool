@@ -35,7 +35,7 @@ const EmptyResultSchema = {
     <div class="c"><b>健康检查</b><div class="num">200</div><div class="muted">全部通过</div><span class="btn">体检报告</span></div>
   </div></body></html>`;
   const app = new App(
-    { name: "wudi-coding", version: "0.28.0" },
+    { name: "wudi-coding", version: "0.29.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -43,7 +43,7 @@ const EmptyResultSchema = {
   const mockCache = new Map();
 
   const state = {
-    view: "projects",  // projects=landing 网格 | detail=当前项目操作页
+    view: "detail",    // 打开即工作台（OpenPencil 同款：无落地选择页）；项目 hub 在「项目」页
     drill: null,       // 非当前项目的只读下钻（registry summary）
     tab: "overview",
     envs: [],
@@ -1955,8 +1955,8 @@ const EmptyResultSchema = {
     applyTheme();
     const ws = app.getHostContext()?.widgetState;
     if (ws && ["projects", "overview", "deploys", "design", "canvas", "docs"].includes(ws.tab)) {
-      state.tab = ws.tab;
-      state.view = ws.tab === "projects" ? "projects" : "detail";
+      state.tab = ws.tab === "projects" ? "overview" : ws.tab;
+      state.view = "detail";
     }
     if (DEMO) {
       state.connected = true; // demo 模式不连宿主，但允许 reportSize
@@ -1976,8 +1976,8 @@ const EmptyResultSchema = {
     try {
       const ws = app.getHostContext()?.widgetState;
       if (ws && ["projects", "overview", "deploys", "design", "canvas", "docs"].includes(ws.tab)) {
-        state.tab = ws.tab;
-        state.view = ws.tab === "projects" ? "projects" : "detail";
+        state.tab = ws.tab === "projects" ? "overview" : ws.tab;
+        state.view = "detail";
       }
       render();
       await loadAll();

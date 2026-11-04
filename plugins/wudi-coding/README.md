@@ -148,6 +148,10 @@ aopc plugin install wudi-coding
 - **线框 → .fig**：设计页「把无敌线框转入 .fig」——唤起 Agent 双工具集转换（`wudi_canvas_get` 读线框 → OpenPencil `new_design` + `create_shape` 按坐标重建 → `export_image` 渲染进图墙）。
 - **版本守卫**：smoke 断言 plugin.json / panel.js / server.mjs 三处版本一致。
 
+## 打开即工作台（v0.29）
+
+- 面板默认直接进入当前项目的 总览（对齐 OpenPencil 模式：面板即编辑器，无落地选择页）；多项目 hub 在「项目」页。
+
 ## 工作台操作中枢（v0.22）
 
 - **下一步建议**：总览页按项目缺口自动给出可执行动作（补配置 / 首次部署 / 失败排查 / tokens 沉淀 / 文档生成），点按钮直达对应页。
