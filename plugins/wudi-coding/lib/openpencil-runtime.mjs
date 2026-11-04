@@ -112,6 +112,9 @@ export async function openpencilBridgeEndpoint() {
   return sc.bridge ?? null;
 }
 
+// 预热：server 启动即 spawn 子进程并完成握手（消除首次工具调用的冷启动超时）
+try { ensureChild(); } catch (e) { console.error('[wudi] OpenPencil 预热失败:', e.message); }
+
 export function openpencilServerPath() {
   return childServerPath;
 }
