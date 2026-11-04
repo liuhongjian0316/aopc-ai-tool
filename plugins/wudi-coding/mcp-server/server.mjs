@@ -8,7 +8,14 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TOOLS, callTool, bridgeConnectDomains } from "../lib/tools.mjs";
 import { openpencilTools, openpencilCall, openpencilReadResource, openpencilResourcesList } from "../lib/openpencil-runtime.mjs";
-let opToolsCache = []; // openpencil 工具缓存（首次 tools/list 后后台填充）
+import { readFileSync as _rf } from "node:fs";
+import { join as _join, dirname as _dn } from "node:path";
+import { fileURLToPath as _fURL } from "node:url";
+const _vendorDir = _join(_dn(_dn(_fURL(import.meta.url))), "vendor", "openpencil");
+let opToolsCache = (() => {
+  try { return JSON.parse(_rf(_join(_vendorDir, "tools-static.json"), "utf-8")); }
+  catch { return []; }
+})(); // 静态工具定义（117 个），后台动态刷新
 
 const SERVER_INFO = { name: "wudi-coding", version: "0.30.1" };
 const PANEL_URI = "ui://wudi-coding/panel.html";
@@ -157,8 +164,7 @@ function handleMessage(line) {
     return;
   }
   if (method === "tools/list") {
-    // 立即回 wudi 工具；openpencil 工具后台拉取缓存供下次 tools/list 合并
-    openpencilTools().catch(() => {});
+    openpencilTools().then((t) => { opToolsCache = t; }).catch(() => {});
     send(id, { tools: [...TOOLS, ...opToolsCache] });
     return;
   }
