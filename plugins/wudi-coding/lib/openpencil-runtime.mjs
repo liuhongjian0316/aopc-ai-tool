@@ -19,6 +19,7 @@ let initDone = null;
 function ensureChild(env = {}) {
   if (child) return child;
   const wsRoot = env.workspaceRoot || process.env.AOPC_PROJECT_DIR || process.cwd();
+  try {
   child = spawn(process.execPath, [childServerPath], {
     env: {
       ...process.env,
@@ -27,7 +28,12 @@ function ensureChild(env = {}) {
       ZCODE_WORKSPACE_IDENTITY: wsRoot,
     },
     stdio: ["pipe", "pipe", "pipe"],
-  });
+    });
+  } catch (err) {
+    console.error("[wudi] OpenPencil spawn 失败:", err.message);
+    child = null;
+    return;
+  }
   child.stdout.setEncoding("utf-8");
   child.stdout.on("data", (chunk) => {
     buffer += chunk;
@@ -47,7 +53,10 @@ function ensureChild(env = {}) {
   });
   let childStderr = "";
   child.stderr.on("data", (d) => { childStderr += d; });
-  child.on("exit", () => { child = null; initDone = null; });
+  child.on("exit", (code) => {
+    console.error("[wudi] OpenPencil 子进程退出 code=" + code);
+    child = null; initDone = null;
+  });
   // 握手（一次性）
   initDone = request("initialize", {
     protocolVersion: "2024-11-05",
