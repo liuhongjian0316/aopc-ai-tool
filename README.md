@@ -1,64 +1,73 @@
-# aopc-ai-tool
+# aopc-ai-tool Plugin Marketplace
 
-liuhongjian 的 AOPC 插件/技能源（marketplace）。本仓库按 AOPC 插件源规范组织，可直接作为 GitHub marketplace 源添加到 AOPC，也可以被 Claude Code 兼容读取。
+liuhongjian's AOPC/ZCode plugin marketplace. Add it as a GitHub marketplace source to AOPC; compatible with Claude Code and ZCode clients.
 
-## 目录结构
+> 中文文档：[README_CN.md](./README_CN.md)
+
+## Install
+
+```shell
+aopc plugins marketplace add <本仓库 GitHub 地址>
+aopc plugins install wudi-coding@aopc-ai-tool --scope user
+```
+
+## Available Plugins
+
+| Plugin | Category | Version | Description |
+| --- | --- | --- | --- |
+| [wudi-coding](./plugins/wudi-coding) | `developer-tools` | 0.28.0 | 无敌编程 |
+| [hongguo-drama](./plugins/hongguo-drama) | `entertainment` | 0.3.0 | 红果短剧下载器接入 AOPC |
+| [fcm-bridge](./plugins/fcm-bridge) | `developer-tools` | 0.2.0 | AOPC 会话内查看与切换 free-coding-models 免费模型路由(/fcm 命令) |
+| [freellm-bridge](./plugins/freellm-bridge) | `developer-tools` | 0.1.1 | AOPC 会话内接入 FreeLLMAPI 免费模型聚合网关 |
+| [boot-animation](./plugins/boot-animation) | `customization` | 0.2.1 | 自定义 AOPC 启动画面 |
+| [desktop-pet](./plugins/desktop-pet) | `customization` | 0.1.0 | AOPC 桌面宠物 |
+| [douyin-pilot](./plugins/douyin-pilot) | `social-media` | 0.2.1 | 抖音账号托管助手 |
+| [obsidian-kb](./plugins/obsidian-kb) | `knowledge-base` | 0.1.3 | Obsidian 知识库集成 |
+| [selfaware](./plugins/selfaware) | `productivity` | 2.7.0 | 观己:给 AOPC agent 装上分层的功能性自我意识 |
+
+## Repository Layout
 
 ```text
 aopc-ai-tool/
 ├── .claude-plugin/
-│   └── marketplace.json      # marketplace 清单（AOPC 优先读取该路径，根目录 marketplace.json 为回退）
-├── plugins/                  # 插件目录，每个插件一个子目录
-│   └── fcm-bridge/
-│       ├── .aopc-plugin/
-│       │   └── plugin.json   # 插件清单（name/version/commands 等）
-│       ├── commands/         # 斜杠命令（Markdown）
-│       ├── scripts/          # 插件自带脚本
+│   └── marketplace.json      # marketplace 清单（AOPC 优先读取该路径，根 marketplace.json 为回退）
+├── marketplace.json           # 根清单副本（与 .claude-plugin 同步，ZCode 客户端兼容）
+├── plugins/                   # 插件目录，每个插件一个子目录
+│   └── wudi-coding/
+│       ├── .aopc-plugin/plugin.json    # AOPC 插件清单
+│       ├── .zcode-plugin/plugin.json   # ZCode 兼容清单（双目录惯例，与 .aopc-plugin 同步）
+│       ├── commands/ skills/ agents/   # 组件
+│       ├── mcp-server/ lib/            # MCP 工具面
 │       └── README.md
-├── docs/                     # 源维护说明
-└── skills/                   # 技能收录说明与约定
+├── docs/                      # 源维护说明
+├── skills/                    # 技能收录说明与约定
+└── AGENTS.md                  # Agent 维护指南
 ```
 
-## 收录插件
+## Plugin Structure
 
-| 插件        | 版本   | 说明                                                         |
-| ----------- | ------ | ------------------------------------------------------------ |
-| fcm-bridge  | 0.1.1  | AOPC 会话内查看与切换 free-coding-models 免费模型路由（`/fcm`） |
-| freellm-bridge | 0.2.0 | AOPC 会话内接入 [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi) 免费模型聚合网关：查看网关与可用模型、一键切换默认模型（`/freellm`） |
-| boot-animation | 0.2.1 | 自定义 AOPC 启动画面：播放插件目录内的 boot.mp4/webm/gif/html |
-| desktop-pet | 0.1.0  | AOPC 桌面宠物：透明置顶悬浮窗、拖拽/甩抛/弹弓/互撞物理、多屏漫游、工作状态六档联动、碎碎念气泡、HTTP API（复刻 [dsh-pet](https://github.com/PC2005-cloud/dsh-pet)） |
-| douyin-pilot | 0.2.1 | 抖音账号托管助手：RPA 主通道（创作者中心扫码登录、视频/定时发布）+ 官方 API 通道（数据/评论）+ 运营技能套件 |
-
-## 安装使用
-
-添加本仓库为 marketplace 源并安装插件：
-
-```bash
-aopc plugins marketplace add liuhongjian0316/aopc-ai-tool
-aopc plugins install fcm-bridge@aopc-ai-tool
+```text
+my-plugin/
+├── .aopc-plugin/plugin.json   # 必需清单（AOPC）
+├── .zcode-plugin/plugin.json  # ZCode 兼容清单（与 .aopc-plugin 保持同版本）
+├── commands/*.md              # 斜杠命令，$ARGUMENTS 接收输入
+├── skills/<name>/SKILL.md     # 技能（name/description 必填）
+├── agents/*.md                # 子代理定义
+└── mcp-server/                # MCP stdio server（可选）
 ```
 
-更新源与插件：
+## Versioning Contract
 
-```bash
-aopc plugins marketplace update
-aopc plugins update fcm-bridge@aopc-ai-tool
+任何进入安装包的文件变更（清单/组件/Hook/MCP 声明/插件 README）都必须同时在 `.aopc-plugin/plugin.json` 与根 `marketplace.json` 提升语义化版本。已发布版本不可复用。
+
+## Validation
+
+提交前在仓库根执行：
+
+```shell
+aopc plugins validate plugins/<插件名>
 ```
-
-## 贡献新插件 / 技能
-
-1. 在 `plugins/<plugin-name>/` 下创建插件目录，清单放 `.aopc-plugin/plugin.json`（必需 `name`、`version`；按需声明 `commands`、`skills`、`hooks`、`mcpServers`）。
-2. 在 `.claude-plugin/marketplace.json` 的 `plugins` 数组追加条目，`source` 指向 `"./plugins/<plugin-name>"`。
-3. 技能随插件分发：把技能放在插件的 `skills/<skill-name>/SKILL.md`（frontmatter 含 `name`、`description`），并在插件清单中声明 `"skills": "skills"`；纯技能型插件可以只含 skills 目录。
-4. 提交 PR 前用 `aopc plugins validate <路径>` 校验插件或 marketplace 清单。
-
-## 规范依据
-
-- AOPC 兼容 Claude Marketplace 默认结构：优先读取 `.claude-plugin/marketplace.json`，根目录 `marketplace.json` 作为回退。
-- 插件 id 为 `<plugin-name>@<marketplace>`，本源 marketplace id 为 `aopc-ai-tool`。
-- 公开 GitHub HTTPS 源走 GitHub Archive（zipball）安装，无需本机 Git；插件条目 `source` 为相对路径时，相对仓库根解析。
-- 插件内引用自身文件时不要硬编码安装路径；运行时 hooks/MCP 可用 `${CLAUDE_PLUGIN_ROOT}`，命令 Markdown 正文用自定位写法（参考 `plugins/fcm-bridge/commands/fcm.md`）。
 
 ## License
 
-MIT
+MIT（各插件以其清单标注为准；vendor 组件见各插件内归属文件）。

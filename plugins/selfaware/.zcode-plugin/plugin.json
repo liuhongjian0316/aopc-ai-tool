@@ -1,0 +1,36 @@
+{
+  "name": "selfaware",
+  "version": "2.7.0",
+  "description": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进",
+  "description_i18n": {
+    "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
+    "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
+  },
+  "author": { "name": "liuhongjian" },
+  "license": "Apache-2.0",
+  "keywords": ["self-awareness", "metacognition", "reflection", "memory", "aopc"],
+  "mcpServers": {
+    "selfaware": {
+      "command": "node",
+      "args": ["${AOPC_PLUGIN_ROOT}/server.mjs"]
+    }
+  },
+  "skills": "skills",
+  "agents": "agents",
+  "commands": "commands",
+  "ui": {
+    "surfaces": [
+      {
+        "id": "selfaware",
+        "title": {
+          "zh-CN": "观己 · 自我仪表盘",
+          "en-US": "Guanji Self Dashboard"
+        },
+        "icon": "eye",
+        "server": "selfaware",
+        "resourceUri": "ui://selfaware/panel.html",
+        "availability": "session"
+      }
+    ]
+  }
+}

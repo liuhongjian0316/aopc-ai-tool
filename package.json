@@ -1,0 +1,10 @@
+{
+  "name": "aopc-ai-tool",
+  "private": true,
+  "description": "liuhongjian's AOPC plugin marketplace",
+  "scripts": {
+    "build:panel": "cd plugins/wudi-coding && node scripts/build-panel.mjs",
+    "smoke": "cd plugins/wudi-coding && node scripts/smoke.mjs",
+    "validate": "for d in plugins/*/; do aopc plugins validate \"$d\" || exit 1; done"
+  }
+}

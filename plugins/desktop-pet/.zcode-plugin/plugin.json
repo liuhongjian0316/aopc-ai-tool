@@ -1,0 +1,69 @@
+{
+  "name": "desktop-pet",
+  "version": "0.1.1",
+  "description": "AOPC 桌面宠物：透明置顶悬浮窗 + 物理交互（拖拽/甩抛/弹弓/互撞）+ 多屏漫游 + 工作状态联动 + 碎碎念气泡 + HTTP API，复刻 dsh-pet 功能",
+  "description_i18n": {
+    "en": "AOPC desktop pet: transparent always-on-top floating windows, physics interactions (drag/throw/slingshot/collision), multi-display roaming, work-status animations, whisper bubbles and an HTTP API. A feature port of dsh-pet.",
+    "zh-CN": "AOPC 桌面宠物：透明置顶悬浮窗 + 物理交互（拖拽/甩抛/弹弓/互撞）+ 多屏漫游 + 工作状态联动 + 碎碎念气泡 + HTTP API，复刻 dsh-pet 功能"
+  },
+  "author": {
+    "name": "liuhongjian"
+  },
+  "license": "MIT",
+  "keywords": [
+    "desktop-pet",
+    "pet",
+    "dsh-pet",
+    "electron",
+    "overlay"
+  ],
+  "mcpServers": {
+    "pet": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "${AOPC_PLUGIN_ROOT}/mcp-server/server.mjs"
+      ],
+      "env": {
+        "AOPC_PLUGIN_DATA": "${AOPC_PLUGIN_DATA}",
+        "AOPC_PET_SHOW": "${user_config.show}",
+        "AOPC_PET_AUTO_START": "${user_config.autoStart}",
+        "AOPC_PET_WHISPER_INTERVAL": "${user_config.whisperIntervalSec}",
+        "AOPC_PET_PHYSICS_POWER": "${user_config.physicsPower}",
+        "AOPC_PET_PET_NAME": "${user_config.petName}"
+      }
+    }
+  },
+  "userConfig": {
+    "show": {
+      "type": "boolean",
+      "title": "显示宠物",
+      "description": "关闭后不显示任何宠物窗口（仍可通过 pet_show 工具/托盘临时唤出）。改动后重开会话生效。",
+      "default": true
+    },
+    "petName": {
+      "type": "string",
+      "title": "宠物名字",
+      "description": "悬浮提示与托盘菜单显示的名字。留空 = 用配置文件里的名字（默认小艾）。",
+      "default": "小艾"
+    },
+    "autoStart": {
+      "type": "boolean",
+      "title": "会话启动时自动显示宠物",
+      "description": "开启后宿主拉起插件时自动按配置显示全部宠物；关闭则只在调用工具/接口时出现。",
+      "default": true
+    },
+    "whisperIntervalSec": {
+      "type": "number",
+      "title": "碎碎念周期（秒）",
+      "description": "每只宠物碎碎念的间隔下限；0 = 关闭定时碎碎念（仍可由 Agent/接口触发）。",
+      "default": 300
+    },
+    "physicsPower": {
+      "type": "number",
+      "title": "甩抛总力度",
+      "description": "拖拽甩抛与接口抛掷共用的总力度倍率，1 = 标准（dsh-pet 默认手感）。",
+      "default": 1
+    }
+  }
+}

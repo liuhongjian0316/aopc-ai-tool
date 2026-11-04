@@ -1,0 +1,860 @@
+{
+  "name": "aopc-ai-tool",
+  "description": "liuhongjian 的 AOPC 插件/技能源：收录 AOPC 插件与技能，供 marketplace 安装与更新。",
+  "description_i18n": {
+    "en": "liuhongjian's AOPC plugin/skill source: a marketplace of AOPC plugins and skills for install and update.",
+    "zh-CN": "liuhongjian 的 AOPC 插件/技能源：收录 AOPC 插件与技能，供 marketplace 安装与更新。"
+  },
+  "owner": {
+    "name": "liuhongjian",
+    "url": "https://github.com/liuhongjian0316"
+  },
+  "plugins": [
+    {
+      "name": "wudi-coding",
+      "source": "./plugins/wudi-coding",
+      "description": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域",
+      "description_i18n": {
+        "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
+        "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
+      },
+      "version": "0.28.0",
+      "author": {
+        "name": "liuhongjian"
+      },
+      "license": "MIT",
+      "category": "developer-tools",
+      "keywords": [
+        "wudi",
+        "full-lifecycle",
+        "developer-tools",
+        "deploy",
+        "ui-design",
+        "docs",
+        "aopc"
+      ],
+      "changelog": [
+        {
+          "version": "0.28.0",
+          "date": "2026-11-04",
+          "changes": [
+            "画布数据安全：saveCanvas 写入前自动备份上一版到 canvas.backup.json（误清空/误删可让 Agent 读备份 + replace 算子恢复）",
+            "画布快捷键补全：⌘/Ctrl+A 全选（限当前画板）、Esc 取消选择",
+            "设计页 tokens 面板编辑：色板卡「编辑 JSON」弹窗直接改 tokens 并同步 tokens.css",
+            "smoke 扩展到 95 项全绿（备份用例）"
+          ]
+        },
+        {
+          "version": "0.27.0",
+          "date": "2026-11-04",
+          "changes": [
+            "画布组件戳扩充至 12 种：新增 ⏻开关 / ☑复选框 / 😊头像 / 🖼图片占位 / 📊图表占位 / ▰进度条",
+            "形状层级调整：wudi_canvas_edit 新增 reorder 算子（置顶/置底），面板单选时出现 置顶/置底 按钮",
+            "关键数据修复：sanitizeShape 对 undefined id 误判 —— 所有自动生成的形状共享 id 'undefined'，update/delete/reorder 全部命中第一个（面板多形状编辑、Agent 多形状操作的隐性破坏源）；现按类型守卫生成唯一 id",
+            "smoke 扩展到 94 项全绿（reorder 置顶/置底、12 种 stamps）"
+          ]
+        },
+        {
+          "version": "0.26.0",
+          "date": "2026-11-04",
+          "changes": [
+            "画布组件形状库：工具条新增组件下拉（🔘按钮 / ▭输入框 / ▤卡片 / H标题 / ¶正文 / —分割线），选中后在画布点击即成组放置（卡片=容器+标题+两行正文，按钮=主色矩形+白字），形状自动挂当前画板",
+            "demo applyOpsLocal 补 id 生成（stamps 无 id 时 demo 也能选中）",
+            "smoke 92 项全绿"
+          ]
+        },
+        {
+          "version": "0.25.0",
+          "date": "2026-11-04",
+          "changes": [
+            "画布撤销/重做：快照历史栈（50 步）+ ⌘Z/⌘⇧Z + 工具条 ↶↷ 按钮；服务端 wudi_canvas_edit 新增 replace 全量替换算子（frames/shapes 整体过校验，撤销回放的数据通道）",
+            "等距分布：≥3 选中时 均分横/均分纵（首尾锚定等分中间空隙）",
+            "复制粘贴：⌘C 复制选中形状 / ⌘V 偏移粘贴",
+            "smoke 扩展到 92 项全绿（replace 往返 + 非法形状拒绝不落盘 + 版本守卫 0.25.0）"
+          ]
+        },
+        {
+          "version": "0.24.0",
+          "date": "2026-11-04",
+          "changes": [
+            "画布多选与批量对齐（Figma 级操作）：选择工具空拖=框选（虚线框）、Shift+点击加选/去选、多选整体拖动、批量删除/填色、六向对齐（左/水平中/右/上/垂直中/下，≥2 选中时工具条出现）、删除按钮带数量",
+            "中键拖动平移画布（与滚轮平移并存）；键盘方向键/删除/⌘D 兼容多选",
+            "smoke 89 项全绿"
+          ]
+        },
+        {
+          "version": "0.23.0",
+          "date": "2026-11-04",
+          "changes": [
+            "画布键盘操作：Delete/Backspace 删除选中、方向键微调（Shift=10px，箭头联动尾点）、⌘/Ctrl+D 复制偏移（一次性注册，输入框聚焦时不干扰）",
+            "画布导出 PNG：序列化世界组 SVG → canvas 2x 渲染 → 宿主 downloadFile 下载（能力探测，不可用时灯箱预览右键保存）；按形状包围盒自动取景",
+            "设计图墙按设计名分组（渲染时间戳归组，组头计数）",
+            "smoke 89 项全绿"
+          ]
+        },
+        {
+          "version": "0.22.0",
+          "date": "2026-11-04",
+          "changes": [
+            "工作台总览升级为操作中枢：新增「下一步」状态驱动建议区 —— 按项目缺口自动给出可执行动作（缺构建/部署目标/健康检查、首次部署、上次失败排查、tokens 未沉淀、文档空白），点按钮直达对应页",
+            "设计页新增资产统计条（设计稿 HTML / 渲染 PNG / tokens 色值 / tokens 基准四格）",
+            "刷新联动：总览刷新同时拉取设计资产与画布数据（新渲染 PNG / 新 .fig 无需切页再刷）",
+            "smoke 89 项全绿 + 版本一致性守卫（0.22.0 三处一致）"
+          ]
+        },
+        {
+          "version": "0.21.0",
+          "date": "2026-11-03",
+          "changes": [
+            "wudi_tokens_compare：外部 tokens（OpenPencil design_to_tokens / Figma 变量导出）与本地 tokens 按扁平键路径比对，新增/变更/移除三清单（Gen UI 绑定），只出报告不改本地 —— tokens 双向闭环收口",
+            "面板设计页「把无敌线框转入 .fig」：一键唤起 Agent 用双工具集转换（wudi_canvas_get 读线框 → OpenPencil new_design + create_shape 按坐标重建 → export_image 渲染进图墙）",
+            "smoke 新增版本一致性守卫（plugin.json / panel.js / server.mjs 三处断言一致，根治版本串漂移）+ tokens_compare 用例；扩展到 89 项全绿"
+          ]
+        },
+        {
+          "version": "0.20.0",
+          "date": "2026-11-03",
+          "changes": [
+            "无敌编程 ↔ OpenPencil 链接与交互：wudi_designs_list 列出工作区 designs/*.fig/.pen 设计稿（文件级清单，结果绑定面板 Gen UI）；设计页每个 .fig 带「在 OpenPencil 打开」「渲染到图墙」按钮（经宿主 message 唤起 Agent：open_design 协同编辑 / export_image 渲染 PNG 到 .wudi/design/renders/ 自动进设计图墙）",
+            "wudi-ui 技能新增 OpenPencil 工作流分支（建稿 render JSX / 改稿 batch_update / 进面板 export_image / tokens 双向打通 design_to_tokens ↔ wudi_design_tokens_set）",
+            "smoke 扩展到 86 项全绿（designs_list 发现 openpencil 建的 .fig）"
+          ]
+        },
+        {
+          "version": "0.19.2",
+          "date": "2026-11-03",
+          "changes": [
+            "修复 OpenPencil 编辑器 WASM 被 CSP 拦截（WebAssembly.instantiate violates CSP）：vendor 源码的资源 _meta 使用 zcode/csp 键，AOPC 宿主读取 aopc/csp —— 现两键并声明（wasmUnsafeEval + unsafeEval），CanvasKit/Yoga/kiwi 动态编译放行"
+          ]
+        },
+        {
+          "version": "0.19.1",
+          "date": "2026-11-03",
+          "changes": [
+            "修复 OpenPencil 面板加载失败（Resource ui://openpencil/panel not found）：清单 resourceUri 补上 .html 扩展名（server 实际注册 ui://openpencil/panel.html），安装副本已验证 resources/read 返回 604KB 编辑器页（profile=mcp-app）",
+            "说明：MCP Apps 架构下一个 surface 绑定一个 server，OpenPencil 编辑器必须独立 surface 运行；工作台设计页作为设计中心 hub（四画布入口 + .fig/.designcraft/渲染产物汇集）"
+          ]
+        },
+        {
+          "version": "0.19.0",
+          "date": "2026-11-03",
+          "changes": [
+            "vendor 官方 OpenPencil 插件（MIT，源码 zai-org/zcode-plugins，本地构建）：Figma .fig 设计稿编辑器 + Agent 117 个工具 —— JSX 渲染节点、auto-layout、组件/实例、设计变量、Iconify 图标库、布尔运算、design_to_tokens、analyze 色板/排版/间距、export SVG/PDF/PNG、query_nodes(XPath)",
+            "清单接线：双 MCP server（wudi + openpencil，ZCODE_* 环境映射 AOPC_*）+ 双面板 surface（OpenPencil 编辑器入侧栏）；vendor 含 node_modules 运行时闭包（css-tree/canvaskit-wasm 等，官方 stage 逻辑）与 MIT/Apache 归属文件",
+            "设计页新增 OpenPencil 推荐区块（新建 designs/<名>.fig 并唤起 Agent 建 hero 区块）；四大画布方案齐备：OpenPencil（.fig+117 工具）/ DesignCraft（25 工具）/ Excalidraw（白板）/ Figma（浏览器+只读）",
+            "smoke 扩展到 85 项：vendor server 独立会话（117 工具、关键工具在列、new_design 建稿、面板资源）"
+          ]
+        },
+        {
+          "version": "0.18.0",
+          "date": "2026-11-03",
+          "changes": [
+            "接入官方 DesignCraft 插件（完整设计编辑器 + Agent 25 工具读写：new_document/place_image/pointer/drag/render_page 等）：设计页新增推荐区块（新建设计文档/渲染当前页到图库，经宿主 message 唤起 Agent）",
+            "资源管线扩展：.wudi/design/renders/ 目录纳入设计图墙扫描 —— DesignCraft 渲染的 PNG 自动进面板",
+            "补充 v0.17 遗漏的动作处理器（fig-save/fig-open/ex-new/ex-export —— 渲染防御化暴露后补齐）",
+            "调研结论：OpenPencil（.fig 设计稿 + Agent 读写）为官方示例插件，市场尚未发布暂不可装；Figma API 只读 —— Agent 写设计走 DesignCraft/Excalidraw"
+          ]
+        },
+        {
+          "version": "0.17.0",
+          "date": "2026-11-03",
+          "changes": [
+            "Figma 集成（方案 B 落地）：设计页新增「Figma · 完整编辑器」区块 —— 保存文件链接后一键在浏览器打开 Figma 完整编辑器（画布/图层/属性面板全功能）；Figma 编辑器与 API 均只读，Agent 读设计 ✅（结构/渲染图/tokens 比对）、写 Figma ❌（官方 MCP 也只读，已核实），需 Agent 写的设计走 Excalidraw（Agent 可完整读写）",
+            "wudi_figma_link 工具：记住/查看 Figma 文件链接（.wudi/design/figma-url.txt），结果绑定面板",
+            "画布页重组：Excalidraw 完整设计画布升为主推（新建白板/线框转入，Agent 读写 ✅），无敌快速线框画布降级为折叠实验项",
+            "smoke 80 项全绿（Gen UI 绑定 4→5）"
+          ]
+        },
+        {
+          "version": "0.16.2",
+          "date": "2026-11-03",
+          "changes": [
+            "修复 面板渲染出错 bindActions is not defined：v0.16 画布 v2 拼接时误删动作区（envArg + bindActions 全部 14 个处理器：项目登记/移除/下钻、环境切换、SSH/通知测试、健康检查、回滚/部署审批、快速建档、周报、生成设计稿、tokens 导出、文档唤起）—— 已原样重建",
+            "上版本的握手前置 + 渲染防御化让该错误直接显示在面板上而非超时黑屏（本次即靠此定位）",
+            "smoke 80 项全绿；安装副本确认含 bindActions"
+          ]
+        },
+        {
+          "version": "0.16.1",
+          "date": "2026-11-03",
+          "changes": [
+            "修复 ui/initialize handshake timed out：v0.16 画布重构把 state.cv 视口漏在 state 初始化外，画布相关渲染路径一触发即 TypeError，异常吃掉了面板与宿主的握手 —— state 补齐初始化 + main() 改为握手前置（connect 成功后才渲染）+ render 全量防御化（异常降级为错误卡片并 sendLog 上报，不再阻断握手）",
+            "修复画布全局 mouseup 监听随渲染累积（bindCanvas 顶部摘除旧监听）",
+            "smoke 80 项全绿"
+          ]
+        },
+        {
+          "version": "0.16.0",
+          "date": "2026-11-03",
+          "changes": [
+            "画布 v2：Figma 式无限画布 + 多画板 —— 所有 UI 设计在同一块画布上。滚轮平移、⌘/Ctrl+滚轮以光标为中心缩放（15%~400%）、适应视图；画板管理（预设 桌面1440/1280、移动375、平板768，拖拽整帧联动子形状、双击/图层重命名、删除可选连形状）、图层面板（形状计数）、形状挂 frameId 自动入画板",
+            "Agent 帧操作：wudi_canvas_edit 新增 add_frame/update_frame/delete_frame（delete_frame 可选连形状），形状 frameId 校验；旧 v1 画布自动迁移（形状归入默认画板）",
+            "导出 v2：按画板逐个出设计稿 HTML（画板名即文件名，保留中文）进图库；excalidraw 场景带 Excalidraw frame 元素（子元素 frameId 关联）",
+            "修复：中文画板名被文件名清洗吞掉；smoke 扩展到 80 项全绿（帧操作/迁移/按帧导出/frame 映射）"
+          ]
+        },
+        {
+          "version": "0.15.0",
+          "date": "2026-11-03",
+          "changes": [
+            "接入现有完整级画布：桥接官方 Excalidraw 插件（已装即用）——wudi_canvas_export 新增 format=excalidraw/both，画布形状映射为 .excalidraw 场景（rect→rectangle、文字/箭头 points 透传）落到 .wudi/design/canvas/",
+            "面板画布页新增「在 Excalidraw 打开 ↗」：导出场景后经宿主 message 唤起 Agent 调 open_diagram 导入，在完整级白板继续拖拽/连线/改样式（该插件 Agent 工具 create_diagram/apply_operations 同样可用）",
+            "节奏：线框在无敌画布（快）→ 完整级编辑在 Excalidraw（全功能）→ 设计稿在图库",
+            "修复：场景导出 rect 类型未映射、el() 白名单丢 text/points 字段（smoke 抓出）；smoke 78 项全绿"
+          ]
+        },
+        {
+          "version": "0.14.0",
+          "date": "2026-11-03",
+          "changes": [
+            "无敌画布：Agent 可操作的设计画布集成进面板——wudi_canvas_get/edit/clear/export 四工具，Agent 直接在画布上铺线框/改样式/清理；面板新增「画布」页（选择/矩形/圆/菱形/箭头/文本工具、tokens 填色色板、拖拽移动、把手缩放、双击改字），双方共享同一份 canvas.json",
+            "画布导出闭环：wudi_canvas_export 把线框内联为 SVG 设计稿 HTML 落到 mockups/，自动进面板图库与文档库 —— 线框在画布、精修在模板",
+            "形状校验：类型白名单、坐标钳制、文本截断，非法形状带索引报错；clear 需 confirm",
+            "wudi-ui 技能新增画布章节（线框在画布、精修在模板）；smoke 扩展到 76 项全绿（画布全链 8 项断言）"
+          ]
+        },
+        {
+          "version": "0.13.0",
+          "date": "2026-11-03",
+          "changes": [
+            "内置设计模板库：skills/wudi-ui/templates/ 三套完整级 HTML 设计模板（dashboard 管理后台 / landing 落地页 / mobile 移动端 375 画布），带 tokens 变量与【可改区】改造指引，/wudi-ui 生成设计稿从模板起步",
+            "面板生成设计稿闭环：设计页选模板类型 + 填页面名 → 一键唤起 Agent 按 wudi-ui 流程生成，完成后自动进图库（message 能力探测降级）",
+            "wudi_design_tokens_export：tokens 导出为 css / tailwind（theme.extend 片段）/ json 三格式，落盘 .wudi/design/exports/，面板加导出按钮",
+            "smoke 扩展到 68 项（模板完整性、导出三格式）全绿"
+          ]
+        },
+        {
+          "version": "0.12.0",
+          "date": "2026-11-02",
+          "changes": [
+            "设计图管线：MCP server 动态暴露 .wudi/design/ 下的设计稿 HTML（ui://wudi-coding/mockup/*）与 Figma PNG（image/*，base64 blob），文件名白名单 + 目录限制防路径穿越",
+            "面板设计图库：设计页新增「UI 设计稿」卡片（点击 iframe 预览完整设计稿）与「设计图」PNG 图片墙（点击灯箱放大），真正看到设计图而不是文件路径",
+            "总览页统计卡片行（部署数/成功率/文档/设计产物）+ 导航图标化",
+            "demo 模式内置设计稿样例与 PNG 占位，无宿主也能完整演示预览",
+            "smoke 62 项全绿；浏览器截图验收图库与预览弹窗"
+          ]
+        },
+        {
+          "version": "0.10.0",
+          "date": "2026-11-02",
+          "changes": [
+            "部署审批策略：环境/档案 deployPolicy（confirm=两步流默认；direct=一键直发，建议只给 staging），面板部署按钮按当前环境策略分流，配了 confirmWord 的环境永远走确认对话框",
+            "wudi_figma_tokens_diff：拉取画板样式（extractStyles 提取颜色/字号）与本地 design tokens 自动比对，报告缺失与未用项，只出报告不自动改 tokens",
+            "smoke 扩展到 57 项（deployPolicy 落档与解析、extractStyles 纯函数单测、tokens_diff 指引路径）"
+          ]
+        },
+        {
+          "version": "0.9.0",
+          "date": "2026-11-02",
+          "changes": [
+            "面板快速建档表单：未建档项目在总览页填表（名称/技术栈/构建/打包/部署根目录/健康检查）直接建档，省去对话问答",
+            "健康快照入部署历史：部署/回滚的 verify 结果（HTTP 状态/检查侧/尝试次数）随记录存档，面板时间线显示状态徽章",
+            "文档页升级：一键生成周报按钮；点文档经宿主 message 能力唤起 Agent 打开并简介（带能力探测降级）",
+            "wudi_notify_test：发送测试通知验证 webhook 配置，未配置返回设置指引",
+            "smoke 52 项全绿；面板浏览器冒烟通过（建档表单渲染）"
+          ]
+        },
+        {
+          "version": "0.8.0",
+          "date": "2026-11-02",
+          "changes": [
+            "wudi_docs_weekly 周报：git log 生成草稿到 docs/weekly/（概览统计+逐日 commit+人工补充骨架），自动登记文档库",
+            "wudi_figma_images：Figma 节点渲染 PNG 下载到 .wudi/design/figma/（scale 可调），供与实现截图视觉比对",
+            "部署确认词：档案/环境 confirmWord（如给 prod 配），wudi_deploy 必须带匹配 confirmWord 才执行；面板部署对话框带确认词输入框，Agent 直调同样拦截",
+            "smoke 扩展到 51 项：周报（临时 git 仓真实提交验证）、确认词三路径、figma_images 指引"
+          ]
+        },
+        {
+          "version": "0.7.0",
+          "date": "2026-11-02",
+          "changes": [
+            "自测脚本 scripts/smoke.mjs：44 项回归（真实 stdio server 协议层 + 全工具面 + notify/figma/store 纯函数单测），一键安全网",
+            "面板一键部署审批流：部署页「部署新版本…」按钮，预检计划→对话框确认→执行（走宿主审批），与回滚共用两步流",
+            "团队并行模式：wudi-dev 技能新增大型任务协作方法论（architect 拆解→契约冻结→并行实现≤4→逐片验证→集成评审）+ /wudi-team 命令",
+            "修复：Figma URL 的 node-id 解析被贪婪匹配吞掉（smoke 首跑抓出）；rollback SSH 不可达时报错改为人话"
+          ]
+        },
+        {
+          "version": "0.6.0",
+          "date": "2026-11-02",
+          "changes": [
+            "部署通知：档案 notifyWebhook/notifyFormat（feishu/wecom/generic，环境级可覆盖），部署与回滚终态自动推送群机器人，推送失败不影响部署结果",
+            "wudi_doctor 一键体检：档案完整性/SSH 连通/远端磁盘与内存/版本数/current 软链/健康快测/通知配置，每项独立判 PASS/WARN/FAIL",
+            "Gen UI 嵌入：wudi_status、wudi_deploy_history、wudi_design_tokens_get、wudi_design_list 绑定工作台面板（_meta.ui），会话调用即内联渲染；面板经 ontoolresult 实时消费工具数据",
+            "E2E：SSH 容器 + 本地 webhook 收包器验证 v1 部署→v2→回滚三次通知序列与体检全 PASS；三种报文格式单测通过"
+          ]
+        },
+        {
+          "version": "0.5.0",
+          "date": "2026-11-02",
+          "changes": [
+            "多环境部署：档案 envs 数组（staging/prod 等，环境字段覆盖顶层并回落），deploy/rollback/health/remote_exec/logs 全系支持 env 参数，环境级可覆盖目标机器（sshHost/sshPort/sshUser）",
+            "新增 wudi_env_set（环境增改删/设默认）、wudi_deploy_logs（按档案 logCommand 拉服务日志，免白名单免确认）",
+            "UI 设计域工具化：wudi_design_tokens_get/set（写入同步生成 tokens.css）+ wudi_design_list（设计稿版本与产物清单）",
+            "工作台面板升级：环境切换分段控件、新增「设计」页（tokens 分组预览含色块、设计产物时间线），共四页",
+            "修复：wudi_project_init 未落 logCommand/defaultEnv；回滚仅一个版本时的报错文案",
+            "真实宿主验收：aopc CLI 安装 user scope 成功，4 技能/命令根/MCP server/面板资源全部被宿主识别，零诊断错误；多环境 E2E（SSH 容器）staging 部署→v2→回滚→日志 与 prod 健康检查失败路径均验证通过"
+          ]
+        },
+        {
+          "version": "0.4.0",
+          "date": "2026-11-02",
+          "changes": [
+            "M4 Figma 可选接入：wudi_figma_fetch 工具拉取文件/节点结构与样式提炼（布局/颜色 hex/字号/文本/flex/gap/padding，限深限宽防爆回复），未配置 token 时返回启用指引不报错",
+            "wudi-ui 技能 Figma 分支更新：链接/裸 key 解析、tokens 提取与转码流程衔接"
+          ]
+        },
+        {
+          "version": "0.3.0",
+          "date": "2026-11-02",
+          "changes": [
+            "M3 工作台面板：ui.surfaces 会话面板（总览/部署/文档三页），部署历史时间线、健康检查、回滚预检→确认两步流",
+            "MCP server 实现 resources/list + resources/read（text/html;profile=mcp-app），panel.html 自包含单文件（官方 ext-apps SDK vendor 内联，scripts/build-panel.mjs 零构建组装 + node 自检）",
+            "面板修复：connect 完成前不发送 sendSizeChanged 通知（浏览器冒烟发现）"
+          ]
+        },
+        {
+          "version": "0.2.0",
+          "date": "2026-11-02",
+          "changes": [
+            "M2 MCP 真工具层：10 个 wudi_* 工具（项目档案建档/读取、全景状态、文档登记、SSH 连通、五阶段部署流水线、部署历史、软链回滚、健康检查、白名单远端执行）",
+            "部署模型：releases/<时间戳> + current 软链原子切换；dir 打 tar / docker-image 打镜像 tar；rsync 失败自动回退 scp；凭据仅走 userConfig → env，仅密钥认证（BatchMode 禁密码）",
+            "安全护栏：deploy/rollback/remote_exec 均需 confirm=true；remote_exec 按档案 remoteWhitelist 前缀白名单；pruneOld 只删时间戳命名目录且保留最近 5 个",
+            "本地 E2E（SSH 容器目标）：v1 部署 → v2 发布 → 一键回滚全链通过，健康检查与内容验证一致"
+          ]
+        },
+        {
+          "version": "0.1.0",
+          "date": "2026-11-02",
+          "changes": [
+            "首个版本（M1 提示词层）：4 个域技能（wudi-dev/wudi-ui/wudi-deploy/wudi-docs）+ 5 个斜杠命令（/wudi 及四域子命令）+ 4 个子代理（architect/ui-designer/reviewer/deployer）",
+            "项目档案约定：项目根 .wudi/ 目录（project.json 档案、deploys.json 部署历史、design/ 设计产物）"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hongguo-drama",
+      "source": "./plugins/hongguo-drama",
+      "description": "红果短剧下载器接入 AOPC：Agent 可搜索/解析/提交下载/查询进度，独立 Electron 运行壳承载完整 UI，关窗后台续下",
+      "description_i18n": {
+        "en": "Hongguo short-drama downloader for AOPC: agent-driven search/resolve/download/progress with a self-contained Electron runtime shell carrying the full UI; downloads continue with the window closed.",
+        "zh-CN": "红果短剧下载器接入 AOPC：Agent 可搜索/解析/提交下载/查询进度，独立 Electron 运行壳承载完整 UI，关窗后台续下"
+      },
+      "version": "0.3.0",
+      "author": {
+        "name": "liuhongjian"
+      },
+      "license": "GPL-3.0",
+      "category": "entertainment",
+      "keywords": [
+        "hongguo",
+        "short-drama",
+        "downloader",
+        "electron",
+        "video",
+        "aopc"
+      ],
+      "changelog": [
+        {
+          "version": "0.3.0",
+          "date": "2026-11-04",
+          "changes": [
+            "运行壳同步上游 v5.7（内部 5.7.0，源码预发；5.3→5.7 跨 4 个版本）：播放请求签名恢复、官网扫码登录、DLNA 单集投屏、按剧清缓存、观看记录分组、bytevc2 解码等",
+            "8 条 AOPC 补丁锚点全部命中，零人工干预回放；新增 vendored 模块 bytevc2/casting/account-web-login",
+            "修复「窗口请求无效」：启动 createWindow 加守卫（0.2.2 引入），防 /show 竞态双窗口"
+          ]
+        },
+        {
+          "version": "0.2.2",
+          "date": "2026-11-02",
+          "changes": [
+            "修复「窗口请求无效」：/show 与启动 createWindow 竞态会静默创建第二个窗口并顶掉 mainWindow，导致先显示的窗口所有 IPC 被拒；启动创建加守卫，双路径收敛到同一窗口（CDP 双窗口复现 + 修复验证通过）"
+          ]
+        },
+        {
+          "version": "0.2.1",
+          "date": "2026-11-01",
+          "changes": [
+            "IPC 拒绝诊断：运行壳包装器记录 AOPC-IPC-DENY 日志（拒绝原因/窗口/帧 URL），排查窗口请求无效问题"
+          ]
+        },
+        {
+          "version": "0.2.0",
+          "date": "2026-11-01",
+          "changes": [
+            "新增会话侧栏面板（ui.surfaces）：下载任务进度卡片、剧库网格、暂停/恢复/重试/停止控制，主题跟随宿主",
+            "新增 hongguo_panel_status 轻量状态工具（不拉起运行壳，面板轮询专用）；hongguo_quit 不再为退出而拉起运行壳",
+            "MCP server 实现 resources/list 与 resources/read（text/html;profile=mcp-app），面板为自包含单文件 HTML（官方 ext-apps SDK 内联）"
+          ]
+        },
+        {
+          "version": "0.1.0",
+          "date": "2026-11-01",
+          "changes": [
+            "首个版本：vendor 红果短剧 5.3.0（GPL-3.0，来源 jackotom/hongguo-drama）为独立 Electron 运行壳",
+            "运行壳补丁：AOPC_PLUGIN_DATA 数据目录隔离、无头启动、关窗后台续下、禁用应用内更新",
+            "新增 aopc-bridge 本地 HTTP 桥（token 鉴权 + IPC 白名单）供 MCP 薄代理驱动",
+            "MCP 工具面：hongguo_open/hide/search/resolve/download/status/library/control/quit",
+            "Electron 44.9.1 运行时自动下载缓存（GitHub 失败回退 npmmirror），单实例握手复用"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fcm-bridge",
+      "source": "./plugins/fcm-bridge",
+      "description": "AOPC 会话内查看与切换 free-coding-models 免费模型路由(/fcm 命令)",
+      "description_i18n": {
+        "en": "Inspect and switch free-coding-models (FCM) free model routing from an AOPC session via the /fcm command.",
+        "zh-CN": "AOPC 会话内查看与切换 free-coding-models 免费模型路由(/fcm 命令)"
+      },
+      "version": "0.2.0",
+      "author": {
+        "name": "liuhongjian"
+      },
+      "license": "MIT",
+      "category": "developer-tools",
+      "keywords": [
+        "fcm",
+        "free-coding-models",
+        "model-router",
+        "aopc"
+      ]
+    },
+    {
+      "name": "freellm-bridge",
+      "source": "./plugins/freellm-bridge",
+      "description": "AOPC 会话内接入 FreeLLMAPI 免费模型聚合网关：查看网关与可用模型、一键切换默认模型(/freellm 命令)",
+      "description_i18n": {
+        "en": "Wire AOPC to a local FreeLLMAPI gateway from a session: inspect the router and its ready models, switch AOPC's default model (/freellm command).",
+        "zh-CN": "AOPC 会话内接入 FreeLLMAPI 免费模型聚合网关：查看网关与可用模型、一键切换默认模型(/freellm 命令)"
+      },
+      "version": "0.1.1",
+      "author": {
+        "name": "liuhongjian"
+      },
+      "license": "MIT",
+      "category": "developer-tools",
+      "keywords": [
+        "freellmapi",
+        "free-llm",
+        "model-router",
+        "openai-compatible",
+        "aopc"
+      ]
+    },
+    {
+      "name": "boot-animation",
+      "source": "./plugins/boot-animation",
+      "description": "自定义 AOPC 启动画面：播放插件目录内的 boot.mp4/webm/gif/html，重启 AOPC 生效",
+      "description_i18n": {
+        "en": "Custom AOPC boot animation: plays boot.mp4/webm/gif/html from the plugin dir on launch.",
+        "zh-CN": "自定义 AOPC 启动画面：播放插件目录内的 boot.mp4/webm/gif/html，重启 AOPC 生效。"
+      },
+      "version": "0.2.1",
+      "author": {
+        "name": "liuhongjian"
+      },
+      "license": "MIT",
+      "category": "customization",
+      "keywords": [
+        "boot-animation",
+        "splash",
+        "startup",
+        "aopc"
+      ]
+    },
+    {
+      "name": "desktop-pet",
+      "source": "./plugins/desktop-pet",
+      "description": "AOPC 桌面宠物：透明置顶悬浮窗 + 物理交互（拖拽/甩抛/弹弓/互撞）+ 多屏漫游 + 工作状态联动 + 碎碎念气泡 + HTTP API，复刻 dsh-pet 功能",
+      "description_i18n": {
+        "en": "AOPC desktop pet: transparent always-on-top floating windows, physics interactions (drag/throw/slingshot/collision), multi-display roaming, work-status animations, whisper bubbles and an HTTP API. A feature port of dsh-pet.",
+        "zh-CN": "AOPC 桌面宠物：透明置顶悬浮窗 + 物理交互（拖拽/甩抛/弹弓/互撞）+ 多屏漫游 + 工作状态联动 + 碎碎念气泡 + HTTP API，复刻 dsh-pet 功能"
+      },
+      "version": "0.1.0",
+      "author": {
+        "name": "liuhongjian"
+      },
+      "license": "MIT",
+      "category": "customization",
+      "keywords": [
+        "desktop-pet",
+        "pet",
+        "dsh-pet",
+        "electron",
+        "overlay"
+      ]
+    },
+    {
+      "name": "douyin-pilot",
+      "source": "./plugins/douyin-pilot",
+      "description": "抖音账号托管助手：RPA 主通道（创作者中心扫码登录、视频/定时发布）+ 官方 API 通道（数据/评论）+ 运营技能套件",
+      "description_i18n": {
+        "en": "Douyin account pilot: RPA main channel (creator-center QR login, video & scheduled publishing) + official API channel (data/comments) + ops skill suite.",
+        "zh-CN": "抖音账号托管助手：RPA 主通道（创作者中心扫码登录、视频/定时发布）+ 官方 API 通道（数据/评论）+ 运营技能套件"
+      },
+      "version": "0.2.1",
+      "author": {
+        "name": "liuhongjian"
+      },
+      "license": "MIT",
+      "category": "social-media",
+      "keywords": [
+        "douyin",
+        "social-media",
+        "automation",
+        "analytics",
+        "aopc"
+      ]
+    },
+    {
+      "name": "obsidian-kb",
+      "source": "./plugins/obsidian-kb",
+      "description": "Obsidian 知识库集成：读取/搜索/创建/编辑笔记、双向链接图谱、Canvas 画布、Dataview 查询、UI 面板可视化浏览，支持加密 Vault 与同步冲突处理",
+      "description_i18n": {
+        "en": "Obsidian Knowledge Base integration: read/search/create/edit notes, bidirectional link graph, Canvas, Dataview queries, UI panel browsing, with encrypted vault and sync conflict handling",
+        "zh-CN": "Obsidian 知识库集成：读取/搜索/创建/编辑笔记、双向链接图谱、Canvas 画布、Dataview 查询、UI 面板可视化浏览，支持加密 Vault 与同步冲突处理"
+      },
+      "version": "0.1.3",
+      "author": {
+        "name": "liuhongjian"
+      },
+      "license": "MIT",
+      "category": "knowledge-base",
+      "keywords": [
+        "obsidian",
+        "knowledge-base",
+        "notes",
+        "markdown",
+        "graph",
+        "canvas",
+        "dataview",
+        "aopc"
+      ],
+      "changelog": [
+        {
+          "version": "0.1.3",
+          "date": "2026-11-01",
+          "changes": [
+            "vault_info 与 list_files 加入 tools/list 对外声明（此前仅面板内部实现，宿主按 tools/list 校验直接拒绝，面板文件树无法加载）"
+          ]
+        },
+        {
+          "version": "0.1.2",
+          "date": "2026-11-01",
+          "changes": [
+            "修复面板握手：UI 换用官方 @modelcontextprotocol/ext-apps SDK（App/connect/callServerTool），替换宿主不认的自造 postMessage 协议（MCP App connection is unavailable）",
+            "面板主题跟随宿主 hostContext（暗色/亮色）"
+          ]
+        },
+        {
+          "version": "0.1.1",
+          "date": "2026-11-01",
+          "changes": [
+            "修复面板加载：MCP server 实现 resources/list 与 resources/read（text/html;profile=mcp-app）",
+            "panel.html 改为自包含产物：CSS/JS 全部内联（ui:// 资源无法解析相对引用）",
+            "面板自启动渲染；新增深色主题样式",
+            "userConfig 拍平为标量选项以通过 AOPC schema 校验"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "selfaware",
+      "source": "./plugins/selfaware",
+      "description": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进",
+      "description_i18n": {
+        "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
+        "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
+      },
+      "version": "2.7.0",
+      "author": {
+        "name": "liuhongjian"
+      },
+      "license": "Apache-2.0",
+      "category": "productivity",
+      "keywords": [
+        "self-awareness",
+        "metacognition",
+        "reflection",
+        "memory",
+        "agent",
+        "aopc"
+      ],
+      "changelog": [
+        {
+          "version": "2.7.0",
+          "date": "2026-11-04",
+          "changes": [
+            "使命对齐度(guanji 第五维,防自主 agent 最隐蔽的失败模式——目标漂移):本周动作与 mission.goal 逐条对照,持续偏离轻则记疑点、重则提案调整;对齐不是僵化,是让漂移可见后再决定",
+            "面板可见性:使命卡带困难老化 tag(最老挂 N 天);学习卡带偏食 tag(复盘多/主动学习与反馈少)",
+            "冒烟测试 204 → 208 项全绿"
+          ]
+        },
+        {
+          "version": "2.6.0",
+          "date": "2026-11-04",
+          "changes": [
+            "插件进化提案通道(外环闭环:她的运行经验 → 插件本身的升级):journal 新增 kind=plugin_proposal(问题+建议方案),插件层摩擦不再 silence 里反复发生;随周报交用户与开发者",
+            "学习食谱仪表:self_state 暴露 journal kind 分布——只复盘不学新知识/不征询反馈 = 偏食,自我提醒",
+            "guanji 周度自省加第四维:插件层摩擦分析;autonomous-ops 三分类后新增 plugin_proposal 出口;周检必答四问",
+            "冒烟测试 200 → 204 项全绿"
+          ]
+        },
+        {
+          "version": "2.5.0",
+          "date": "2026-11-04",
+          "changes": [
+            "进化时间线(进化本身可度量可回看):面板新增进化卡——自我模型变更记录时间线 + playbook 规则增长计数(P 规则行,出处格式兼容 v1.1 多样化);self_state structured 同步暴露 evolution",
+            "周报模板成文(周日首份周报预备):五段模板(数据概览/胜出与证伪/本周学到/进化了什么/需要你决策)+ 周报正文自动落知识库(type=experience, tags: weekly-report)",
+            "冒烟测试 197 → 200 项全绿(计数正则兼容 v1.1 出处格式)"
+          ]
+        },
+        {
+          "version": "2.4.0",
+          "date": "2026-11-04",
+          "changes": [
+            "假设追踪(实验方法论最后一环):publish 必带 hypothesis(本条要验证什么/预期什么)——无假设的发布带 ⚠ 提醒(无假设得不出结论);台账/面板展示假设;measure 回执对照定位假设",
+            "每周进化升级『假设胜率统计』:跨已度量条目对照各自 hypothesis,验证的复制、证伪的撤",
+            "学习时刻升级三源:① 困难研究 ② 新知识 ③ 主动学习(每周 ≥2 次主动选题学新本事,先 self_recall 避免重复)——进化不只补短板,还长新本事",
+            "冒烟测试 193 → 197 项全绿"
+          ]
+        },
+        {
+          "version": "2.3.0",
+          "date": "2026-11-04",
+          "changes": [
+            "用户反馈即时入库(进化的最贵燃料):journal 新增 kind=user_feedback——纠正/表扬/请示批复当场记录,构成通用规则的当天落 playbook;沉默不代拟",
+            "self_state 使命结构新增 difficultyAgingDays(最老困难挂 N 天)入面板数据通道",
+            "冒烟测试 190 → 193 项全绿"
+          ]
+        },
+        {
+          "version": "2.2.0",
+          "date": "2026-11-04",
+          "changes": [
+            "台账 void 状态(实战账目驱动:v001『已发布』实为假阳性,当时无状态可标):action=void(id, reason 必填)——聚合排除假阳性,面板划线展示,get 如实列出作废依据;诚实账本 > 好看账本",
+            "断点续跑协议成文化(1.9 实战验证有效后入技能):阶段转换必写 note=断点存档/下轮从最后 note 续跑/假阳性如实作废/领域产物与可复用工具的存放区分",
+            "冒烟测试 185 → 190 项全绿"
+          ]
+        },
+        {
+          "version": "2.1.0",
+          "date": "2026-11-04",
+          "changes": [
+            "修复(e2e 回归抓出):超长单行 model_io(单条可达数百 KB)在 256KB 尾部读取时头部被切,JSON.parse 必败导致 provider usage 锚点丢失回退 estimate——extractUsage 增加正则兜底(inputTokens 仅存在于 usage 对象,无误配风险),T45 用 300KB 单行锁定",
+            "冒烟测试 177 → 185 项全绿(另修 T34 跨午夜日期硬编码)"
+          ]
+        },
+        {
+          "version": "2.0.0",
+          "date": "2026-11-03",
+          "changes": [
+            "度量结构化(2.0.0 主题:实验数据成为一等公民):measure 支持结构化数字字段 views/likes/comments/completion/follows,显式非法输入直接报错不静默丢弃",
+            "ledgerAgg 聚合(条数/平均播放/最佳/最差)入 self_state 与 self_mission structured;面板新增内容实验卡(SVG 播放柱状 + 最佳标注)",
+            "self_recall 命中反思日志源(复盘标题与教训可检索)",
+            "修复:readMission 丢弃 ledgerSeq/openSeq 序号字段——第二次 publish/obstacle 会顶掉第一条(T43 抓出,两次发布测试锁定)",
+            "冒烟测试 177 → 184 项全绿"
+          ]
+        },
+        {
+          "version": "1.9.0",
+          "date": "2026-11-03",
+          "changes": [
+            "提案生命周期闭环(账务断点修复):self_journal 新增 action=update——playbook 落地后回写 landed/rejected,⚠ 过期提醒随之解除;此前提案永远停在 proposed",
+            "recall 全库模式(可选):knowledgeBase.searchScope=all 时召回整个 Obsidian 库的既有知识(递归扫描,跳过 .obsidian/.git,文件数与大小封顶)——agent 能站在用户已有知识上工作;默认 own 保守模式",
+            "self_state 新增提案生命周期仪表(proposed/stale/landed)与困难队列老化天数(最老挂 N 天)",
+            "冒烟测试 168 → 177 项全绿"
+          ]
+        },
+        {
+          "version": "1.8.0",
+          "date": "2026-11-03",
+          "changes": [
+            "内容实验台账(真机里程碑驱动:首条视频已自主发布并上架,但发布后无人回访度量):self_mission 新增 publish/measure——发布即记假设,≥48h 到期回访度量,measure 给对照定位假设的指引",
+            "self_recall 全域化:召回范围从知识库扩展到 playbooks + 自我模型(自己写的知识资产全部可检索,结果带来源标注)",
+            "日循环接线:发布必记台账/唤醒先回访到期条目/每周跨条目找模式(胜出复制、证伪撤回);面板使命卡显示台账摘要与到期 ⚠",
+            "真机里程碑:首条视频《让AI一句话给浏览器写了个黑洞》已自主发布并核验上架;RPA 数据链路自愈升级(网络拦截方案,推翻此前『无法自动化』判定)",
+            "冒烟测试 162 → 168 项全绿"
+          ]
+        },
+        {
+          "version": "1.7.0",
+          "date": "2026-11-03",
+          "changes": [
+            "知识复利闭环(此前知识库只写不读):新增 self_recall 工具——按关键词召回自己写入的笔记(评分=多行命中累计,零依赖扫描);autonomous-ops 三处接线:开工回查今日任务相关经验、困难研究前先查已学(重复研究转同题补学)、每周知识整理(合并重复/退役过时)",
+            "self_learn record 自动关联:标题与既有笔记求 2-gram 交集,自动追加 Obsidian 双链 [[相关笔记]]",
+            "kbTokens 分词修正:中文单字是合法查询,不再被 ASCII 长度规则过滤(T37)",
+            "冒烟测试 156 → 162 项全绿"
+          ]
+        },
+        {
+          "version": "1.6.0",
+          "date": "2026-11-03",
+          "changes": [
+            "经验入库(用户需求:经验也写到知识库):self_learn 新增 type=experience——亲历的「背景/做法/结果/教训」条目,frontmatter 带 type: experience + agent-experience 标签,git 提交信息区分 经验沉淀/学习记录",
+            "self_mission close 新增 experience 参数:结项时自动把使命全程经验沉淀进知识库(带运行天数),入库失败自动降级为 note 保留正文",
+            "autonomous-ops 新增经验入库节(无结果数据的经验不写);self-review 产出第 4 通道补录",
+            "冒烟测试 148 → 156 项全绿"
+          ]
+        },
+        {
+          "version": "1.5.0",
+          "date": "2026-11-03",
+          "changes": [
+            "困难驱动的自主学习(用户需求:自主学习自己遇到困难的相关知识):self_mission 新增 obstacle/resolve 动作——遇到新困难先入队,每日学习时刻研究其机制(为什么/底层原理/变体),写透后写入知识库并消化队列",
+            "学习时刻升级双源:① 困难研究(队列非空时优先,禁止只记怎么修不记为什么——操作会过期,机制才可迁移)② 新知识(队列空时)",
+            "面板使命卡显示待研究困难队列;kbRecord 抽取复用(self_learn 与 resolve 共用知识库写入)",
+            "定时任务内层指令同步困难研究条款;冒烟测试 141 → 148 项全绿"
+          ]
+        },
+        {
+          "version": "1.4.0",
+          "date": "2026-11-03",
+          "changes": [
+            "每日学习时刻(用户需求:自主进化要每天学新知识):self_learn 工具把新知识写入用户的 Obsidian 知识库(本地路径可配 knowledgeBase.path,默认子文件夹 观己学习)",
+            "agent 标识三重:frontmatter(source: agent-selfaware / agent-written: true)+ 正文 🤖 横幅 + git 提交信息 agent(观己):;同题补学追加不覆盖;autoCommit 默认开,autoPush 默认关",
+            "面板新增每日学习卡(今日/累计/最近条目);autonomous-ops 日循环加入学习时刻步骤(来源必须真实,知识库是公开仓库,署名即信誉)",
+            "修复:callTool switch 丢失 self_mission case + self_journal 重复(历史编辑事故, mission 测试曾因此静默通过存疑——已由 141 项测试锁定)",
+            "冒烟测试 128 → 141 项全绿"
+          ]
+        },
+        {
+          "version": "1.3.0",
+          "date": "2026-11-03",
+          "changes": [
+            "无头请示落点协议(实测事故驱动:B 类扫码卡死无头会话 5 小时):B/C 类请示写入 mission note(前缀【请示】)后立即结束本轮,不等待不挂起;批复经面板/下次会话",
+            "自扩展资产可见性:self_state 暴露 opsScripts(自造脚本)与 playbookFiles(含领域手册)——能力自扩展协议有了清单基础设施",
+            "self_config 白名单补 retentionDays",
+            "真机里程碑:agent 自主完成 96 条历史视频数据分析并自我纠偏使命定位(数据胜出模式 4 条写入 mission goal);chromium 自愈安装成功(ops-fixes 种子规则生效)",
+            "冒烟测试 128 → 131 项全绿"
+          ]
+        },
+        {
+          "version": "1.2.0",
+          "date": "2026-11-03",
+          "changes": [
+            "通用自主(用户澄清:抖音只是场景):autonomous-ops 重写为领域无关操作系统——核心骨架(三分类自愈/强制学习/熔断/周进化)不变,领域细节由 agent 在『域适应』时自己写进 <domain>-ops.md",
+            "能力自扩展:缺工具三选一——组合现有工具 → 自造脚本进 self/ops/scripts/(可复用可演化,跑通当天登记)→ 才借外力;禁止『我没这个能力』直接请示",
+            "定时桥泛化:每日 09:30 拉起的日循环改为驱动『当前使命』(以 self_mission get 为准),换领域不用改定时器",
+            "guanji 周度自省新增三问:本周把几个问题变成能力?ops-fixes 长了几条?自扩展了什么?"
+          ]
+        },
+        {
+          "version": "1.1.0",
+          "date": "2026-11-03",
+          "changes": [
+            "自愈协议(用户反馈『遇到问题还是需要我来』的直接回应):障碍三分类——机械障碍自己修、凭据障碍问一次永久记住、价值判断才请示;禁止把 A 类当请示上报",
+            "自主学习日常化:每日收工强制提炼 ≥1 条规则直接落 playbook(完全自主使命免事前审批,出处留痕人事后审计);连续 3 天零学习 = 进化停滞,周报须自我检讨",
+            "标准请示格式:事实 + 默认提案 + 一句话所需,用户回复一次即成永久规则",
+            "bootstrap 播种 ops-fixes.md 自愈手册(已知修法种子:playwright 缺失/凭据/验证),agent 演化内容绝不覆盖",
+            "冒烟测试 125 → 130 项全绿"
+          ]
+        },
+        {
+          "version": "1.0.0",
+          "date": "2026-11-02",
+          "changes": [
+            "完全自主运营版本:使命新增自主等级(full=完全自主/supervised=受监督),横幅与面板携带等级标记",
+            "autonomous-ops 升级完全自主版:完整日循环(唤醒自检→数据回收→内容生产+合规自检→发布→互动→收工记账)+ 熔断器(连续 3 天发布失败/失败率>50%/数据断崖 → 停发请示)+ 每周进化循环(数据→洞察→固化 playbook→guanji 周检→周报)",
+            "无人值守定时桥:配合宿主定时任务每日拉起 aopc -p 无头会话执行日循环(落地示例:自主运营抖音号,配合 douyin-pilot)",
+            "冒烟测试 121 → 125 项全绿;自 0.1.0 起 9 轮迭代,功能面闭环"
+          ]
+        },
+        {
+          "version": "0.9.0",
+          "date": "2026-11-02",
+          "changes": [
+            "使命机制(自主运营地基):self_mission 工具立项/记日志/结项;进行中的使命进入每次会话开场横幅(第 N 天)——agent 跨会话保持目标意识",
+            "面板三张零依赖 SVG 图:近 14 天活动柱状(调用/失败)、失败率折线、会话上下文占用曲线(预算轨迹 trail)",
+            "新增 autonomous-ops 技能:自主运营节律(立项/开工收工仪式/失败即复盘/周度 guanji 自检),以 douyin-pilot 运营抖音号为落地示例",
+            "self_history 增加按本地日聚合 daily;冒烟测试 110 → 121 项全绿"
+          ]
+        },
+        {
+          "version": "0.8.0",
+          "date": "2026-11-02",
+          "changes": [
+            "新增会话面板「观己 · 自我仪表盘」(ui.surfaces + MCP Apps):上下文预算进度条(provider 实测)、会话统计、自我档案健康度、慢性错误、跨会话历史与叙事、反思日志;主题跟随宿主亮/暗",
+            "四个查询工具补 structuredContent(wudi 同款模式):主 agent 调用时面板经 Gen UI 绑定实时刷新",
+            "MCP server 增加 resources/list+read(panel.html 以 text/html;profile=mcp-app 自包含分发,ext-apps SDK 内联)",
+            "真机验收:e2e 14/14 全绿(0.4.0 预算修复最终确认)、/selfcheck 功能 6/6(子代理视图适配生效)",
+            "冒烟测试 100 → 110 项全绿"
+          ]
+        },
+        {
+          "version": "0.7.0",
+          "date": "2026-11-02",
+          "changes": [
+            "事件日志保留策略 retentionDays(默认 90 天,0=永久):过期会话事件在下次启动惰性清理,events/ 不再无限增长",
+            "self_history 时间展示本地化(此前 UTC,对 UTC+8 用户傍晚的会话会显示成次日凌晨)",
+            "冒烟测试 94 → 100 项全绿(测试侧顺带修正 fs.utimesSync 秒/毫秒陷阱)"
+          ]
+        },
+        {
+          "version": "0.6.0",
+          "date": "2026-11-02",
+          "changes": [
+            "新增 self_config 工具:注入开关/节流参数/上下文窗口会话内白名单读写,立即生效,不必手改 config.json",
+            "宿主级校验通过:plugin manifest is valid(aopc plugins validate)",
+            "/selfcheck 真机 dogfood:5/6 PASS,C5 见证 self_history 积累 5 个真实会话;命令命名统一为 /selfcheck(宿主按文件名注册)",
+            "冒烟测试 85 → 94 项全绿"
+          ]
+        },
+        {
+          "version": "0.5.0",
+          "date": "2026-11-02",
+          "changes": [
+            "self_state 新增自我档案健康度:五段完整性、教训条数、最后变更日期——防止复盘漂移的仪表(T19 顺带修正健康度统计的按节切片实现)",
+            "self_journal 查询对超 7 天未落地的提案打 ⚠ 并给出清账指引——积压的提案等于没有提案(T20)",
+            "新增 scripts/e2e.mjs:真机端到端回归脚本化(复跑 V1/V2/V3 断言;--skip-subagent 省 token),与 smoke(85 项本地伪造)构成两级测试",
+            "dataRoot 回退改 os.homedir()(Windows 兼容)"
+          ]
+        },
+        {
+          "version": "0.4.0",
+          "date": "2026-11-02",
+          "changes": [
+            "真机无头验证(aopc -p ×3):hook 全链触发、provider 实测预算(39.7k/200k·19.8%)、MCP 端到端、guanji 裸名派发均通过;子代理内部调用不触发 hook(C3 负结果)",
+            "修复:rollout 在 turn 结束才落盘导致首 turn/单 turn 会话预算为 null——Stop 时增量刷新",
+            "适配 C3:self_state 子代理视图改为 Agent 派发计数(子代理内部调用对 hook 不可见)",
+            "慢性错误自动落 playbook 提案(self_errors 惰性写 journal,同签名去重)",
+            "跨会话复盘债:会话收尾未复盘失败增量并入全局,开场横幅提示,journal 落账清零;playbook 规则按 P1→P3 优先注入",
+            "冒烟测试 70 → 76 项全绿(增量搬运语义由 T5/T17 双向锁定)"
+          ]
+        },
+        {
+          "version": "0.3.0",
+          "date": "2026-11-02",
+          "changes": [
+            "慢性错误检测:self_errors 发现同一错误签名跨 ≥3 个会话复发时,标记为习惯性问题并建议固化为 playbook 规则",
+            "self_history 叙事化:Stop 事件留存我最后回复的脱敏片段(200 字符),跨会话记忆从纯统计升级为『最近在做』",
+            "新增 critic 提醒:会话内文件改动累计 10 处时,一次性建议收尾前派 critic 对抗审查(第 4 个独立开关 injectCriticNudge)",
+            "真机实证:resume 会话 SessionStart hook 与自我档案自动播种在真实宿主上验证通过;冒烟测试 59 → 70 项全绿"
+          ]
+        },
+        {
+          "version": "0.2.0",
+          "date": "2026-11-02",
+          "changes": [
+            "新增 self_history:跨会话自传体记忆(会话列表、失败率趋势、累计统计)",
+            "SessionStart 自动播种自我档案与 playbooks 骨架(只创建不覆盖);playbook 规则聚合注入横幅(600 字符预算)——L4 闭环的规则真正进入上下文",
+            "新增 /self-check 真机自检命令:逐项验证 hook 注入、数据流、rollout 对应、子代理观测、派发名",
+            "修复:self_state 可能误选子代理会话为主会话(observer 现显式标记 sub);冒烟测试扩至 59 项全绿"
+          ]
+        },
+        {
+          "version": "0.1.0",
+          "date": "2026-11-02",
+          "changes": [
+            "首个版本:L1 观察器 hook(5 事件观测 + 第一人称注入)+ MCP 四工具(self_state/self_errors/self_usage/self_journal)",
+            "L2 元认知技能 + critic 子代理;L3 自我模型与 guanji 子代理;L4 self-review 技能与 /reflect 命令",
+            "44 项冒烟测试全绿(scripts/smoke.mjs);真机会话验证待做"
+          ]
+        }
+      ]
+    }
+  ]
+}
