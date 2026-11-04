@@ -6,9 +6,9 @@
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { TOOLS, callTool } from "../lib/tools.mjs";
+import { TOOLS, callTool, bridgeConnectDomains } from "../lib/tools.mjs";
 
-const SERVER_INFO = { name: "wudi-coding", version: "0.29.0" };
+const SERVER_INFO = { name: "wudi-coding", version: "0.30.0" };
 const PANEL_URI = "ui://wudi-coding/panel.html";
 const PANEL_MIME = "text/html;profile=mcp-app";
 const panelPath = resolve(join(dirname(fileURLToPath(import.meta.url)), "..", "panel.html"));
@@ -122,7 +122,13 @@ function handleMessage(line) {
     const uri = params?.uri ?? "";
     try {
       if (uri === PANEL_URI) {
-        send(id, { contents: [{ uri: PANEL_URI, mimeType: PANEL_MIME, text: readPanel() }] });
+        send(id, {
+          contents: [{ uri: PANEL_URI, mimeType: PANEL_MIME, text: readPanel() }],
+          _meta: {
+            ui: { csp: { connectDomains: bridgeConnectDomains() } },
+            "aopc/csp": { connectDomains: bridgeConnectDomains() },
+          },
+        });
         return;
       }
       const m = uri.match(/^ui:\/\/wudi-coding\/(mockup|image)\/([\w.-]+)$/);

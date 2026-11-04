@@ -24,6 +24,43 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 const clip = (s, n = 1500) => String(s ?? "").trim().slice(-n);
 
+/* ---- 实时协同桥：canvas 变更 SSE 广播（OpenPencil 式 agent↔面板活同步） ---- */
+import http from "node:http";
+const bridgeSubscribers = new Set();
+let bridgePort = 0;
+const bridgeServer = http.createServer((req, res) => {
+  if (req.url !== "/bridge") {
+    res.writeHead(404).end();
+    return;
+  }
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "Access-Control-Allow-Origin": "*",
+  });
+  res.write(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
+  bridgeSubscribers.add(res);
+  req.on("close", () => bridgeSubscribers.delete(res));
+});
+bridgeServer.listen(0, "127.0.0.1", () => {
+  bridgePort = bridgeServer.address().port;
+});
+
+/** 向所有已连接面板广播画布变更。 */
+function broadcastCanvasChanged() {
+  for (const res of bridgeSubscribers) {
+    try {
+      res.write(`data: ${JSON.stringify({ type: "canvas-changed" })}\n\n`);
+    } catch { /* 断开的连接下次遍历时移除 */ }
+  }
+}
+
+/** 面板资源 CSP：放行本机协同桥连接。 */
+export function bridgeConnectDomains() {
+  return bridgePort ? [`http://127.0.0.1:${bridgePort}`] : [];
+}
+
 /** Gen UI：工具结果内联渲染工作台面板（MCP Apps _meta.ui 绑定）。 */
 const UI_META = { ui: { resourceUri: "ui://wudi-coding/panel.html", surface: "wudi", visibility: ["model", "app"] } };
 
@@ -303,6 +340,11 @@ export const TOOLS = [
     },
   },
   {
+    name: "wudi_canvas_bridge",
+    description: "获取设计画布实时协同桥端点（SSE）。面板通过它订阅画布变更实现 Agent↔用户实时协同；一般无需主动调用，面板启动时自动连接。",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
     name: "wudi_canvas_get",
     description: "读取设计画布（.wudi/design/canvas.json 的形状列表）。画布是 Agent 可直接操作的设计画板：线框、流程、布局草图先画在这，再导出为设计稿。",
     inputSchema: { type: "object", properties: {} },
@@ -457,6 +499,8 @@ export async function callTool(name, args = {}) {
         return toolTokensCompare(args);
       case "wudi_canvas_get":
         return toolCanvasGet();
+      case "wudi_canvas_bridge":
+        return toolCanvasBridge();
       case "wudi_canvas_edit":
         return toolCanvasEdit(args);
       case "wudi_canvas_clear":
@@ -1453,6 +1497,11 @@ function toolProjectsRemove(args) {
 
 /* ================= 设计画布（Agent 可操作） ================= */
 
+function toolCanvasBridge() {
+  if (!bridgePort) return fail("协同桥尚未就绪，稍后重试。");
+  return ok(`实时协同桥：http://127.0.0.1:${bridgePort}/bridge（SSE，画布变更推送）`, { url: `http://127.0.0.1:${bridgePort}/bridge` });
+}
+
 function toolCanvasGet() {
   const canvas = store.loadCanvas();
   return ok(`设计画布（${canvas.shapes.length} 个形状）：\n${j(canvas)}`, { canvas });
@@ -1518,6 +1567,7 @@ function toolCanvasEdit(args = {}) {
     }
   }
   store.saveCanvas(canvas);
+  broadcastCanvasChanged();
   return ok(`画布已更新（${canvas.frames.length} 画板 / ${canvas.shapes.length} 形状）：\n${summary.map((s) => `- ${s}`).join("\n")}`, { canvas });
 }
 
@@ -1527,6 +1577,7 @@ function toolCanvasClear(args = {}) {
   const n = canvas.shapes.length;
   const fn = canvas.frames.length;
   store.saveCanvas({ frames: [], shapes: [] });
+  broadcastCanvasChanged();
   return ok(`画布已清空（移除 ${fn} 画板 / ${n} 形状）。`, { canvas: { frames: [], shapes: [] } });
 }
 

@@ -35,7 +35,7 @@ const EmptyResultSchema = {
     <div class="c"><b>健康检查</b><div class="num">200</div><div class="muted">全部通过</div><span class="btn">体检报告</span></div>
   </div></body></html>`;
   const app = new App(
-    { name: "wudi-coding", version: "0.29.0" },
+    { name: "wudi-coding", version: "0.30.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -1078,6 +1078,7 @@ const EmptyResultSchema = {
     }, { passive: false });
     let drag = null;
     svg.addEventListener("mousedown", (ev) => {
+      state.canvasDragging = true;
       const target = ev.target;
       const p = pt(ev);
       if (target.id === "cv-handle" && state.canvasSel) {
@@ -1213,6 +1214,7 @@ const EmptyResultSchema = {
       }
     });
     const upHandler = () => {
+      state.canvasDragging = false;
       if (!drag) return;
       const d = drag; drag = null;
       if (d.mode === "create") {
@@ -1973,6 +1975,20 @@ const EmptyResultSchema = {
       return;
     }
     applyTheme();
+    try {
+      // OpenPencil 式实时协同：订阅画布变更桥，Agent 操作实时同步到面板
+      const bridgeRes = await callTool("wudi_canvas_bridge", {}).catch(() => null);
+      const bridgeUrl = bridgeRes?.structuredContent?.url;
+      if (bridgeUrl) {
+        const es = new EventSource(bridgeUrl);
+        es.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data);
+            if (msg.type === "canvas-changed" && !state.canvasBusy && !state.canvasDragging) loadCanvas();
+          } catch { /* 忽略畸形消息 */ }
+        };
+      }
+    } catch { /* 桥不可用时降级为手动刷新 */ }
     try {
       const ws = app.getHostContext()?.widgetState;
       if (ws && ["projects", "overview", "deploys", "design", "canvas", "docs"].includes(ws.tab)) {
