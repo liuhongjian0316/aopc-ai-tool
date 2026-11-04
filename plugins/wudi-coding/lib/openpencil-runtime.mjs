@@ -13,6 +13,7 @@ const childServerPath = join(vendorRoot, "dist", "server.mjs");
 let child = null;
 let pendingId = 0;
 const pending = new Map();
+let childStderr = "";
 let buffer = "";
 let initDone = null;
 
@@ -51,7 +52,7 @@ function ensureChild(env = {}) {
       } catch { /* 忽略非 JSON */ }
     }
   });
-  let childStderr = "";
+
   child.stderr.on("data", (d) => { childStderr += d; });
   child.on("exit", (code) => {
     console.error("[wudi] OpenPencil 子进程退出 code=" + code);
