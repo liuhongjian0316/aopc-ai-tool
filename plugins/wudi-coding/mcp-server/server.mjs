@@ -7,6 +7,10 @@ import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TOOLS, callTool, bridgeConnectDomains } from "../lib/tools.mjs";
+
+// 进程级兜底：任何未捕获错误都不能杀掉 server（宿主连接断开的根因）
+process.on("uncaughtException", (err) => console.error("[wudi] uncaught:", err.message));
+process.on("unhandledRejection", (err) => console.error("[wudi] unhandled:", String(err).slice(0, 300)));
 import { openpencilTools, openpencilCall, openpencilReadResource, openpencilResourcesList } from "../lib/openpencil-runtime.mjs";
 import { readFileSync as _rf } from "node:fs";
 import { join as _join, dirname as _dn } from "node:path";
