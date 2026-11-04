@@ -1,4 +1,4 @@
-// 红果短剧 5.3：桌面桥接入口，发行说明见 docs/release-5.3.md。
+// 红果短剧 5.7：桌面桥接入口，发行说明见 docs/release-5.7.md。
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -58,7 +58,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 红果解析与下载
   hongguoResolve: (input) => ipcRenderer.invoke('hongguo-resolve', input),
   hongguoDownloadBatch: (payload) => ipcRenderer.invoke('hongguo-download-batch', payload),
-  downloadSeriesToNas: (seriesId, quality) => ipcRenderer.invoke('download-series-to-nas', seriesId, quality),
+  downloadSeriesToNas: (seriesId, quality, options) => ipcRenderer.invoke('download-series-to-nas', seriesId, quality, options),
   onNasExportDone: cb => {
     const listener = (_event, data) => cb(data);
     ipcRenderer.on('nas-export-done', listener);
@@ -72,7 +72,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   searchResolve: (seriesId) => ipcRenderer.invoke('search-resolve', seriesId),
   searchWindowShow: (visible, sourceUrl) => ipcRenderer.invoke('search-window-show', visible, sourceUrl),
   getSeriesList: (options) => ipcRenderer.invoke('get-series-list', options),
-  forgetSeries: (seriesId) => ipcRenderer.invoke('forget-series', seriesId),
+  forgetSeries: (seriesId, options) => ipcRenderer.invoke('forget-series', seriesId, options),
   removeWatchHistory: (seriesId) => ipcRenderer.invoke('remove-watch-history', seriesId),
   cleanupWatchedEpisode: (seriesId, vidIndex) => ipcRenderer.invoke('cleanup-watched-episode', seriesId, vidIndex),
   removeSeries: (seriesId) => ipcRenderer.invoke('remove-series', seriesId),
@@ -85,6 +85,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   prepareOnlinePlay: (payload) => ipcRenderer.invoke('prepare-online-play', payload),
   releaseOnlinePlay: (payload) => ipcRenderer.invoke('release-online-play', payload),
   onlineCacheStatus: () => ipcRenderer.invoke('online-cache-status'),
+  discoverCastDevices: () => ipcRenderer.invoke('discover-cast-devices'),
+  startCasting: payload => ipcRenderer.invoke('start-casting', payload),
+  controlCasting: action => ipcRenderer.invoke('control-casting', action),
+  clearSeriesPlaybackCache: seriesId => ipcRenderer.invoke('clear-series-playback-cache', seriesId),
   clearOnlineCache: () => ipcRenderer.invoke('clear-online-cache'),
   onOnlinePlayProgress: (cb) => {
     const listener = (_e, data) => cb(data);
@@ -151,6 +155,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 红果账号（网页扫码，只读同步 APP 观看记录）
   getAccountStatus: () => ipcRenderer.invoke('get-account-status'),
+  openAccountWebLogin: () => ipcRenderer.invoke('open-account-web-login'),
   startAccountLogin: () => ipcRenderer.invoke('start-account-login'),
   pollAccountLogin: (loginId) => ipcRenderer.invoke('poll-account-login', loginId),
   cancelAccountLogin: (loginId) => ipcRenderer.invoke('cancel-account-login', loginId),

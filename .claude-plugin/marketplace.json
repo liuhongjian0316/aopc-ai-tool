@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.12.0",
+      "version": "0.28.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,195 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.28.0",
+          "date": "2026-11-04",
+          "changes": [
+            "画布数据安全：saveCanvas 写入前自动备份上一版到 canvas.backup.json（误清空/误删可让 Agent 读备份 + replace 算子恢复）",
+            "画布快捷键补全：⌘/Ctrl+A 全选（限当前画板）、Esc 取消选择",
+            "设计页 tokens 面板编辑：色板卡「编辑 JSON」弹窗直接改 tokens 并同步 tokens.css",
+            "smoke 扩展到 95 项全绿（备份用例）"
+          ]
+        },
+        {
+          "version": "0.27.0",
+          "date": "2026-11-04",
+          "changes": [
+            "画布组件戳扩充至 12 种：新增 ⏻开关 / ☑复选框 / 😊头像 / 🖼图片占位 / 📊图表占位 / ▰进度条",
+            "形状层级调整：wudi_canvas_edit 新增 reorder 算子（置顶/置底），面板单选时出现 置顶/置底 按钮",
+            "关键数据修复：sanitizeShape 对 undefined id 误判 —— 所有自动生成的形状共享 id 'undefined'，update/delete/reorder 全部命中第一个（面板多形状编辑、Agent 多形状操作的隐性破坏源）；现按类型守卫生成唯一 id",
+            "smoke 扩展到 94 项全绿（reorder 置顶/置底、12 种 stamps）"
+          ]
+        },
+        {
+          "version": "0.26.0",
+          "date": "2026-11-04",
+          "changes": [
+            "画布组件形状库：工具条新增组件下拉（🔘按钮 / ▭输入框 / ▤卡片 / H标题 / ¶正文 / —分割线），选中后在画布点击即成组放置（卡片=容器+标题+两行正文，按钮=主色矩形+白字），形状自动挂当前画板",
+            "demo applyOpsLocal 补 id 生成（stamps 无 id 时 demo 也能选中）",
+            "smoke 92 项全绿"
+          ]
+        },
+        {
+          "version": "0.25.0",
+          "date": "2026-11-04",
+          "changes": [
+            "画布撤销/重做：快照历史栈（50 步）+ ⌘Z/⌘⇧Z + 工具条 ↶↷ 按钮；服务端 wudi_canvas_edit 新增 replace 全量替换算子（frames/shapes 整体过校验，撤销回放的数据通道）",
+            "等距分布：≥3 选中时 均分横/均分纵（首尾锚定等分中间空隙）",
+            "复制粘贴：⌘C 复制选中形状 / ⌘V 偏移粘贴",
+            "smoke 扩展到 92 项全绿（replace 往返 + 非法形状拒绝不落盘 + 版本守卫 0.25.0）"
+          ]
+        },
+        {
+          "version": "0.24.0",
+          "date": "2026-11-04",
+          "changes": [
+            "画布多选与批量对齐（Figma 级操作）：选择工具空拖=框选（虚线框）、Shift+点击加选/去选、多选整体拖动、批量删除/填色、六向对齐（左/水平中/右/上/垂直中/下，≥2 选中时工具条出现）、删除按钮带数量",
+            "中键拖动平移画布（与滚轮平移并存）；键盘方向键/删除/⌘D 兼容多选",
+            "smoke 89 项全绿"
+          ]
+        },
+        {
+          "version": "0.23.0",
+          "date": "2026-11-04",
+          "changes": [
+            "画布键盘操作：Delete/Backspace 删除选中、方向键微调（Shift=10px，箭头联动尾点）、⌘/Ctrl+D 复制偏移（一次性注册，输入框聚焦时不干扰）",
+            "画布导出 PNG：序列化世界组 SVG → canvas 2x 渲染 → 宿主 downloadFile 下载（能力探测，不可用时灯箱预览右键保存）；按形状包围盒自动取景",
+            "设计图墙按设计名分组（渲染时间戳归组，组头计数）",
+            "smoke 89 项全绿"
+          ]
+        },
+        {
+          "version": "0.22.0",
+          "date": "2026-11-04",
+          "changes": [
+            "工作台总览升级为操作中枢：新增「下一步」状态驱动建议区 —— 按项目缺口自动给出可执行动作（缺构建/部署目标/健康检查、首次部署、上次失败排查、tokens 未沉淀、文档空白），点按钮直达对应页",
+            "设计页新增资产统计条（设计稿 HTML / 渲染 PNG / tokens 色值 / tokens 基准四格）",
+            "刷新联动：总览刷新同时拉取设计资产与画布数据（新渲染 PNG / 新 .fig 无需切页再刷）",
+            "smoke 89 项全绿 + 版本一致性守卫（0.22.0 三处一致）"
+          ]
+        },
+        {
+          "version": "0.21.0",
+          "date": "2026-11-03",
+          "changes": [
+            "wudi_tokens_compare：外部 tokens（OpenPencil design_to_tokens / Figma 变量导出）与本地 tokens 按扁平键路径比对，新增/变更/移除三清单（Gen UI 绑定），只出报告不改本地 —— tokens 双向闭环收口",
+            "面板设计页「把无敌线框转入 .fig」：一键唤起 Agent 用双工具集转换（wudi_canvas_get 读线框 → OpenPencil new_design + create_shape 按坐标重建 → export_image 渲染进图墙）",
+            "smoke 新增版本一致性守卫（plugin.json / panel.js / server.mjs 三处断言一致，根治版本串漂移）+ tokens_compare 用例；扩展到 89 项全绿"
+          ]
+        },
+        {
+          "version": "0.20.0",
+          "date": "2026-11-03",
+          "changes": [
+            "无敌编程 ↔ OpenPencil 链接与交互：wudi_designs_list 列出工作区 designs/*.fig/.pen 设计稿（文件级清单，结果绑定面板 Gen UI）；设计页每个 .fig 带「在 OpenPencil 打开」「渲染到图墙」按钮（经宿主 message 唤起 Agent：open_design 协同编辑 / export_image 渲染 PNG 到 .wudi/design/renders/ 自动进设计图墙）",
+            "wudi-ui 技能新增 OpenPencil 工作流分支（建稿 render JSX / 改稿 batch_update / 进面板 export_image / tokens 双向打通 design_to_tokens ↔ wudi_design_tokens_set）",
+            "smoke 扩展到 86 项全绿（designs_list 发现 openpencil 建的 .fig）"
+          ]
+        },
+        {
+          "version": "0.19.2",
+          "date": "2026-11-03",
+          "changes": [
+            "修复 OpenPencil 编辑器 WASM 被 CSP 拦截（WebAssembly.instantiate violates CSP）：vendor 源码的资源 _meta 使用 zcode/csp 键，AOPC 宿主读取 aopc/csp —— 现两键并声明（wasmUnsafeEval + unsafeEval），CanvasKit/Yoga/kiwi 动态编译放行"
+          ]
+        },
+        {
+          "version": "0.19.1",
+          "date": "2026-11-03",
+          "changes": [
+            "修复 OpenPencil 面板加载失败（Resource ui://openpencil/panel not found）：清单 resourceUri 补上 .html 扩展名（server 实际注册 ui://openpencil/panel.html），安装副本已验证 resources/read 返回 604KB 编辑器页（profile=mcp-app）",
+            "说明：MCP Apps 架构下一个 surface 绑定一个 server，OpenPencil 编辑器必须独立 surface 运行；工作台设计页作为设计中心 hub（四画布入口 + .fig/.designcraft/渲染产物汇集）"
+          ]
+        },
+        {
+          "version": "0.19.0",
+          "date": "2026-11-03",
+          "changes": [
+            "vendor 官方 OpenPencil 插件（MIT，源码 zai-org/zcode-plugins，本地构建）：Figma .fig 设计稿编辑器 + Agent 117 个工具 —— JSX 渲染节点、auto-layout、组件/实例、设计变量、Iconify 图标库、布尔运算、design_to_tokens、analyze 色板/排版/间距、export SVG/PDF/PNG、query_nodes(XPath)",
+            "清单接线：双 MCP server（wudi + openpencil，ZCODE_* 环境映射 AOPC_*）+ 双面板 surface（OpenPencil 编辑器入侧栏）；vendor 含 node_modules 运行时闭包（css-tree/canvaskit-wasm 等，官方 stage 逻辑）与 MIT/Apache 归属文件",
+            "设计页新增 OpenPencil 推荐区块（新建 designs/<名>.fig 并唤起 Agent 建 hero 区块）；四大画布方案齐备：OpenPencil（.fig+117 工具）/ DesignCraft（25 工具）/ Excalidraw（白板）/ Figma（浏览器+只读）",
+            "smoke 扩展到 85 项：vendor server 独立会话（117 工具、关键工具在列、new_design 建稿、面板资源）"
+          ]
+        },
+        {
+          "version": "0.18.0",
+          "date": "2026-11-03",
+          "changes": [
+            "接入官方 DesignCraft 插件（完整设计编辑器 + Agent 25 工具读写：new_document/place_image/pointer/drag/render_page 等）：设计页新增推荐区块（新建设计文档/渲染当前页到图库，经宿主 message 唤起 Agent）",
+            "资源管线扩展：.wudi/design/renders/ 目录纳入设计图墙扫描 —— DesignCraft 渲染的 PNG 自动进面板",
+            "补充 v0.17 遗漏的动作处理器（fig-save/fig-open/ex-new/ex-export —— 渲染防御化暴露后补齐）",
+            "调研结论：OpenPencil（.fig 设计稿 + Agent 读写）为官方示例插件，市场尚未发布暂不可装；Figma API 只读 —— Agent 写设计走 DesignCraft/Excalidraw"
+          ]
+        },
+        {
+          "version": "0.17.0",
+          "date": "2026-11-03",
+          "changes": [
+            "Figma 集成（方案 B 落地）：设计页新增「Figma · 完整编辑器」区块 —— 保存文件链接后一键在浏览器打开 Figma 完整编辑器（画布/图层/属性面板全功能）；Figma 编辑器与 API 均只读，Agent 读设计 ✅（结构/渲染图/tokens 比对）、写 Figma ❌（官方 MCP 也只读，已核实），需 Agent 写的设计走 Excalidraw（Agent 可完整读写）",
+            "wudi_figma_link 工具：记住/查看 Figma 文件链接（.wudi/design/figma-url.txt），结果绑定面板",
+            "画布页重组：Excalidraw 完整设计画布升为主推（新建白板/线框转入，Agent 读写 ✅），无敌快速线框画布降级为折叠实验项",
+            "smoke 80 项全绿（Gen UI 绑定 4→5）"
+          ]
+        },
+        {
+          "version": "0.16.2",
+          "date": "2026-11-03",
+          "changes": [
+            "修复 面板渲染出错 bindActions is not defined：v0.16 画布 v2 拼接时误删动作区（envArg + bindActions 全部 14 个处理器：项目登记/移除/下钻、环境切换、SSH/通知测试、健康检查、回滚/部署审批、快速建档、周报、生成设计稿、tokens 导出、文档唤起）—— 已原样重建",
+            "上版本的握手前置 + 渲染防御化让该错误直接显示在面板上而非超时黑屏（本次即靠此定位）",
+            "smoke 80 项全绿；安装副本确认含 bindActions"
+          ]
+        },
+        {
+          "version": "0.16.1",
+          "date": "2026-11-03",
+          "changes": [
+            "修复 ui/initialize handshake timed out：v0.16 画布重构把 state.cv 视口漏在 state 初始化外，画布相关渲染路径一触发即 TypeError，异常吃掉了面板与宿主的握手 —— state 补齐初始化 + main() 改为握手前置（connect 成功后才渲染）+ render 全量防御化（异常降级为错误卡片并 sendLog 上报，不再阻断握手）",
+            "修复画布全局 mouseup 监听随渲染累积（bindCanvas 顶部摘除旧监听）",
+            "smoke 80 项全绿"
+          ]
+        },
+        {
+          "version": "0.16.0",
+          "date": "2026-11-03",
+          "changes": [
+            "画布 v2：Figma 式无限画布 + 多画板 —— 所有 UI 设计在同一块画布上。滚轮平移、⌘/Ctrl+滚轮以光标为中心缩放（15%~400%）、适应视图；画板管理（预设 桌面1440/1280、移动375、平板768，拖拽整帧联动子形状、双击/图层重命名、删除可选连形状）、图层面板（形状计数）、形状挂 frameId 自动入画板",
+            "Agent 帧操作：wudi_canvas_edit 新增 add_frame/update_frame/delete_frame（delete_frame 可选连形状），形状 frameId 校验；旧 v1 画布自动迁移（形状归入默认画板）",
+            "导出 v2：按画板逐个出设计稿 HTML（画板名即文件名，保留中文）进图库；excalidraw 场景带 Excalidraw frame 元素（子元素 frameId 关联）",
+            "修复：中文画板名被文件名清洗吞掉；smoke 扩展到 80 项全绿（帧操作/迁移/按帧导出/frame 映射）"
+          ]
+        },
+        {
+          "version": "0.15.0",
+          "date": "2026-11-03",
+          "changes": [
+            "接入现有完整级画布：桥接官方 Excalidraw 插件（已装即用）——wudi_canvas_export 新增 format=excalidraw/both，画布形状映射为 .excalidraw 场景（rect→rectangle、文字/箭头 points 透传）落到 .wudi/design/canvas/",
+            "面板画布页新增「在 Excalidraw 打开 ↗」：导出场景后经宿主 message 唤起 Agent 调 open_diagram 导入，在完整级白板继续拖拽/连线/改样式（该插件 Agent 工具 create_diagram/apply_operations 同样可用）",
+            "节奏：线框在无敌画布（快）→ 完整级编辑在 Excalidraw（全功能）→ 设计稿在图库",
+            "修复：场景导出 rect 类型未映射、el() 白名单丢 text/points 字段（smoke 抓出）；smoke 78 项全绿"
+          ]
+        },
+        {
+          "version": "0.14.0",
+          "date": "2026-11-03",
+          "changes": [
+            "无敌画布：Agent 可操作的设计画布集成进面板——wudi_canvas_get/edit/clear/export 四工具，Agent 直接在画布上铺线框/改样式/清理；面板新增「画布」页（选择/矩形/圆/菱形/箭头/文本工具、tokens 填色色板、拖拽移动、把手缩放、双击改字），双方共享同一份 canvas.json",
+            "画布导出闭环：wudi_canvas_export 把线框内联为 SVG 设计稿 HTML 落到 mockups/，自动进面板图库与文档库 —— 线框在画布、精修在模板",
+            "形状校验：类型白名单、坐标钳制、文本截断，非法形状带索引报错；clear 需 confirm",
+            "wudi-ui 技能新增画布章节（线框在画布、精修在模板）；smoke 扩展到 76 项全绿（画布全链 8 项断言）"
+          ]
+        },
+        {
+          "version": "0.13.0",
+          "date": "2026-11-03",
+          "changes": [
+            "内置设计模板库：skills/wudi-ui/templates/ 三套完整级 HTML 设计模板（dashboard 管理后台 / landing 落地页 / mobile 移动端 375 画布），带 tokens 变量与【可改区】改造指引，/wudi-ui 生成设计稿从模板起步",
+            "面板生成设计稿闭环：设计页选模板类型 + 填页面名 → 一键唤起 Agent 按 wudi-ui 流程生成，完成后自动进图库（message 能力探测降级）",
+            "wudi_design_tokens_export：tokens 导出为 css / tailwind（theme.extend 片段）/ json 三格式，落盘 .wudi/design/exports/，面板加导出按钮",
+            "smoke 扩展到 68 项（模板完整性、导出三格式）全绿"
+          ]
+        },
         {
           "version": "0.12.0",
           "date": "2026-11-02",
@@ -152,7 +341,7 @@
         "en": "Hongguo short-drama downloader for AOPC: agent-driven search/resolve/download/progress with a self-contained Electron runtime shell carrying the full UI; downloads continue with the window closed.",
         "zh-CN": "红果短剧下载器接入 AOPC：Agent 可搜索/解析/提交下载/查询进度，独立 Electron 运行壳承载完整 UI，关窗后台续下"
       },
-      "version": "0.2.2",
+      "version": "0.3.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -167,6 +356,15 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.3.0",
+          "date": "2026-11-04",
+          "changes": [
+            "运行壳同步上游 v5.7（内部 5.7.0，源码预发；5.3→5.7 跨 4 个版本）：播放请求签名恢复、官网扫码登录、DLNA 单集投屏、按剧清缓存、观看记录分组、bytevc2 解码等",
+            "8 条 AOPC 补丁锚点全部命中，零人工干预回放；新增 vendored 模块 bytevc2/casting/account-web-login",
+            "修复「窗口请求无效」：启动 createWindow 加守卫（0.2.2 引入），防 /show 竞态双窗口"
+          ]
+        },
         {
           "version": "0.2.2",
           "date": "2026-11-02",

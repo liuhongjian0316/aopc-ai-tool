@@ -6,7 +6,7 @@
 // bounded HTTPS transport; exact episode matching; supported codec selection.
 // Crypto tables and SDK protocol constants below are not user credentials.
 const crypto = require('node:crypto');
-const { getPlaybackDevice } = require('./playback-device');
+const { registerPlaybackDevice } = require('./playback-device');
 const sm3 = require('./sm3');
 const { normalizeDownloadQuality, meetsDownloadQuality } = require('./download-quality');
 const localId = () => String(1000000000000000n + BigInt('0x' + crypto.randomBytes(6).toString('hex')));
@@ -133,14 +133,30 @@ function helios(khronos) {
 }
 
 function branchOf(url, body, khronos) { const bodyMd5 = body ? crypto.createHash('md5').update(body).digest() : Buffer.alloc(16); const q = sm3(url.split('?')[1]); const iv = getIv(getIv(getIv(0x20230928, q), bodyMd5), le32(khronos)); const low = iv & 15; return low - (((low * 171) >> 9) * 3); }
-function playbackRequest(payload, identity) {
-    // Registered identity alone is sufficient for this endpoint; keep search signing separate.
-    const query = pythonUrlEncode({ ...DEVICE, ...identity, _rticket: String(Date.now()) });
-    return { url: `${VIDEO_API}?${query}`, body: Buffer.from(payload), headers: {
+function playbackRequest(payload, identity, host = new URL(VIDEO_API).hostname) {
+    const body = Buffer.from(payload);
+    const khronos = Math.floor(Date.now() / 1000), ticketBase = Date.now();
+    const device = { ...DEVICE, ...identity };
+    let query, url, requestTicket;
+    for (let n = 0; n < 128; n += 1) {
+        requestTicket = ticketBase + n;
+        query = pythonUrlEncode({ ...device, ts: String(khronos), _rticket: String(requestTicket) });
+        url = `https://${host}/novel/player/multi_video_model/v1/?${query}`;
+        if (branchOf(url, body, khronos) === 0) break;
+        if (n === 127) throw new Error('无法生成播放请求签名');
+    }
+    return { url, body, headers: {
         'User-Agent': PLAYBACK_UA, Accept: 'application/json; charset=utf-8,application/x-protobuf',
         'Content-Type': 'application/json; charset=UTF-8',
+        'x-ss-req-ticket': String(requestTicket), 'sdk-version': '2', 'x-xs-from-web': '0',
+        'x-khronos': String(khronos),
+        'x-gorgon': xGorgon(query, body, khronos, Math.floor(Math.random() * 65536)),
+        'x-ladon': be32(khronos).toString('base64'), 'x-argus': le32(khronos).toString('base64'),
+        'x-helios': helios(khronos), 'x-medusa': buildMedusa(url, body, khronos, device), 'x-tt-dt': '',
+        'x-tt-store-region': 'cn', 'x-tt-store-region-src': 'did',
     } };
 }
+
 function parseSearchInteger(value) {
     if (typeof value !== 'number' && (typeof value !== 'string' || !/^\d+$/.test(value.trim()))) return null;
     const number = Number(value);
@@ -345,28 +361,34 @@ async function requestJson(url, options, deadline, signal) {
 }
 
 async function fetchAppPlayUrl(vid, options = {}) {
-    const requestedQuality = normalizeDownloadQuality(options.quality);
-    const allowLowerQuality = options.allowLowerQuality === true && requestedQuality !== 'auto';
+    normalizeDownloadQuality(options.quality); // Validate before registration or network I/O.
     vid = String(vid || '');
     if (!/^\d{1,30}$/.test(vid)) throw new Error('分集编号无效');
-    const deadline = Date.now() + 12000;
-    const signal = AbortSignal.timeout(12000);
     const payload = JSON.stringify({
         biz_param: { detail_page_version: 0, device_level: 3, disable_digg_stat: false, need_all_video_definition: true, need_mp4_align: false, use_os_player: false, use_server_dns: false, video_platform: 1024 },
         mixed_video_id_map: { '1004': [vid] },
     });
-    let identity = await getPlaybackDevice(requestJson);
+    // Playback identities can be single-use; search/account retain their shared device.
+    let identity = await registerPlaybackDevice(requestJson);
+    // Registration has its own 8s budget; it must not consume the model request budget.
+    const deadline = Date.now() + 12000;
+    const signal = AbortSignal.timeout(12000);
     let response;
     for (let attempt = 0; attempt < 2; attempt++) {
-        const signed = playbackRequest(payload, identity);
+        const signed = playbackRequest(payload, identity, attempt ? 'api5-normal-hl.fqnovel.com' : new URL(VIDEO_API).hostname);
+        if (attempt) signed.headers.Connection = 'close';
         try {
             response = await requestJson(signed.url, { method: 'POST', headers: signed.headers, data: signed.body }, deadline, signal);
             break;
         } catch (error) {
-            if (attempt || error.code !== 'EMPTY_RESPONSE' || deadline - Date.now() < 8000) throw error;
-            const renewed = await getPlaybackDevice(requestJson, identity);
-            if (renewed === identity) throw error;
-            identity = renewed;
+            if (attempt || error.code !== 'EMPTY_RESPONSE' || deadline - Date.now() < 1000) throw error;
+            // Keep one alternate-host attempt even when a fresh registration fails.
+            if (deadline - Date.now() >= 8000) {
+                try { identity = await registerPlaybackDevice(requestJson); }
+                catch (_) { /* Keep the previously registered identity for the alternate route. */ }
+            }
+            if (deadline - Date.now() < 500) throw error;
+            await new Promise(resolve => setTimeout(resolve, 300));
         }
     }
     if (Number(response.Code || response.code || 0) !== 0) throw Object.assign(new Error('App 接口暂未提供本集播放信息'), { code: 'BUSINESS_REJECTED' });
@@ -374,27 +396,50 @@ async function fetchAppPlayUrl(vid, options = {}) {
     const model = typeof entry?.video_model === 'string' ? jsonBody(entry.video_model) : entry?.video_model;
     if (!model) throw Object.assign(new Error('App 接口未返回所选分集，已停止取址'), { code: entry?.video_model ? 'INVALID_RESPONSE' : 'MISSING_MODEL' });
     const inline = Array.isArray(model.video_list) && model.video_list.length > 0;
-    let info = model;
-    if (!inline) {
+    const readFallback = async () => {
         const fallback = parseFallback(model.fallback_api);
         if (!fallback) throw Object.assign(new Error('App 接口未返回本集片源地址'), { code: 'MISSING_MODEL' });
         const outer = await requestJson(fallback, { headers: { 'User-Agent': VIDEO_UA } }, deadline, signal);
         if ([outer, outer.video_info].some(value => Number(value?.Code || value?.code || 0) !== 0)) {
             throw Object.assign(new Error('App 接口暂未提供本集播放信息'), { code: 'BUSINESS_REJECTED' });
         }
-        info = outer?.video_info?.data;
+        return outer?.video_info?.data;
+    };
+    if (!inline) return parseAppPlayModel(await readFallback(), vid, options, false);
+    try {
+        return parseAppPlayModel(model, vid, options, true);
+    } catch (error) {
+        // Only absent encryption metadata enables this recovery path; the fallback
+        // must independently pass identity, duration, encryption and URL validation.
+        const duration = Number(model.video_duration);
+        if (!error.incompleteEncryptionMetadata || typeof model.video_id !== 'string' || !model.video_id.trim() || !Number.isFinite(duration) || duration <= 0
+            || !error.minimumPixels || !model.fallback_api) throw error;
+        const info = await readFallback();
+        const fallbackDuration = Number(info?.video_duration);
+        if (info?.video_id !== model.video_id || !Number.isFinite(fallbackDuration) || fallbackDuration <= 0
+            || Math.abs(fallbackDuration - duration) > 0.5) {
+            throw Object.assign(new Error('备用片源编号或完整时长无法确认，已停止取址'), { code: 'INVALID_RESPONSE' });
+        }
+        return parseAppPlayModel(info, vid, options, false, true, error.minimumPixels);
     }
+}
+
+function parseAppPlayModel(info, vid, options, inline, requireEncryptionMetadata = inline, minimumPixels = 0) {
+    const requestedQuality = normalizeDownloadQuality(options.quality);
+    const allowLowerQuality = options.allowLowerQuality === true && requestedQuality !== 'auto';
     if (!info) throw Object.assign(new Error('App 接口未返回本集片源模型'), { code: 'MISSING_MODEL' });
     const compatibleRows = Object.values(info?.video_list || {}).filter(item => item && (item.main_url || item.backup_url || Array.isArray(item.backup_url_list))).map(item => {
         const codec = str(item.codec_type || item.video_meta?.codec_type).toLowerCase();
-        const codecRank = ['h264', 'avc', 'avc1'].includes(codec) ? 0 : ['hevc', 'h265', 'hvc1', 'hev1', 'bytevc1'].includes(codec) ? 1 : 2;
+        const codecRank = ['h264', 'avc', 'avc1'].includes(codec) ? 0 : ['hevc', 'h265', 'hvc1', 'hev1', 'bytevc1'].includes(codec) ? 1 : codec === 'bytevc2' ? 2 : 3;
         const quality = str(item.quality_desc || item.definition || item.video_meta?.definition || item.height || item.vheight);
         const meta = item.video_meta || {};
         const [width, height] = [[item.vwidth, item.vheight], [item.width, item.height], [meta.vwidth, meta.vheight], [meta.width, meta.height]]
             .map(pair => pair.map(Number)).find(pair => pair.every(value => Number.isFinite(value) && value > 0)) || [0, 0];
         const pixels = width && height ? Math.min(width, height) : Number(quality.match(/\d+/)?.[0] || 0);
         return { item, codec, codecRank, quality, pixels, width, height };
-    }).filter(row => row.codecRank < 2);
+    }).filter(row => row.codecRank < 3 && (!minimumPixels || Math.min(row.width, row.height) >= minimumPixels)
+        && (row.codecRank !== 2 || (row.width > 0 && row.height > 0 && typeof info.video_id === 'string'
+            && info.video_id.trim() && Number.isFinite(Number(info.video_duration)) && Number(info.video_duration) > 0)));
     const rows = compatibleRows.filter(row => allowLowerQuality || meetsDownloadQuality(row, requestedQuality)).sort((a, b) => {
         if (requestedQuality === 'auto') return a.codecRank - b.codecRank || b.pixels - a.pixels;
         const aMeets = meetsDownloadQuality(a, requestedQuality), bMeets = meetsDownloadQuality(b, requestedQuality);
@@ -406,12 +451,15 @@ async function fetchAppPlayUrl(vid, options = {}) {
         const strictQuality = compatibleRows.length > 0 && requestedQuality !== 'auto' && !allowLowerQuality;
         throw Object.assign(new Error(strictQuality
             ? `本集暂无尺寸可确认且满足 ${requestedQuality} 的 H.264/HEVC 片源，未降级`
-            : '本集暂未提供兼容的 H.264/HEVC 片源'), {
+            : Object.values(info.video_list || {}).some(item => str(item?.codec_type || item?.video_meta?.codec_type).toLowerCase() === 'bytevc2')
+                ? '本集仅提供播放器不支持的 ByteVC2 编码，当前无法播放或下载，请在官方 App 观看'
+                : '本集暂未提供兼容的 H.264/HEVC 片源'), {
             code: strictQuality ? 'QUALITY_UNAVAILABLE' : 'NO_COMPATIBLE_SOURCE',
             ...(strictQuality ? { quality: requestedQuality } : {}),
         });
     }
     let lastError;
+    let incompleteEncryptionMetadata = false;
     const variants = [];
     const seen = new Set();
     // Auto means "best available". Keep every compatible encoding at the same
@@ -423,7 +471,8 @@ async function fetchAppPlayUrl(vid, options = {}) {
     for (const selected of selectedRows) {
         try {
             const spade = selected.item.spade_a || selected.item.encrypt_info?.spade_a;
-            if (inline && !spade && ![false, 0, '0', 'false'].includes(selected.item.encrypt_info?.encrypt)) {
+            if (requireEncryptionMetadata && !spade && ![false, 0, '0', 'false'].includes(selected.item.encrypt_info?.encrypt)) {
+                if (selected.item.encrypt_info?.encrypt == null) incompleteEncryptionMetadata = true;
                 throw Object.assign(new Error('本集片源缺少有效解密信息'), { code: 'INVALID_RESPONSE' });
             }
             const key = spade ? deriveContentKey(spade) : null;
@@ -441,13 +490,22 @@ async function fetchAppPlayUrl(vid, options = {}) {
                     variants.push({ url, contentKey, codec: selected.codec === 'bytevc1' ? 'hevc' : selected.codec, source: 'app', vid,
                         userAgent: inline ? PLAYBACK_UA : VIDEO_UA, quality: allowLowerQuality ? (selected.width && selected.height ? `${Math.min(selected.width, selected.height)}p` : '') : requestedQuality === 'auto' ? selected.quality : requestedQuality,
                         ...(requestedQuality === 'auto' ? {} : { width: selected.width, height: selected.height }) });
+                    if (selected.codec === 'bytevc2') Object.assign(variants[variants.length - 1], {
+                        width: selected.width, height: selected.height, duration: Number(info.video_duration),
+                    });
                 } catch (error) { lastError = error; }
             }
         } catch (error) { lastError = error; }
     }
     if (variants.length) return { ...variants[0], variants };
     throw lastError?.code === 'SECURITY_BLOCKED' ? lastError
-        : Object.assign(new Error('本集片源地址或密钥无法解析'), { code: 'INVALID_RESPONSE' });
+        : Object.assign(new Error('本集片源地址或密钥无法解析'), {
+            code: 'INVALID_RESPONSE',
+            ...(incompleteEncryptionMetadata ? {
+                incompleteEncryptionMetadata: true,
+                minimumPixels: Math.min(rows[0].width, rows[0].height),
+            } : {}),
+        });
 }
 
 module.exports = { fetchAppPlayUrl, signedSearchRequest, signedMetadataRequest, signedAccountRequest, parseSearchInteger, preserveLargeJsonIntegers, requestJson, SEARCH_API, SEARCH_UA };

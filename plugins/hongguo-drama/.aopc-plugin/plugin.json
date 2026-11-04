@@ -1,7 +1,7 @@
 {
   "name": "hongguo-drama",
-  "version": "0.2.2",
-  "description": "红果短剧下载器接入 AOPC：Agent 可搜索/解析/提交下载/查询进度，独立 Electron 运行壳承载完整 UI（播放、下载管理、追剧），关窗后台续下；侧栏面板可视化剧库与下载进度",
+  "version": "0.3.0",
+  "description": "红果短剧下载器（上游 5.7）接入 AOPC：Agent 可搜索/解析/提交下载/查询进度，独立 Electron 运行壳承载完整 UI（播放、下载管理、追剧），关窗后台续下；侧栏面板可视化剧库与下载进度",
   "description_i18n": {
     "en": "Hongguo short-drama downloader for AOPC: let the agent search, resolve, submit downloads and track progress; a self-contained Electron runtime shell carries the full UI (player, download manager, follow-list) and keeps downloading with the window closed. Sidebar panel visualizes library and download progress.",
     "zh-CN": "红果短剧下载器接入 AOPC：Agent 可搜索/解析/提交下载/查询进度，独立 Electron 运行壳承载完整 UI（播放、下载管理、追剧），关窗后台续下；侧栏面板可视化剧库与下载进度"

@@ -1,7 +1,7 @@
 {
   "name": "hongguo-aopc-runtime",
-  "version": "5.3.0-aopc.1",
-  "description": "红果短剧 AOPC 插件运行壳（vendor 自 jackotom/hongguo-drama 5.3.0，GPL-3.0）",
+  "version": "5.7.0-aopc.1",
+  "description": "红果短剧 AOPC 插件运行壳（vendor 自 jackotom/hongguo-drama 5.7.0，GPL-3.0）",
   "main": "main.js",
   "license": "GPL-3.0",
   "private": true
