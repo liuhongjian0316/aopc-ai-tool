@@ -7,6 +7,8 @@ import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TOOLS, callTool, bridgeConnectDomains } from "../lib/tools.mjs";
+import { openpencilTools, openpencilCall, openpencilReadResource, openpencilResourcesList } from "../lib/openpencil-runtime.mjs";
+let opToolsCache = []; // openpencil 工具缓存（首次 tools/list 后后台填充）
 
 const SERVER_INFO = { name: "wudi-coding", version: "0.30.0" };
 const PANEL_URI = "ui://wudi-coding/panel.html";
@@ -131,6 +133,12 @@ function handleMessage(line) {
         });
         return;
       }
+      if (uri.startsWith("ui://openpencil/")) {
+        openpencilReadResource(uri)
+          .then((result) => send(id, result))
+          .catch((err) => sendError(id, -32602, `OpenPencil 资源读取失败：${String(err?.message ?? err).slice(0, 200)}`));
+        return;
+      }
       const m = uri.match(/^ui:\/\/wudi-coding\/(mockup|image)\/([\w.-]+)$/);
       if (!m) {
         sendError(id, -32602, `未知资源：${uri}（可用：${PANEL_URI} 或设计资源）`);
@@ -149,12 +157,23 @@ function handleMessage(line) {
     return;
   }
   if (method === "tools/list") {
-    send(id, { tools: TOOLS });
+    // 立即回 wudi 工具；openpencil 工具后台拉取缓存供下次 tools/list 合并
+    openpencilTools().catch(() => {});
+    send(id, { tools: [...TOOLS, ...opToolsCache] });
     return;
   }
   if (method === "tools/call") {
     inFlight++;
-    callTool(params?.name ?? "", params?.arguments ?? {})
+    const toolName = params?.name ?? "";
+    const isWudiTool = TOOLS.some((t) => t.name === toolName);
+    const callPromise = isWudiTool
+      ? callTool(toolName, params?.arguments ?? {})
+      : openpencilCall(toolName, params?.arguments ?? {}).then((r) => ({
+          content: (r.content ?? []).map((c) => ({ type: "text", text: c.text ?? "" })),
+          isError: !!r.isError,
+          structuredContent: r.structuredContent,
+        }));
+    callPromise
       .then((result) => send(id, result))
       .catch((err) => sendError(id, -32603, `工具内部错误：${String(err?.message ?? err).slice(0, 500)}`))
       .finally(() => {

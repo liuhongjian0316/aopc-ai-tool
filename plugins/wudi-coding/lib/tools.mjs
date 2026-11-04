@@ -10,6 +10,7 @@ import * as store from "./store.mjs";
 import { sshRun, localRun, uploadFile, sshPing, sshConfig } from "./ssh.mjs";
 import { figmaToken, parseFigmaRef, fetchFigmaStructure, fetchFigmaImages, extractStyles } from "./figma.mjs";
 import { getFigmaUrl, setFigmaUrl } from "./store.mjs";
+import { openpencilTools, openpencilCall, openpencilReadResource, openpencilResourcesList, openpencilBridgeEndpoint } from "./openpencil-runtime.mjs";
 import { resolveNotify, sendNotify } from "./notify.mjs";
 
 const ok = (text, structuredContent) => ({

@@ -96,17 +96,6 @@
         "server": "wudi",
         "resourceUri": "ui://wudi-coding/panel.html",
         "availability": "session"
-      },
-      {
-        "id": "openpencil",
-        "title": {
-          "zh-CN": "OpenPencil 设计稿",
-          "en-US": "OpenPencil"
-        },
-        "icon": "pen-tool",
-        "server": "openpencil",
-        "resourceUri": "ui://openpencil/panel.html",
-        "availability": "session"
       }
     ]
   }

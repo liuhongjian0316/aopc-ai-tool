@@ -191,6 +191,10 @@ aopc plugin install wudi-coding
 - **画布快捷键补全**：⌘/Ctrl+A 全选当前画板形状、Esc 取消选择。
 - **tokens 面板编辑**：色板卡「编辑 JSON」弹窗直接改 tokens 并同步 tokens.css。
 
+## Agent↔面板实时协同（v0.30）
+
+- **实时协同桥**：wudi server 内置 SSE 端点（127.0.0.1 随机端口），画布变更实时广播；面板 EventSource 订阅 —— Agent 的 `wudi_canvas_edit`/`clear` 操作**实时出现在用户眼前的画布上**（拖拽中自动避让），OpenPencil 同款活协同。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。
