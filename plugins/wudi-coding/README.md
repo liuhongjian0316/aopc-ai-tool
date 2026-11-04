@@ -101,6 +101,92 @@ aopc plugin install wudi-coding
 - **设计图墙**：`wudi_figma_images` 下载的 PNG 以图片墙展示，点击灯箱放大。
 - **完整级别面板**：总览页统计卡片行（部署数/成功率/文档/设计产物）、导航图标化、品牌横幅、项目卡片网格、健康徽章时间线 —— 面板本身按 wudi-ui 设计标准打造。
 
+## 设计生成闭环（v0.13）
+
+- **内置设计模板库**：`skills/wudi-ui/templates/` 三套完整级模板（dashboard / landing / mobile），`/wudi-ui` 从模板起步生成，不再从白板开始。
+- **面板生成闭环**：设计页选模板类型 + 填页面名 → 唤起 Agent 生成 → 自动进图库。
+- **tokens 导出**：`wudi_design_tokens_export`（css / tailwind / json），面板一键导出 tokens.css。
+
+## 无敌画布（v0.14）
+
+- **Agent 可操作的设计画布**：面板「画布」页（选择/矩形/圆/菱形/箭头/文本、tokens 填色、拖拽缩放、双击改字）与 Agent（`wudi_canvas_get/edit/clear/export`）共享同一份 `.wudi/design/canvas.json`。
+- **线框→设计稿闭环**：`wudi_canvas_export` 把画布线框内联为 SVG 设计稿 HTML，自动进图库与设计稿预览。
+- 使用节奏：布局探索用画布（Agent 铺线框 + 你拖拽微调），定稿导出后按模板精修。
+
+## Excalidraw 桥接（v0.15）
+
+- 无敌画布（快速线框）与**官方 Excalidraw 插件**（完整级白板，已装即用）打通：`wudi_canvas_export {format: "excalidraw"}` 生成 .excalidraw 场景，面板「在 Excalidraw 打开 ↗」一键唤起 Agent 导入；Excalidraw 的 create_diagram/apply_operations 也可供 Agent 继续操作。
+- 节奏：线框在无敌画布 → 完整级编辑在 Excalidraw → 设计稿在图库 → 精修按模板。
+
+## Figma 式画布（v0.16）
+
+- **无限画布 + 多画板**：滚轮平移、⌘/Ctrl+滚轮缩放、适应视图；每个 UI 设计一个画板（预设 桌面1440 / 移动375 / 平板768），拖画板标签整帧联动，图层面板管理。
+- **Agent 帧操作**：`wudi_canvas_edit` 支持 add_frame / update_frame / delete_frame，形状挂 frameId；旧画布自动迁移。
+- **按画板导出**：设计稿 HTML 每画板一份进图库；excalidraw 场景带 frame 元素，在官方 Excalidraw 无限画布继续编辑。
+
+## Figma 与画布策略（v0.17）
+
+- **Figma 完整编辑器在浏览器**：设计页保存文件链接后一键打开（画布/图层/属性面板全功能）；面板可链接管理。边界：Figma API 只读 —— Agent 读设计 ✅、写 Figma ❌（官方 MCP 同为只读）。
+- **需要 Agent 读写的设计走 Excalidraw**（Agent 可完整读写），面板画布页一键新建/转入。
+- 无敌快速线框画布保留为实验入口（面板与 Agent 共享数据）。
+
+## DesignCraft 完整编辑器（v0.18）
+
+- 官方 **designcraft** 插件（面板内完整设计编辑器）+ **Agent 25 工具读写**（new_document/place_image/pointer/drag/type_text/render_page/export_png）。设计页一键新建文档、渲染 PNG 回图库（.wudi/design/renders/ 自动进设计图墙）。
+- 画布矩阵：**DesignCraft**（完整编辑器 + Agent 读写，主推）/ **Excalidraw**（白板 + Agent 读写）/ **Figma**（浏览器完整编辑器，Agent 只读）/ 无敌线框（实验）。
+- OpenPencil（.fig 设计稿 + Agent 读写）为官方示例插件，市场发布后即可接入。
+
+## OpenPencil · Figma 设计稿编辑器（v0.19，vendor 官方插件）
+
+- 从官方插件仓库（zai-org/zcode-plugins，MIT/Apache-2.0）构建并 vendor 进本插件：**直接编辑工作区里的 .fig 设计稿（Figma 同款格式）**，侧栏完整编辑器 + **Agent 117 个工具协同**（JSX 渲染、auto-layout、组件/实例、设计变量、Iconify 图标、布尔运算、design_to_tokens、analyze 色板/排版、export SVG/PDF/PNG、XPath 查询）。
+- 面板设计页一键「新建 Figma 设计稿」（designs/<名>.fig），侧栏「OpenPencil 设计稿」面板打开即可编辑，Agent 与你实时协同。
+- 归属：OpenPencil © 上游作者（MIT）；运行时闭包含 css-tree/canvaskit-wasm 等（见 vendor/openpencil/dist/THIRD_PARTY_NOTICES.txt）。
+
+## tokens 双向闭环与线框转换（v0.21）
+
+- **tokens 比对**：`wudi_tokens_compare`（Gen UI 绑定）——外部 tokens（OpenPencil `design_to_tokens`、Figma 变量导出）与本地 tokens 按扁平键路径比对，新增/变更/移除三清单；确认后 `wudi_design_tokens_set` 整体写入。
+- **线框 → .fig**：设计页「把无敌线框转入 .fig」——唤起 Agent 双工具集转换（`wudi_canvas_get` 读线框 → OpenPencil `new_design` + `create_shape` 按坐标重建 → `export_image` 渲染进图墙）。
+- **版本守卫**：smoke 断言 plugin.json / panel.js / server.mjs 三处版本一致。
+
+## 工作台操作中枢（v0.22）
+
+- **下一步建议**：总览页按项目缺口自动给出可执行动作（补配置 / 首次部署 / 失败排查 / tokens 沉淀 / 文档生成），点按钮直达对应页。
+- **设计页资产统计条**：设计稿 HTML / 渲染 PNG / tokens 色值 / 基准状态四格。
+- **刷新联动**：总览刷新同时拉取设计资产与画布数据。
+
+## 画布手感与导出（v0.23）
+
+- **键盘操作**：Delete 删除选中、方向键微调（Shift=10px，箭头联动尾点）、⌘/Ctrl+D 复制偏移。
+- **导出 PNG**：按形状包围盒自动取景，2x 渲染下载（宿主 downloadFile，兜底灯箱预览）。
+- **图墙分组**：渲染 PNG 按设计名归组（组头计数）。
+
+## 画布多选与对齐（v0.24）
+
+- **框选多选**：选择工具空拖出虚线框圈选；**Shift+点击**加选/去选；多选整体拖动、批量删除/填色。
+- **六向对齐**：≥2 选中时工具条出现 左/水平中/右/上/垂直中/下 对齐按钮。
+- **中键拖动**平移画布（与滚轮平移并存）。
+
+## 撤销重做与分布（v0.25）
+
+- **撤销/重做**：⌘Z / ⌘⇧Z + 工具条 ↶↷，快照历史栈 50 步（服务端 replace 全量替换算子承载数据回放）。
+- **等距分布**：≥3 选中时 均分横/均分纵（首尾锚定等分中间空隙）。
+- **复制粘贴**：⌘C / ⌘V（偏移 24px）。
+
+## 组件形状库（v0.26）
+
+- 画布工具条新增组件下拉：**按钮 / 输入框 / 卡片 / 标题 / 正文 / 分割线** 六种组件戳 —— 选中后点击画布成组放置（卡片=容器+标题+正文，按钮=主色矩形+白字），形状自动挂当前画板、进撤销栈。
+
+## 组件库与层级（v0.27）
+
+- **12 种组件戳**：按钮/输入框/卡片/标题/正文/分割线 + 开关/复选框/头像/图片占位/图表占位/进度条。
+- **层级调整**：单选形状出现 置顶/置底 按钮（Agent 侧 reorder 算子同步可用）。
+
+## 数据安全与编辑补全（v0.28）
+
+- **画布自动备份**：每次写入前自动备份上一版到 canvas.backup.json —— 误操作可让 Agent 读备份后用 replace 算子恢复。
+- **画布快捷键补全**：⌘/Ctrl+A 全选当前画板形状、Esc 取消选择。
+- **tokens 面板编辑**：色板卡「编辑 JSON」弹窗直接改 tokens 并同步 tokens.css。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。

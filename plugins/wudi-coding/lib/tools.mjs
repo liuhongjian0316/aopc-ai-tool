@@ -4,11 +4,12 @@
  * 需要用户介入的步骤在返回里明确写出下一步；需要确认的高危操作以 confirm 参数把关。
  * 状态存储：项目根 .wudi/（见 lib/store.mjs）；SSH 执行：lib/ssh.mjs（系统命令，仅密钥认证）。
  */
-import { existsSync, mkdirSync, readdirSync, statSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import * as store from "./store.mjs";
 import { sshRun, localRun, uploadFile, sshPing, sshConfig } from "./ssh.mjs";
 import { figmaToken, parseFigmaRef, fetchFigmaStructure, fetchFigmaImages, extractStyles } from "./figma.mjs";
+import { getFigmaUrl, setFigmaUrl } from "./store.mjs";
 import { resolveNotify, sendNotify } from "./notify.mjs";
 
 const ok = (text, structuredContent) => ({
@@ -233,6 +234,16 @@ export const TOOLS = [
     },
   },
   {
+    name: "wudi_design_tokens_export",
+    description: "把 design tokens 导出为指定格式：css（变量文件）、tailwind（tailwind.config.js 的 theme.extend 片段）、json。落盘到 .wudi/design/exports/ 并返回内容。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        format: { type: "string", enum: ["css", "tailwind", "json"], description: "导出格式，默认 css" },
+      },
+    },
+  },
+  {
     name: "wudi_notify_test",
     description: "发送一条测试通知验证 webhook 配置（档案 notifyWebhook/notifyFormat，可按环境覆盖）。未配置时返回设置指引。",
     inputSchema: {
@@ -289,6 +300,87 @@ export const TOOLS = [
         maxDepth: { type: "number", description: "提取树最大深度，默认 8" },
       },
       required: ["ref"],
+    },
+  },
+  {
+    name: "wudi_canvas_get",
+    description: "读取设计画布（.wudi/design/canvas.json 的形状列表）。画布是 Agent 可直接操作的设计画板：线框、流程、布局草图先画在这，再导出为设计稿。",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "wudi_canvas_edit",
+    description: "编辑设计画布（Figma 式无限画布 + 多画板，批量操作）。ops 每项：{op:'add', shape:{type,x,y,w,h,fill,stroke,text,fontSize,frameId}} / {op:'update', id, patch} / {op:'delete', ids} / {op:'add_frame', frame:{name,x,y,w,h,background}} / {op:'update_frame', id, patch} / {op:'delete_frame', id, withShapes}。type: rect/ellipse/diamond/arrow/text；形状带 frameId 归入画板。每个 UI 设计建议一个画板（如 首页-1440、详情-375）。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ops: {
+          type: "array",
+          description: "批量操作数组，按顺序执行",
+          items: {
+            type: "object",
+            properties: {
+              op: { type: "string", enum: ["add", "update", "delete", "add_frame", "update_frame", "delete_frame"] },
+              shape: { type: "object", description: "op=add 时的形状" },
+              id: { type: "string", description: "op=update/delete/update_frame/delete_frame 的目标 id" },
+              patch: { type: "object", description: "op=update 的字段补丁" },
+              ids: { type: "array", items: { type: "string" }, description: "op=delete 的 id 列表" },
+              frame: { type: "object", description: "op=add_frame 时的画板（name/x/y/w/h，预设：桌面 1440x900、移动 375x812）" },
+              withShapes: { type: "boolean", description: "op=delete_frame 时是否连同形状删除" },
+            },
+            required: ["op"],
+          },
+        },
+      },
+      required: ["ops"],
+    },
+  },
+  {
+    name: "wudi_canvas_clear",
+    description: "清空设计画布（confirm 必须 true；建议先 wudi_canvas_get 展示现状征得同意）。",
+    inputSchema: {
+      type: "object",
+      properties: { confirm: { type: "boolean", description: "必须为 true" } },
+    },
+  },
+  {
+    name: "wudi_canvas_export",
+    description: "导出设计画布。format=html（默认）：SVG 设计稿 HTML 落到 mockups/，进面板图库；format=excalidraw：.excalidraw 场景文件落 .wudi/design/canvas/，随后可让 Agent 调官方 Excalidraw 插件的 open_diagram 导入，在完整级白板中继续编辑；format=both 两者都要。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "设计稿文件名（不含扩展名，如 app-wireframe-v1）" },
+        format: { type: "string", enum: ["html", "excalidraw", "both"], description: "导出格式，默认 html" },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "wudi_tokens_compare",
+    description: "比对一组外部 tokens（如 OpenPencil design_to_tokens 的输出、Figma 变量导出）与当前 design tokens：按扁平键路径报告 新增/变更/移除 三清单。只出报告不改本地；确认合并后用 wudi_design_tokens_set 整体写入。",
+    _meta: UI_META,
+    inputSchema: {
+      type: "object",
+      properties: {
+        tokens: { type: "object", description: "外部 tokens 对象（结构与 wudi tokens 一致：color/spacing/... 分组）" },
+        json: { type: "string", description: "tokens 的 JSON 字符串（与 tokens 二选一）" },
+      },
+    },
+  },
+  {
+    name: "wudi_designs_list",
+    description: "列出工作区 designs/ 目录下的 .fig/.pen 设计稿文件（名称、大小、修改时间）。配合 OpenPencil 插件：Agent 可用 open_design 打开协同编辑、export_image 渲染 PNG 到 .wudi/design/renders/ 进面板图墙。",
+    _meta: UI_META,
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "wudi_figma_link",
+    description: "记住/查看项目的 Figma 文件链接（https://www.figma.com/ 开头）。设置后面板设计页可一键在浏览器打开 Figma 完整编辑器。注意：Figma API 只读，Agent 能读设计但改不了 Figma 文件；需要 Agent 写的设计走 Excalidraw。",
+    _meta: UI_META,
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "Figma 文件链接；缺省为查看当前链接" },
+      },
     },
   },
   {
@@ -355,6 +447,22 @@ export async function callTool(name, args = {}) {
         return toolDesignTokensSet(args);
       case "wudi_design_list":
         return toolDesignList();
+      case "wudi_design_tokens_export":
+        return toolDesignTokensExport(args);
+      case "wudi_figma_link":
+        return toolFigmaLink(args);
+      case "wudi_designs_list":
+        return toolDesignsList();
+      case "wudi_tokens_compare":
+        return toolTokensCompare(args);
+      case "wudi_canvas_get":
+        return toolCanvasGet();
+      case "wudi_canvas_edit":
+        return toolCanvasEdit(args);
+      case "wudi_canvas_clear":
+        return toolCanvasClear(args);
+      case "wudi_canvas_export":
+        return toolCanvasExport(args);
       case "wudi_docs_weekly":
         return await toolDocsWeekly(args);
       case "wudi_notify_test":
@@ -1343,6 +1451,113 @@ function toolProjectsRemove(args) {
   return ok(`已从注册表移除：${removed.name}（${removed.path}）。项目文件本身未删除。`, { removed });
 }
 
+/* ================= 设计画布（Agent 可操作） ================= */
+
+function toolCanvasGet() {
+  const canvas = store.loadCanvas();
+  return ok(`设计画布（${canvas.shapes.length} 个形状）：\n${j(canvas)}`, { canvas });
+}
+
+function toolCanvasEdit(args = {}) {
+  const ops = args.ops;
+  if (!Array.isArray(ops) || !ops.length) return fail("缺少 ops 数组（add/update/delete/add_frame/update_frame/delete_frame 批量操作）。");
+  const canvas = store.loadCanvas();
+  const validFrames = new Set(canvas.frames.map((f) => f.id));
+  const summary = [];
+  for (const [i, op] of ops.entries()) {
+    try {
+      if (op?.op === "add") {
+        const shape = store.sanitizeShape(op.shape, i, validFrames);
+        if (canvas.shapes.length >= 1000) throw new Error("画布已达 1000 形状上限，先删除再添加。");
+        canvas.shapes.push(shape);
+        summary.push(`+ ${shape.type} ${shape.id} @(${shape.x},${shape.y})${shape.frameId ? ` in ${shape.frameId}` : ""}`);
+      } else if (op?.op === "update") {
+        const idx = canvas.shapes.findIndex((s) => s.id === op.id);
+        if (idx < 0) throw new Error(`找不到形状 ${op.id}`);
+        const merged = { ...canvas.shapes[idx], ...(op.patch ?? {}) };
+        canvas.shapes[idx] = store.sanitizeShape(merged, i, validFrames);
+        summary.push(`~ ${op.id}`);
+      } else if (op?.op === "delete") {
+        const ids = new Set(Array.isArray(op.ids) ? op.ids : [op.id].filter(Boolean));
+        const before = canvas.shapes.length;
+        canvas.shapes = canvas.shapes.filter((s) => !ids.has(s.id));
+        summary.push(`- ${before - canvas.shapes.length} 个形状`);
+      } else if (op?.op === "add_frame") {
+        if (canvas.frames.length >= 50) throw new Error("画板数已达 50 上限。");
+        const frame = store.sanitizeFrame(op.frame, canvas.frames.length);
+        canvas.frames.push(frame);
+        summary.push(`+ 画板 ${frame.name} ${frame.id} @(${frame.x},${frame.y}) ${frame.w}x${frame.h}`);
+      } else if (op?.op === "update_frame") {
+        const idx = canvas.frames.findIndex((f) => f.id === op.id);
+        if (idx < 0) throw new Error(`找不到画板 ${op.id}`);
+        canvas.frames[idx] = store.sanitizeFrame({ ...canvas.frames[idx], ...(op.patch ?? {}) }, idx);
+        summary.push(`~ 画板 ${op.id}`);
+      } else if (op?.op === "delete_frame") {
+        const frame = store.deleteFrame(canvas, String(op.id ?? ""), op.withShapes === true);
+        summary.push(`- 画板 ${frame.name}${op.withShapes ? "（含形状）" : "（形状转游离）"}`);
+      } else if (op?.op === "reorder") {
+        const idx = canvas.shapes.findIndex((s) => s.id === op.id);
+        if (idx < 0) throw new Error(`找不到形状 ${op.id}`);
+        const [sh] = canvas.shapes.splice(idx, 1);
+        if (op.to === "front") canvas.shapes.push(sh);
+        else canvas.shapes.unshift(sh);
+        summary.push(`⇅ ${op.id} ${op.to === "front" ? "置顶" : "置底"}`);
+      } else if (op?.op === "replace") {
+        // 全量替换（撤销/重做数据基础）：frames/shapes 整体过校验后替换
+        const frames = (op.canvas?.frames ?? []).map((f, fi) => store.sanitizeFrame(f, fi));
+        const valid = new Set(frames.map((f) => f.id));
+        const shapes = (op.canvas?.shapes ?? []).map((sh, si) => store.sanitizeShape(sh, si, valid));
+        canvas.frames = frames;
+        canvas.shapes = shapes;
+        summary.push(`↺ 全量替换（${frames.length} 画板 / ${shapes.length} 形状）`);
+      } else {
+        throw new Error(`ops[${i}] 的 op 非法：${op?.op}`);
+      }
+    } catch (err) {
+      return fail(`ops[${i}] 失败：${String(err?.message ?? err)}`);
+    }
+  }
+  store.saveCanvas(canvas);
+  return ok(`画布已更新（${canvas.frames.length} 画板 / ${canvas.shapes.length} 形状）：\n${summary.map((s) => `- ${s}`).join("\n")}`, { canvas });
+}
+
+function toolCanvasClear(args = {}) {
+  if (args.confirm !== true) return fail("清空画布需 confirm=true。建议先 wudi_canvas_get 展示现状征得用户同意。");
+  const canvas = store.loadCanvas();
+  const n = canvas.shapes.length;
+  const fn = canvas.frames.length;
+  store.saveCanvas({ frames: [], shapes: [] });
+  return ok(`画布已清空（移除 ${fn} 画板 / ${n} 形状）。`, { canvas: { frames: [], shapes: [] } });
+}
+
+function toolCanvasExport(args = {}) {
+  const name = String(args.name ?? "").trim();
+  if (!name) return fail("缺少 name（设计稿文件名，如 app-wireframe-v1）。");
+  const canvas = store.loadCanvas();
+  if (!canvas.shapes.length && !canvas.frames.length) return fail("画布是空的，先 wudi_canvas_edit 添加画板与形状再导出。");
+  const format = ["html", "excalidraw", "both"].includes(String(args.format)) ? String(args.format) : "html";
+  const lines = [];
+  const out = {};
+  if (format === "html" || format === "both") {
+    const outputs = store.exportCanvasToMockups(canvas, name);
+    for (const o of outputs) {
+      store.registerDoc({ path: o.relPath, type: "doc", title: `画布导出：${o.frame}`, source: "canvas export" });
+      lines.push(`- 画板「${o.frame}」→ ${o.relPath}（${o.shapes} 形状，已进图库）`);
+    }
+    out.mockups = outputs;
+  }
+  if (format === "excalidraw" || format === "both") {
+    const ex = store.exportCanvasToExcalidraw(canvas, name);
+    out.excalidraw = ex.relPath;
+    lines.push(`- Excalidraw 场景：${ex.relPath}（${ex.elements} 元素，画板映射为 frame）`);
+    lines.push("  继续编辑：让 Agent 调官方 Excalidraw 插件的 open_diagram 导入该文件，在完整级无限画布中拖拽/连线/改样式。");
+  }
+  return ok(
+    [`画布已导出（${format}，${canvas.frames.length} 画板）：`, ...lines, "", "下一步：HTML 版按 wudi-ui 流程接 tokens 精修；excalidraw 版在完整级无限画布自由编辑。"].join("\n"),
+    out
+  );
+}
+
 /* ================= 周报 / Figma 渲染 ================= */
 
 function isoWeek(d = new Date()) {
@@ -1482,6 +1697,66 @@ async function toolFigmaImages(args = {}) {
   }
 }
 
+function toolDesignTokensExport(args = {}) {
+  const tokens = store.loadTokens();
+  if (!tokens) return fail("还没有 design tokens。先 /wudi-ui 沉淀或 wudi_design_tokens_set 写入，再导出。");
+  const format = ["css", "tailwind", "json"].includes(String(args.format)) ? String(args.format) : "css";
+  let content = "";
+  let fname = "";
+  if (format === "json") {
+    content = j(tokens);
+    fname = "tokens.json";
+  } else if (format === "tailwind") {
+    // tailwind.config.js 的 theme.extend 片段：颜色转 rgb 值（tailwind 期望无 # 的值也接受，直接给原值更直观）
+    const camel = (s) => String(s).replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
+    const toJs = (obj, indent = "  ") => {
+      const lines = [];
+      for (const [k, v] of Object.entries(obj ?? {})) {
+        if (v && typeof v === "object" && !Array.isArray(v)) lines.push(`${indent}${camel(k)}: {`);
+        const sub = v && typeof v === "object" && !Array.isArray(v) ? toJs(v, indent + "  ") : null;
+        if (sub) { lines.push(sub); lines.push(`${indent}},`); }
+        else lines.push(`${indent}${camel(k)}: ${JSON.stringify(String(v))},`);
+      }
+      return lines.join("\n");
+    };
+    content = [
+      "// 由 wudi-coding 设计 tokens 导出；合并进 tailwind.config.js 的 theme.extend",
+      "// 用法：theme: { extend: { colors: {...}, spacing: {...}, borderRadius: {...}, fontSize: {...} } }",
+      `{`,
+      `  colors: {`,
+      toJs(tokens.color ?? {}),
+      `  },`,
+      `  spacing: {`,
+      toJs(tokens.spacing ?? {}),
+      `  },`,
+      `  borderRadius: {`,
+      toJs(tokens.radius ?? {}),
+      `  },`,
+      `  fontSize: {`,
+      toJs(tokens.typography ?? {}),
+      `  },`,
+      `}`,
+    ].join("\n");
+    fname = "tailwind.theme.js";
+  } else {
+    try {
+      content = readFileSync(join(store.designDir(), "tokens.css"), "utf-8");
+    } catch {
+      content = "";
+    }
+    if (!content) return fail("tokens.css 不存在（tokens 可能是旧版写入），重跑一次 wudi_design_tokens_set 生成后再导出。");
+    fname = "tokens.css";
+  }
+  const exportsDir = join(store.designDir(), "exports");
+  mkdirSync(exportsDir, { recursive: true });
+  const outPath = join(exportsDir, fname);
+  writeFileSync(outPath, content, "utf-8");
+  return ok(
+    [`tokens 已导出（${format}）：`, `- ${outPath}`, "", "```", clip(content, 1200), "```", "转组件代码时引用该文件，不再出现魔法值。"].join("\n"),
+    { format, path: `.wudi/design/exports/${fname}`, content }
+  );
+}
+
 async function toolNotifyTest(args = {}) {
   const project = store.loadProject();
   if (!project) return fail("项目未建档，先 wudi_project_init。");
@@ -1509,6 +1784,92 @@ async function toolNotifyTest(args = {}) {
   return res.ok
     ? ok(`测试通知已发送（${cfg.format} 格式 → ${cfg.webhook}）：${res.detail}。请到群里确认收到。`, { notify: res })
     : fail(`测试通知失败：${res.detail}（检查 webhook 地址与网络连通性）`);
+}
+
+function flattenTokens(obj, prefix = "", out = {}) {
+  for (const [k, v] of Object.entries(obj ?? {})) {
+    const path = prefix ? `${prefix}.${k}` : k;
+    if (v && typeof v === "object" && !Array.isArray(v)) flattenTokens(v, path, out);
+    else if (v !== null && v !== undefined) out[path] = String(v);
+  }
+  return out;
+}
+
+function toolTokensCompare(args = {}) {
+  let incoming = args.tokens;
+  if (!incoming && args.json !== undefined) {
+    try {
+      incoming = JSON.parse(String(args.json));
+    } catch (err) {
+      return fail(`json 参数不是合法 JSON：${String(err?.message ?? err).slice(0, 200)}`);
+    }
+  }
+  if (!incoming || typeof incoming !== "object") return fail("缺少 tokens 对象（或 json 字符串）。");
+  const local = store.loadTokens();
+  if (!local) return fail("本地还没有 design tokens，先 wudi_design_tokens_set 建立基准再比对。");
+  const flatIn = flattenTokens(incoming);
+  const flatLocal = flattenTokens(local);
+  const added = Object.keys(flatIn).filter((k) => !(k in flatLocal)).map((k) => ({ key: k, value: flatIn[k] }));
+  const changed = Object.keys(flatIn).filter((k) => k in flatLocal && flatLocal[k] !== flatIn[k]).map((k) => ({ key: k, local: flatLocal[k], incoming: flatIn[k] }));
+  const removed = Object.keys(flatLocal).filter((k) => !(k in flatIn)).map((k) => ({ key: k, value: flatLocal[k] }));
+  const same = Object.keys(flatIn).length - added.length - changed.length;
+  const lines = [
+    `═══ tokens 比对（外部 vs 本地）═══`,
+    `外部 ${Object.keys(flatIn).length} 键 / 本地 ${Object.keys(flatLocal).length} 键｜一致 ${same}`,
+    "",
+    `【新增】外部有本地无（${added.length}）：`,
+    ...(added.slice(0, 20).map((a) => `- ${a.key} = ${a.value}`)),
+    added.length > 20 ? `  …共 ${added.length} 条` : "",
+    "",
+    `【变更】同键不同值（${changed.length}）：`,
+    ...(changed.slice(0, 20).map((c) => `- ${c.key}: ${c.local} → ${c.incoming}`)),
+    changed.length > 20 ? `  …共 ${changed.length} 条` : "",
+    "",
+    `【移除】本地有外部无（${removed.length}）：`,
+    ...(removed.slice(0, 20).map((r) => `- ${r.key} = ${r.value}`)),
+    removed.length > 20 ? `  …共 ${removed.length} 条` : "",
+    "",
+    "处置：确认后把合并结果用 wudi_design_tokens_set 整体写入（写前可让用户过目本报告）。",
+  ].filter(Boolean);
+  return ok(lines.join("\n").slice(0, 30_000), { added, changed, removed, same });
+}
+
+function toolDesignsList() {
+  const dir = join(store.projectRoot(), "designs");
+  const designs = [];
+  try {
+    for (const f of readdirSync(dir)) {
+      if (!/\.(fig|pen)$/i.test(f)) continue;
+      const st = statSync(join(dir, f));
+      designs.push({
+        name: f,
+        path: `designs/${f}`,
+        format: f.toLowerCase().endsWith(".fig") ? "fig（可编辑）" : "pen（只读导入）",
+        sizeKB: Number((st.size / 1024).toFixed(1)),
+        updatedAt: st.mtime.toISOString(),
+      });
+    }
+  } catch { /* designs/ 不存在 */ }
+  designs.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+  const lines = designs.length
+    ? designs.map((d) => `- ${d.name}（${d.format}，${d.sizeKB} KB，${d.updatedAt.slice(0, 16).replace("T", " ")}）`).join("\n")
+    : "（designs/ 目录还没有设计稿。用 OpenPencil 的 new_design 创建，或让 Agent 建稿。）";
+  return ok(`设计稿（${designs.length}）：\n${lines}\n\n交互：open_design 打开协同编辑 → create_shape/render 改内容 → export_image 渲染 PNG 到 .wudi/design/renders/ 进面板图墙。`, { designs });
+}
+
+function toolFigmaLink(args = {}) {
+  if (args.url === undefined) {
+    const url = getFigmaUrl();
+    return url
+      ? ok(`当前 Figma 文件链接：${url}`, { url })
+      : ok("尚未设置 Figma 文件链接。调用本工具传 url（https://www.figma.com/ 开头）记住后面板可一键打开。");
+  }
+  try {
+    const url = setFigmaUrl(args.url);
+    return ok(`Figma 文件链接已保存：${url}\n边界说明：Figma API 只读 —— Agent 可拉取结构/渲染图/比对 tokens（wudi_figma_*），但改不了 Figma 文件；需要 Agent 写的设计请走 Excalidraw 画布。`, { url });
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
 }
 
 async function toolFigmaTokensDiff(args = {}) {

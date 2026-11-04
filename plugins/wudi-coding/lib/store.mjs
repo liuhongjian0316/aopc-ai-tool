@@ -4,7 +4,7 @@
  * 随项目走（.wudi/ 可入 .gitignore），因此以 AOPC_WORKSPACE_ROOT 为根。
  * 原子写入（tmp + rename）。
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -232,6 +232,229 @@ export function saveTokens(tokens) {
   lines.push("}");
   writeFileSync(join(designDir(), "tokens.css"), lines.join("\n"), "utf-8");
   return { json: join(designDir(), "tokens.json"), css: join(designDir(), "tokens.css") };
+}
+
+/* ---------------- 设计画布 v2（Figma 式：无限画布 + 多画板 Frame，Agent 可操作） ---------------- */
+
+export const CANVAS_SHAPE_TYPES = ["rect", "ellipse", "diamond", "arrow", "text"];
+
+/** 读设计画布 v2；旧格式（只有 shapes）自动迁移：全部形状归入新建默认画板。 */
+export function loadCanvas() {
+  const raw = readJSON("canvas.json", null);
+  if (!raw) return { version: 2, frames: [], shapes: [] };
+  if (Array.isArray(raw.frames)) {
+    return { version: 2, frames: raw.frames, shapes: Array.isArray(raw.shapes) ? raw.shapes : [] };
+  }
+  // v1 迁移：shapes 平铺 → 建"画布 1"并按包围盒收纳
+  const shapes = Array.isArray(raw.shapes) ? raw.shapes : [];
+  let minX = 0, minY = 0, maxX = 800, maxY = 500;
+  if (shapes.length) {
+    minX = Math.min(...shapes.map((s) => s.x ?? 0));
+    minY = Math.min(...shapes.map((s) => s.y ?? 0));
+    maxX = Math.max(...shapes.map((s) => (s.x ?? 0) + (s.w ?? 0)));
+    maxY = Math.max(...shapes.map((s) => (s.y ?? 0) + (s.h ?? 0)));
+  }
+  const frame = {
+    id: `f-${Date.now().toString(36)}`,
+    name: "画布 1",
+    x: Math.floor(minX - 40),
+    y: Math.floor(minY - 60),
+    w: Math.max(400, Math.ceil(maxX - minX + 80)),
+    h: Math.max(300, Math.ceil(maxY - minY + 100)),
+    background: "#ffffff",
+  };
+  for (const sh of shapes) sh.frameId = frame.id;
+  return { version: 2, frames: [frame], shapes };
+}
+
+/** 校验并规整画板（Frame）。 */
+export function sanitizeFrame(input, index = 0) {
+  const num = (v, lo, hi, dflt) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(Math.max(Math.round(n), lo), hi) : dflt;
+  };
+  return {
+    id: /^f[\w-]{0,63}$/.test(String(input?.id)) ? String(input.id) : `f-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+    name: String(input?.name ?? `画板 ${index + 1}`).slice(0, 60) || `画板 ${index + 1}`,
+    x: num(input?.x, -2000, 4000, 0),
+    y: num(input?.y, -2000, 4000, 0),
+    w: num(input?.w, 50, 8000, 1440),
+    h: num(input?.h, 50, 8000, 900),
+    background: /^#[0-9a-fA-F]{3,8}$/.test(String(input?.background)) ? String(input.background) : "#ffffff",
+  };
+}
+
+/** 校验并规整形状：类型白名单、数值钳制、文本截断、frameId 校验（validFrameIds 传入时）。 */
+export function sanitizeShape(input, index = 0, validFrameIds = null) {
+  const type = String(input?.type ?? "");
+  if (!CANVAS_SHAPE_TYPES.includes(type)) {
+    throw new Error(`形状[${index}] 类型非法：${type}（允许 ${CANVAS_SHAPE_TYPES.join("/")}）`);
+  }
+  const num = (v, lo, hi, dflt) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return dflt;
+    return Math.min(Math.max(Math.round(n), lo), hi);
+  };
+  let frameId = "";
+  if (input?.frameId) {
+    if (validFrameIds && !validFrameIds.has(String(input.frameId))) {
+      throw new Error(`形状[${index}] frameId 不存在：${input.frameId}`);
+    }
+    frameId = String(input.frameId);
+  }
+  const shape = {
+    // 关键：input.id 为 undefined 时 String() 会得到 "undefined" 并通过 \w 正则 —— 必须先判类型，
+    // 否则所有自动生成的形状共享同一 id，update/delete/reorder 全部命中第一个。
+    id: typeof input?.id === "string" && /^\w[\w-]{0,63}$/.test(input.id) ? input.id : `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}${Number.isInteger(index) && index > 0 ? "-" + index : ""}`,
+    type,
+    frameId,
+    x: num(input.x, -2000, 8000, 40),
+    y: num(input.y, -2000, 8000, 40),
+    fill: /^#[0-9a-fA-F]{3,8}$/.test(String(input?.fill)) ? String(input.fill) : "",
+    stroke: /^#[0-9a-fA-F]{3,8}$/.test(String(input?.stroke)) ? String(input.stroke) : "#3565f0",
+    fontSize: num(input.fontSize, 8, 72, 14),
+  };
+  if (type === "text") {
+    shape.text = String(input?.text ?? "").slice(0, 500);
+    shape.w = num(input.w, 10, 4000, Math.max(60, shape.text.length * shape.fontSize * 0.62));
+    shape.h = num(input.h, 16, 800, Math.ceil(shape.fontSize * 1.5));
+  } else {
+    shape.w = num(input.w, 2, 4000, 120);
+    shape.h = num(input.h, 2, 4000, 80);
+    shape.text = String(input?.text ?? "").slice(0, 200);
+  }
+  if (type === "arrow") {
+    shape.x2 = num(input.x2, -2000, 8000, shape.x + 120);
+    shape.y2 = num(input.y2, -2000, 8000, shape.y + 40);
+  }
+  return shape;
+}
+
+/** 保存设计画布 v2（原子写）。 */
+export function saveCanvas(canvas) {
+  if (!canvas || !Array.isArray(canvas.shapes) || !Array.isArray(canvas.frames)) {
+    throw new Error("canvas 结构非法（缺 frames/shapes 数组）。");
+  }
+  // 数据安全：写入前把当前画布备份一份（误清空/误删可让 Agent 读 canvas.backup.json + replace 恢复）
+  const cur = join(wudiDir(), "canvas.json");
+  if (existsSync(cur)) copyFileSync(cur, join(wudiDir(), "canvas.backup.json"));
+  writeJSON("canvas.json", {
+    version: 2,
+    frames: canvas.frames.slice(0, 50),
+    shapes: canvas.shapes.slice(0, 1000),
+  });
+  return join(wudiDir(), "canvas.json");
+}
+
+/** 删除画板：withShapes=true 连同画板内形状一起删，否则形状转为游离（frameId 清空）。 */
+export function deleteFrame(canvas, frameId, withShapes) {
+  const frame = canvas.frames.find((f) => f.id === frameId);
+  if (!frame) throw new Error(`找不到画板 ${frameId}`);
+  canvas.frames = canvas.frames.filter((f) => f.id !== frameId);
+  if (withShapes) canvas.shapes = canvas.shapes.filter((s) => s.frameId !== frameId);
+  else for (const s of canvas.shapes) if (s.frameId === frameId) s.frameId = "";
+  return frame;
+}
+
+/** Figma 文件链接（.wudi/design/figma-url.txt）：面板「在浏览器打开 Figma」用。 */
+export function getFigmaUrl() {
+  try {
+    return readFileSync(join(designDir(), "figma-url.txt"), "utf-8").trim();
+  } catch {
+    return "";
+  }
+}
+
+export function setFigmaUrl(url) {
+  const u = String(url ?? "").trim();
+  if (!/^https:\/\/(www\.)?figma\.com\//.test(u)) {
+    throw new Error("请填 https://www.figma.com/ 开头的 Figma 文件链接。");
+  }
+  mkdirSync(designDir(), { recursive: true });
+  writeFileSync(join(designDir(), "figma-url.txt"), u, "utf-8");
+  return u;
+}
+
+/** 画布导出为 Excalidraw 场景（.excalidraw）：画板映射为 Excalidraw frame，形状挂 frameId。 */
+export function exportCanvasToExcalidraw(canvas, name) {
+  const safe = String(name || "canvas").replace(/[^\w-]+/g, "-").replace(/^-+|-+$/g, "") || "canvas";
+  const el = (e) => ({
+    id: e.id, type: e.type, x: e.x, y: e.y, width: e.width, height: e.height, angle: 0,
+    strokeColor: e.strokeColor, backgroundColor: e.backgroundColor, fillStyle: "solid",
+    strokeWidth: 2, roughness: 1, roundness: null, seed: 1, version: 1, versionNonce: 1,
+    isDeleted: false, boundElements: null, groupIds: [], frameId: e.frameId ?? null, link: null, locked: false, opacity: 100,
+    ...(e.text !== undefined ? { text: e.text, fontSize: e.fontSize, fontFamily: 1, textAlign: "left", verticalAlign: "top", containerId: null, lineHeight: 1.25 } : {}),
+    ...(e.points ? { points: e.points, startArrowhead: null, endArrowhead: "arrow", lastCommittedPoint: null } : {}),
+    ...(e.frameName !== undefined ? { name: e.frameName } : {}),
+  });
+  const elements = [];
+  for (const f of canvas.frames ?? []) {
+    elements.push(el({ id: `f-${f.id}`, type: "frame", x: f.x, y: f.y, width: f.w, height: f.h, strokeColor: "transparent", backgroundColor: f.background, frameName: f.name }));
+  }
+  for (const s of canvas.shapes ?? []) {
+    const id = `wudi-${s.id}`;
+    const frameId = s.frameId ? `f-${s.frameId}` : null;
+    if (s.type === "text") {
+      elements.push(el({ id, type: "text", x: s.x, y: s.y, width: s.w, height: s.h, strokeColor: s.fill || "#171a21", backgroundColor: "transparent", text: s.text, fontSize: s.fontSize, frameId }));
+      continue;
+    }
+    if (s.type === "arrow") {
+      const dx = (s.x2 ?? s.x + 120) - s.x, dy = (s.y2 ?? s.y + 40) - s.y;
+      elements.push(el({ id, type: "arrow", x: s.x, y: s.y, width: Math.abs(dx), height: Math.abs(dy), strokeColor: s.stroke || "#3565f0", backgroundColor: "transparent", points: [[0, 0], [dx, dy]], frameId }));
+      continue;
+    }
+    elements.push(el({ id, type: s.type === "diamond" ? "diamond" : "rectangle", x: s.x, y: s.y, width: s.w, height: s.h, strokeColor: s.stroke || "#3565f0", backgroundColor: s.fill || "transparent", frameId }));
+  }
+  const scene = { type: "excalidraw", version: 2, source: "wudi-coding", elements, appState: { viewBackgroundColor: "#f4f6fa" }, files: {} };
+  const dir = join(wudiDir(), "design", "canvas");
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, `${safe}.excalidraw`);
+  writeFileSync(file, JSON.stringify(scene, null, 2), "utf-8");
+  return { file, relPath: `.wudi/design/canvas/${safe}.excalidraw`, elements: elements.length };
+}
+
+/** 画布按画板导出为设计稿 HTML：每帧一个独立 mockup（命名取画板名）。 */
+export function exportCanvasToMockups(canvas, name) {
+  const safe = String(name || "canvas").replace(/[^\w\u4e00-\u9fa5-]+/g, "-").replace(/^-+|-+$/g, "") || "canvas";
+  const mockDir = join(wudiDir(), "design", "mockups");
+  mkdirSync(mockDir, { recursive: true });
+  const outputs = [];
+  const frames = (canvas.frames ?? []).length ? canvas.frames : [{ id: "", name: safe, x: 0, y: 0, w: 800, h: 500, background: "#ffffff" }];
+  for (const f of frames) {
+    const shapes = (canvas.shapes ?? []).filter((s) => (s.frameId || "") === f.id);
+    const shapesSvg = shapes.map((s) => shapeToSvg(s)).join("\n  ");
+    const frameSafe = `${safe}-${String(f.name).replace(/[^\w\u4e00-\u9fa5-]+/g, "-")}`;
+    const html = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeXml(f.name)} 设计画板</title>
+<style>body{margin:0;background:#f4f6fa;display:flex;justify-content:center;padding:24px}.frame{background:${f.background};border:1px solid #e3e7ee;border-radius:12px;box-shadow:0 1px 3px rgba(16,24,40,.06)}</style>
+</head><body><div class="frame"><svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg" style="display:block">
+  <defs><marker id="arrowhead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#3565f0"/></marker></defs>
+  <rect width="${f.w}" height="${f.h}" fill="${f.background}"/>
+  ${shapesSvg}
+</svg></div></body></html>`;
+    const file = join(mockDir, `${frameSafe}.html`);
+    writeFileSync(file, html, "utf-8");
+    outputs.push({ frame: f.name, frameId: f.id, relPath: `.wudi/design/mockups/${frameSafe}.html`, shapes: shapes.length });
+  }
+  return outputs;
+}
+
+function shapeToSvg(s) {
+  const stroke = s.stroke || "#3565f0";
+  const fill = s.fill || "none";
+  const text = (t, x, y, size, anchor = "middle") => (t ? `<text x="${x}" y="${y}" text-anchor="${anchor}" font-size="${size}" fill="#171a21" font-family="sans-serif">${escapeXml(t)}</text>` : "");
+  if (s.type === "rect") return `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" rx="8" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>${text(s.text, s.x + s.w / 2, s.y + s.h / 2 + s.fontSize / 3, s.fontSize)}`;
+  if (s.type === "ellipse") return `<ellipse cx="${s.x + s.w / 2}" cy="${s.y + s.h / 2}" rx="${s.w / 2}" ry="${s.h / 2}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>${text(s.text, s.x + s.w / 2, s.y + s.h / 2 + s.fontSize / 3, s.fontSize)}`;
+  if (s.type === "diamond") {
+    const cx = s.x + s.w / 2, cy = s.y + s.h / 2;
+    return `<polygon points="${cx},${s.y} ${s.x + s.w},${cy} ${cx},${s.y + s.h} ${s.x},${cy}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>${text(s.text, cx, cy + s.fontSize / 3, s.fontSize)}`;
+  }
+  if (s.type === "arrow") return `<line x1="${s.x}" y1="${s.y}" x2="${s.x2}" y2="${s.y2}" stroke="${stroke}" stroke-width="2" marker-end="url(#arrowhead)"/>`;
+  return text(s.text, s.x, s.y + s.fontSize, s.fontSize, "start");
+}
+
+function escapeXml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
 /* ---------------- 时间戳与工具 ---------------- */

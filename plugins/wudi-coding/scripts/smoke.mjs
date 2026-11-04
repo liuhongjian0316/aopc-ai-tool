@@ -45,7 +45,11 @@ async function unitTests() {
   check("notify: 环境覆盖顶层", notify.resolveNotify({ notifyWebhook: "http://top" }, { raw: { notifyWebhook: "http://env", notifyFormat: "feishu" } }).webhook === "http://env");
 
   const figma = await import(join(root, "lib", "figma.mjs").replace("file://", ""));
-  const styles = figma.extractStyles({
+  /* 设计模板库完整性 */
+  for (const t of ["dashboard.html", "landing.html", "mobile.html"]) {
+    const tpl = await readFile(join(root, "skills", "wudi-ui", "templates", t), "utf-8").catch(() => "");
+    check(`template: ${t} 存在且含 tokens 变量与可改区`, tpl.includes("--color-primary") && tpl.includes("【可改区"));
+  }  const styles = figma.extractStyles({
     type: "FRAME",
     children: [
       { type: "RECTANGLE", fills: [{ type: "SOLID", color: { r: 0.2, g: 0.4, b: 1, a: 1 } }] },
@@ -73,10 +77,24 @@ async function unitTests() {
   check("store: 指定环境生效", store.resolveEnv(proj, "staging").deployRoot === "/staging");
 }
 
+/* ---------- 版本一致性守卫 ---------- */
+  console.log("◆ 版本一致性");
+  try {
+    const pluginJson = JSON.parse(await readFile(join(root, ".aopc-plugin", "plugin.json"), "utf8"));
+    const panelSrc = await readFile(join(root, "panel", "panel.js"), "utf8");
+    const serverSrc = await readFile(join(root, "mcp-server", "server.mjs"), "utf8");
+    const v = pluginJson.version;
+    check(`版本三处一致（${v}）`,
+      panelSrc.includes(`version: "${v}" }`) && serverSrc.includes(`version: "${v}" }`),
+      `plugin.json=${v} panel 含 ${panelSrc.match(/version: "([0-9.]+)" \}/)?.[1]} server 含 ${serverSrc.match(/version: "([0-9.]+)" \}/)?.[1]}`);
+  } catch (err) {
+    check("版本一致性文件可读", false, String(err));
+  }
+
 /* ---------- MCP 协议回归（起真实 server） ---------- */
 
-function rpcSession(env) {
-  const child = spawn(process.execPath, [serverPath], {
+function rpcSession(env, serverFile = serverPath) {
+  const child = spawn(process.execPath, [serverFile], {
     env: { ...process.env, ...env },
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -137,7 +155,7 @@ async function protocolTests() {
     check(`tools/list: 工具数 ≥ 17（实际 ${list.length}）`, list.length >= 17);
     check("tools/list: 全部有 inputSchema", list.every((t) => t.inputSchema?.type === "object"));
     const uiBound = list.filter((t) => t?._meta?.ui?.surface === "wudi");
-    check("tools/list: Gen UI 绑定 4 个", uiBound.length === 4);
+    check("tools/list: Gen UI 绑定 7 个（+ wudi_tokens_compare）", uiBound.length === 7);
     check("tools/list: 关键工具在列", ["wudi_deploy", "wudi_rollback", "wudi_doctor", "wudi_deploy_logs", "wudi_env_set", "wudi_design_tokens_set", "wudi_figma_fetch"].every((n) => list.some((t) => t.name === n)));
 
     const resList = await s.call("resources/list", {});
@@ -182,6 +200,11 @@ async function protocolTests() {
     check("design_tokens_set: 写入+css", !errOf(r) && textOf(r).includes("tokens.css"));
     r = await s.call("tools/call", { name: "wudi_design_tokens_get", arguments: {} });
     check("design_tokens_get: 读回", !errOf(r) && textOf(r).includes("#3366ff"));
+    /* tokens 导出三格式 */
+    for (const [fmt, expect] of [["css", "--color-primary: #3366ff"], ["tailwind", "colors: {"], ["json", '"color"']]) {
+      r = await s.call("tools/call", { name: "wudi_design_tokens_export", arguments: { format: fmt } });
+      check(`tokens_export: ${fmt} 格式`, !errOf(r) && textOf(r).includes(expect) && textOf(r).includes(".wudi/design/exports/"), textOf(r).slice(0, 120));
+    }
     r = await s.call("tools/call", { name: "wudi_design_list", arguments: {} });
     check("design_list: 产物清单", !errOf(r) && textOf(r).includes("tokens.json"));
     const css = await readFile(join(workdir, ".wudi", "design", "tokens.css"), "utf-8").catch(() => "");
@@ -249,6 +272,104 @@ async function protocolTests() {
     check("projects_remove: 移除成功", !errOf(r) && textOf(r).includes("已从注册表移除"));
     r = await s.call("tools/call", { name: "wudi_projects_list", arguments: {} });
     check("projects_list: 移除后重新自动登记当前区", (r?.result?.structuredContent?.projects ?? []).some((p) => p.isCurrent));
+
+    /* ---- 设计画布 v2（Figma 式多画板，Agent 操作面）---- */
+    r = await s.call("tools/call", { name: "wudi_canvas_get", arguments: {} });
+    check("canvas_get: 空画布（v2）", !errOf(r) && (r?.result?.structuredContent?.canvas?.frames?.length ?? -1) === 0);
+    r = await s.call("tools/call", {
+      name: "wudi_canvas_edit",
+      arguments: { ops: [
+        { op: "add_frame", frame: { name: "首页-1440", x: 0, y: 0, w: 1440, h: 900 } },
+        { op: "add_frame", frame: { name: "详情-375", x: 1560, y: 0, w: 375, h: 812 } },
+      ] },
+    });
+    const framesAfter = r?.result?.structuredContent?.canvas?.frames ?? [];
+    check("canvas_edit: add_frame 两画板", !errOf(r) && framesAfter.length === 2);
+    const fid = framesAfter[0]?.id;
+    r = await s.call("tools/call", {
+      name: "wudi_canvas_edit",
+      arguments: { ops: [
+        { op: "add", shape: { type: "rect", frameId: fid, x: 40, y: 40, w: 200, h: 120, fill: "#dbe4fd", text: "侧栏" } },
+        { op: "add", shape: { type: "text", frameId: fid, x: 60, y: 200, text: "标题文字", fontSize: 18 } },
+        { op: "add", shape: { type: "arrow", frameId: fid, x: 250, y: 100, x2: 400, y2: 100 } },
+      ] },
+    });
+    const canvasAfter = r?.result?.structuredContent?.canvas;
+    check("canvas_edit: 形状挂画板", !errOf(r) && canvasAfter?.shapes?.length === 3 && canvasAfter.shapes.every((sh) => sh.frameId === fid));
+    const addedId = canvasAfter?.shapes?.[0]?.id;
+    r = await s.call("tools/call", { name: "wudi_canvas_edit", arguments: { ops: [{ op: "update", id: addedId, patch: { w: 260, text: "侧栏导航" } }] } });
+    check("canvas_edit: update 生效", !errOf(r) && r?.result?.structuredContent?.canvas?.shapes?.[0]?.w === 260);
+    r = await s.call("tools/call", { name: "wudi_canvas_edit", arguments: { ops: [{ op: "add", shape: { type: "rect", frameId: "f-ghost", x: 1, y: 1 } }] } });
+    check("canvas_edit: frameId 不存在拒绝", errOf(r) && textOf(r).includes("frameId 不存在"));
+    r = await s.call("tools/call", { name: "wudi_canvas_edit", arguments: { ops: [{ op: "add", shape: { type: "pentagon", x: 1, y: 1 } }] } });
+    check("canvas_edit: 非法类型拒绝", errOf(r) && textOf(r).includes("类型非法"));
+    r = await s.call("tools/call", { name: "wudi_canvas_export", arguments: { name: "smoke-wire" } });
+    check("canvas_export: 按画板出两份设计稿", !errOf(r) && (r?.result?.structuredContent?.mockups?.length ?? 0) === 2 && textOf(r).includes("首页-1440"));
+    const exportHtml = await readFile(join(workdir, ".wudi", "design", "mockups", "smoke-wire-首页-1440.html"), "utf-8").catch(() => "");
+    check("canvas_export: SVG 内联与箭头 marker", exportHtml.includes("<svg") && exportHtml.includes("arrowhead"));
+    r = await s.call("tools/call", { name: "wudi_canvas_export", arguments: { name: "smoke-wire", format: "excalidraw" } });
+    check("canvas_export: excalidraw 场景", !errOf(r) && textOf(r).includes(".excalidraw"));
+    const exScene = JSON.parse(await readFile(join(workdir, ".wudi", "design", "canvas", "smoke-wire.excalidraw"), "utf-8").catch(() => "{}"));
+    check("canvas_export: frame 与元素映射", exScene.type === "excalidraw" && exScene.elements.some((e) => e.type === "frame") && exScene.elements.some((e) => e.type === "rectangle" && e.frameId) && exScene.elements.some((e) => e.type === "text" && e.text === "标题文字"));
+    /* ---- 层级调整 ---- */
+    r = await s.call("tools/call", { name: "wudi_canvas_edit", arguments: { ops: [{ op: "add", shape: { type: "rect", frameId: "", x: 500, y: 40, w: 100, h: 60, text: "底层" } }, { op: "add", shape: { type: "rect", frameId: "", x: 520, y: 60, w: 100, h: 60, text: "顶层" } }] } });
+    const twoIds = (r?.result?.structuredContent?.canvas?.shapes ?? []).filter((sh) => sh.text === "底层" || sh.text === "顶层").map((sh) => sh.id);
+    r = await s.call("tools/call", { name: "wudi_canvas_edit", arguments: { ops: [{ op: "reorder", id: twoIds[0], to: "front" }] } });
+    const lastShape = r?.result?.structuredContent?.canvas?.shapes?.at(-1);
+    check("canvas_edit: reorder 置顶", !errOf(r) && lastShape?.text === "底层", `isError=${errOf(r)} last=${JSON.stringify(lastShape)} shapes=${JSON.stringify(r?.result?.structuredContent?.canvas?.shapes?.map((x) => x.text))}`);
+    r = await s.call("tools/call", { name: "wudi_canvas_edit", arguments: { ops: [{ op: "reorder", id: twoIds[0], to: "back" }] } });
+    check("canvas_edit: reorder 置底", !errOf(r) && r?.result?.structuredContent?.canvas?.shapes?.[0]?.text === "底层");
+
+    /* ---- canvas.json 自动备份 ---- */
+    r = await s.call("tools/call", { name: "wudi_canvas_edit", arguments: { ops: [{ op: "add", shape: { type: "rect", frameId: "", x: 700, y: 40, w: 80, h: 40, text: "备份前" } }] } });
+    const backupOk = await readFile(join(workdir, ".wudi", "canvas.backup.json"), "utf8").then((t) => t.includes('"version": 2')).catch(() => false);
+    check("canvas_backup: 写入前自动备份上一版", backupOk);
+
+    /* ---- replace 全量替换（撤销/重做数据基础）---- */
+    r = await s.call("tools/call", { name: "wudi_canvas_edit", arguments: { ops: [{ op: "replace", canvas: { frames: [{ name: "替换画板", x: 10, y: 10, w: 800, h: 600 }], shapes: [{ type: "rect", frameId: "", x: 50, y: 50, w: 100, h: 60, fill: "#e2f5ea", text: "替换后的形状" }] } }] } });
+    check("canvas_edit: replace 全量替换", !errOf(r) && textOf(r).includes("全量替换（1 画板 / 1 形状）"));
+    r = await s.call("tools/call", { name: "wudi_canvas_get", arguments: {} });
+    check("canvas_get: replace 后状态", !errOf(r) && (r?.result?.structuredContent?.canvas?.frames?.[0]?.name === "替换画板") && (r?.result?.structuredContent?.canvas?.shapes?.[0]?.text === "替换后的形状"));
+    r = await s.call("tools/call", { name: "wudi_canvas_edit", arguments: { ops: [{ op: "replace", canvas: { frames: [{ name: "坏画板", x: 0, y: 0, w: 100, h: 100 }], shapes: [{ type: "hexagon", x: 0, y: 0 }] } }] } });
+    check("canvas_edit: replace 非法形状拒绝且不落盘", errOf(r) && textOf(r).includes("类型非法"));
+
+    r = await s.call("tools/call", { name: "wudi_canvas_clear", arguments: {} });
+    check("canvas_clear: 无 confirm 拒绝", errOf(r) && textOf(r).includes("confirm"));
+    r = await s.call("tools/call", { name: "wudi_canvas_clear", arguments: { confirm: true } });
+    check("canvas_clear: 确认后清空", !errOf(r) && (r?.result?.structuredContent?.canvas?.frames?.length ?? -1) === 0);
+
+    /* ---- vendor OpenPencil server（独立 MCP server，Figma .fig 设计稿）---- */
+    {
+      const op = rpcSession({ ZCODE_WORKSPACE_ROOT: workdir }, join(root, "vendor", "openpencil", "dist", "server.mjs"));
+      try {
+        const init = await op.call("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "smoke", version: "1.0" } });
+        check("openpencil: initialize", !!init?.result?.serverInfo);
+        await op.call("notifications/initialized", {});
+        const tl = await op.call("tools/list", {});
+        const names = (tl?.result?.tools ?? []).map((t) => t.name);
+        check(`openpencil: 工具数 ≥ 100（实际 ${names.length}）`, names.length >= 100);
+        check("openpencil: 关键工具在列", ["new_design", "open_design", "create_shape", "render", "design_to_tokens", "export_image", "set_layout", "query_nodes"].every((n) => names.includes(n)));
+        const nd = await op.call("tools/call", { name: "new_design", arguments: { path: "designs/smoke.fig" } });
+        const ndText = nd?.result?.content?.map((c) => c.text).join("\n") ?? "";
+        check("openpencil: new_design 建稿", (nd?.result?.isError ?? true) === false || ndText.includes("已存在") || ndText.includes("smoke.fig"));
+        const rs = await op.call("resources/list", {});
+        check("openpencil: 面板资源", JSON.stringify(rs?.result ?? {}).includes("openpencil"));
+      } finally {
+        op.kill();
+      }
+    }
+
+    /* ---- tokens 比对 ---- */
+    r = await s.call("tools/call", { name: "wudi_tokens_compare", arguments: { tokens: { color: { primary: "#ffffff", accent: "#7c5cf0" }, spacing: { sm: "8px" } } } });
+    const cmpSc = r?.result?.structuredContent ?? {};
+    check("tokens_compare: 变更与新增识别（本地 2 键无移除）", !errOf(r) && cmpSc.changed?.some((c) => c.key === "color.primary" && c.local === "#3366ff") && cmpSc.added?.some((a) => a.key === "color.accent") && (cmpSc.removed?.length ?? 0) === 0, JSON.stringify(cmpSc).slice(0, 220));
+    r = await s.call("tools/call", { name: "wudi_tokens_compare", arguments: { tokens: { color: { primary: "#3366ff" }, spacing: { sm: "8px" } } } });
+    check("tokens_compare: 一致时三清单全空", !errOf(r) && (r?.result?.structuredContent?.added ?? [1]).length === 0 && (r?.result?.structuredContent?.changed ?? [1]).length === 0 && (r?.result?.structuredContent?.removed ?? [1]).length === 0);
+
+    /* ---- 设计稿清单（OpenPencil 建稿后文件级联动）---- */
+    r = await s.call("tools/call", { name: "wudi_designs_list", arguments: {} });
+    const designsSc = r?.result?.structuredContent?.designs ?? [];
+    check("designs_list: 发现 openpencil 建的 .fig", !errOf(r) && designsSc.some((d) => d.name === "smoke.fig"), JSON.stringify(designsSc).slice(0, 150));
 
     r = await s.call("tools/call", { name: "wudi_doctor", arguments: { env: "staging" } });
     // 无真实 SSH（TEST-NET 地址 2s 超时）：SSH/远端/健康检查应失败或跳过，但档案项应 PASS

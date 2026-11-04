@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<!-- wudi-coding 内置设计模板：mobile（移动端 App，375 画布）。改造说明同 dashboard 模板注释。 -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mobile 模板</title>
+<style>
+  :root { --color-primary: #3565f0; --color-accent: #7c5cf0; --color-text: #171a21; --color-bg: #f4f6fa; }
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, "PingFang SC", sans-serif; }
+  body { background: #e8ebf1; display: flex; gap: 40px; justify-content: center; padding: 32px; }
+  .phone { width: 375px; height: 720px; background: var(--color-bg); border-radius: 36px; border: 8px solid #171a21; overflow: hidden; display: flex; flex-direction: column; position: relative; box-shadow: 0 24px 60px rgba(0,0,0,.18); }
+  .status { display: flex; justify-content: space-between; padding: 12px 22px 6px; font-size: 12px; font-weight: 700; }
+  .head { padding: 8px 18px 14px; }
+  .head h1 { font-size: 20px; letter-spacing: -.02em; }
+  .head .sub { font-size: 12px; color: #8a93a3; margin-top: 2px; }
+  .scroll { flex: 1; overflow: hidden; padding: 0 14px; }
+  .card { background: #fff; border-radius: 14px; padding: 14px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(16,24,40,.06); }
+  .card .row { display: flex; align-items: center; gap: 10px; }
+  .card .ic { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px; background: rgba(53,101,240,.1); }
+  .card b { font-size: 13.5px; display: block; }
+  .card .m { font-size: 11.5px; color: #8a93a3; }
+  .card .val { margin-left: auto; font-weight: 800; font-size: 15px; background: linear-gradient(135deg, var(--color-primary), var(--color-accent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .banner { background: linear-gradient(135deg, var(--color-primary), var(--color-accent)); color: #fff; border-radius: 14px; padding: 14px; margin-bottom: 10px; }
+  .banner b { font-size: 14px; } .banner p { font-size: 11.5px; opacity: .85; margin-top: 3px; }
+  .tabbar { display: flex; border-top: 1px solid rgba(0,0,0,.06); background: #fff; padding: 8px 0 18px; }
+  .tab { flex: 1; text-align: center; font-size: 10.5px; color: #8a93a3; }
+  .tab.active { color: var(--color-primary); font-weight: 700; }
+  .tab .ti { font-size: 17px; display: block; margin-bottom: 1px; }
+  .fab { position: absolute; right: 16px; bottom: 74px; width: 52px; height: 52px; border-radius: 17px; background: linear-gradient(135deg, var(--color-primary), var(--color-accent)); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 8px 20px rgba(53,101,240,.4); }
+</style>
+</head>
+<body>
+  <!-- 【可改区①】首页屏 -->
+  <div class="phone">
+    <div class="status"><span>9:41</span><span>●●●</span></div>
+    <div class="head"><h1>工作台</h1><div class="sub">早上好，LJ · 今天有 2 个部署待确认</div></div>
+    <div class="scroll">
+      <div class="banner"><b>🚀 一键部署已就绪</b><p>zongheng-app v20261101 通过体检，可发布 prod</p></div>
+      <div class="card"><div class="row"><div class="ic">📦</div><div><b>zongheng-app</b><span class="m">prod · 22:01 部署成功</span></div><span class="val">✓</span></div></div>
+      <div class="card"><div class="row"><div class="ic">🎨</div><div><b>设计稿 v3</b><span class="m">工作台改版 · 待你确认</span></div><span class="val">2</span></div></div>
+      <div class="card"><div class="row"><div class="ic">📄</div><div><b>周报已生成</b><span class="m">docs/weekly/2026-W44.md</span></div></div></div>
+    </div>
+    <!-- 【可改区②】底部导航与 FAB -->
+    <div class="fab">＋</div>
+    <div class="tabbar"><div class="tab active"><span class="ti">◱</span>总览</div><div class="tab"><span class="ti">◧</span>项目</div><div class="tab"><span class="ti">◨</span>部署</div><div class="tab"><span class="ti">undo</span>我的</div></div>
+  </div>
+  <!-- 【可改区③】第二屏（详情页示例）：复制 .phone 改内容 -->
+</body>
+</html>

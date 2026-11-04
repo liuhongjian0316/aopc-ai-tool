@@ -14,11 +14,31 @@ description: UI 设计闭环：单文件 HTML 设计稿生成、截图自检迭�
 
 ## 2. 设计稿：单文件 HTML
 
-- 每稿一个自包含 HTML（内联 CSS/JS，仅字体允许外链），存 `.wudi/design/mockups/<名称>-v<N>.html`。
-- 桌面端默认 1440 宽画布；同时给一个 375 宽移动摘要块（响应式设计必须展示断点行为）。
+- **从内置模板起步**：本技能带三套完整级模板（`templates/` 相对本技能目录）——`dashboard.html`（管理后台/工作台）、`landing.html`（产品落地页）、`mobile.html`（移动端 App 375 画布）。按页面类型选模板复制到 `.wudi/design/mockups/<名称>-v1.html`，替换 `:root` tokens 为项目 tokens、内容换业务真实文案，再按需增删区块；模板内的【可改区】注释是改造指引。
+- 每稿一个自包含 HTML（内联 CSS/JS，仅字体允许外链）；没有合适模板才从空白起稿。
+- 桌面端默认 1440 宽画布（mobile 模板为 375）；同时给一个 375 宽移动摘要块（响应式设计必须展示断点行为）。
 - 必画状态：默认、hover、加载、空数据、错误，至少覆盖主要交互组件。
 - 标注：关键间距/字号/色值直接写在稿内标注层，方便转代码时对照。
 - 真实感数据：用贴近业务的真实文案和长度，不用 lorem ipsum 和 "Test User"。
+- 落盘后用 `wudi_design_list` 确认进入图库（面板设计页可见、可预览）。
+
+## 2b. 设计画布：快速线框（wudi_canvas_* 工具）
+
+布局探索阶段优先用**设计画布**（面板「画布」页与 Agent 共享同一份数据）：
+
+- `wudi_canvas_edit` 批量铺形状：`add`（rect/ellipse/diamond/arrow/text，坐标 0-4000）搭线框——先大区块（侧栏/主区/卡片），再小元素；`update` 调位置尺寸颜色；`delete` 清理。
+- 布局定稿后 `wudi_canvas_export {name}` 导出：`format=html` 进图库精修，`format=excalidraw` 生成 .excalidraw 场景（再让 Agent 调官方 Excalidraw 插件的 open_diagram 导入，在完整级白板自由编辑，该插件也有 create_diagram/apply_operations 供 Agent 继续操作）——**线框在画布，精修在模板或 Excalidraw**，不要在画布上抠像素细节。
+- 用户在面板画布上的拖拽/填色与你的操作实时同步同一份数据；动 Agent 侧大改前先 `wudi_canvas_get` 看现状。
+
+## 2c. OpenPencil 工作流（.fig 设计稿，Agent 深度读写）
+
+Figma 式设计走 OpenPencil（vendor 官方插件，117 工具）：设计稿是工作区 `designs/*.fig` 文件，**Agent 与用户在侧栏编辑器实时协同**。
+
+- **建稿**：`new_design {path: "designs/<名>.fig"}` → `create_shape`（FRAME/RECTANGLE/TEXT…）或 `render`（JSX 批量搭布局）→ `set_layout`（auto-layout）→ `set_fill/set_text/set_radius` 精修。
+- **改稿**：先 `open_design` + `get_page_tree`/`find_nodes` 摸清结构，再 `update_node`/`batch_update`；不要全量重建覆盖用户布局。
+- **进面板**：`export_image` 渲染 PNG 到 `.wudi/design/renders/`（自动进工作台设计图墙）；`wudi_designs_list` 随时盘点设计稿。
+- **tokens 打通**：`design_to_tokens` 从设计稿导出 tokens → `wudi_design_tokens_set` 沉淀；反向用 `list_variables`/`create_variable` 把 wudi tokens 灌回设计稿变量。
+- 面板「设计」页有每个 .fig 的「打开 / 渲染到图墙」按钮（经宿主 message 唤起你执行）。
 
 ## 3. 截图自检（不可跳过）
 

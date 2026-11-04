@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<!-- wudi-coding 内置设计模板：landing（产品落地页）。改造说明同 dashboard 模板注释。 -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>landing 模板</title>
+<style>
+  :root { --color-primary: #3565f0; --color-accent: #7c5cf0; --color-text: #171a21; --color-bg: #ffffff; --radius: 14px; }
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, "PingFang SC", sans-serif; }
+  body { background: var(--color-bg); color: var(--color-text); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  nav { display: flex; align-items: center; gap: 24px; padding: 18px 0; }
+  .logo { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, var(--color-primary), var(--color-accent)); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; }
+  .logo-t { font-weight: 750; font-size: 14.5px; }
+  nav a { color: #5b6472; text-decoration: none; font-size: 13px; }
+  nav .sp { flex: 1; }
+  .hero { text-align: center; padding: 72px 0 48px; }
+  .hero .tag { display: inline-block; font-size: 12px; font-weight: 600; color: var(--color-primary); background: rgba(53,101,240,.08); padding: 4px 14px; border-radius: 20px; margin-bottom: 18px; }
+  .hero h1 { font-size: 42px; line-height: 1.18; letter-spacing: -.02em; margin-bottom: 16px; }
+  .hero h1 em { font-style: normal; background: linear-gradient(135deg, var(--color-primary), var(--color-accent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero p { font-size: 16px; color: #5b6472; max-width: 560px; margin: 0 auto 28px; }
+  .cta { display: inline-block; padding: 12px 28px; border-radius: 10px; background: linear-gradient(135deg, var(--color-primary), var(--color-accent)); color: #fff; font-weight: 650; font-size: 14px; text-decoration: none; }
+  .cta.ghost { background: transparent; color: var(--color-text); border: 1px solid rgba(0,0,0,.12); margin-left: 10px; }
+  .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 40px 0 64px; }
+  .feat { border: 1px solid rgba(0,0,0,.06); border-radius: var(--radius); padding: 20px; }
+  .feat .ic { width: 38px; height: 38px; border-radius: 10px; background: rgba(53,101,240,.08); display: flex; align-items: center; justify-content: center; font-size: 17px; margin-bottom: 12px; }
+  .feat b { font-size: 14px; display: block; margin-bottom: 6px; }
+  .feat p { font-size: 12.5px; color: #5b6472; line-height: 1.6; }
+  footer { border-top: 1px solid rgba(0,0,0,.06); padding: 20px 0; text-align: center; color: #8a93a3; font-size: 12px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <nav><div class="logo">无</div><span class="logo-t">无敌编程</span><span class="sp"></span><a href="#">功能</a><a href="#">定价</a><a href="#">文档</a></nav>
+    <!-- 【可改区①】hero：一句话价值主张 + 双 CTA -->
+    <div class="hero">
+      <span class="tag">AI 全生命周期开发</span>
+      <h1>从需求到上线<br>一个工作台<em>全部搞定</em></h1>
+      <p>开发、UI 设计、部署、文档 —— Agent 驱动的完整级程序员工作台，让每一次交付都带着设计上线。</p>
+      <a class="cta" href="#">免费开始</a><a class="cta ghost" href="#">观看演示 →</a>
+    </div>
+    <!-- 【可改区②】特性三卡 -->
+    <div class="features">
+      <div class="feat"><div class="ic">⚡</div><b>五阶段部署流水线</b><p>build → package → upload → remote → verify，软链原子切换、一键回滚、健康检查收口。</p></div>
+      <div class="feat"><div class="ic">🎨</div><b>设计稿即代码</b><p>设计 tokens 自动沉淀，设计稿与实现并排比对，Figma 一键拉取。</p></div>
+      <div class="feat"><div class="ic">📊</div><b>项目管理总览</b><p>所有项目的部署、文档、设计产物一目了然，健康状态实时可视。</p></div>
+    </div>
+  </div>
+  <footer>© 2026 无敌编程 · 用 AI 把每一次交付做到完整级别</footer>
+</body>
+</html>

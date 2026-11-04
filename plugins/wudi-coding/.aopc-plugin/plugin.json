@@ -1,6 +1,6 @@
 {
   "name": "wudi-coding",
-  "version": "0.12.0",
+  "version": "0.28.0",
   "description": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册）。/wudi 命令族调度四个域，wudi-* 技能提供方法论，wudi_* MCP 工具提供项目档案与部署流水线真工具",
   "description_i18n": {
     "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (design mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation (README/API/PRD/runbook). /wudi command family orchestrates the four domains, wudi-* skills provide methodology, wudi_* MCP tools provide project profile and the real deploy pipeline.",
@@ -37,6 +37,19 @@
         "WUDI_SSH_USER": "${user_config.sshUser}",
         "WUDI_SSH_IDENTITY": "${user_config.sshIdentityPath}",
         "WUDI_FIGMA_TOKEN": "${user_config.figmaToken}"
+      }
+    },
+    "openpencil": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "${AOPC_PLUGIN_ROOT}/vendor/openpencil/dist/server.mjs"
+      ],
+      "cwd": "${AOPC_PROJECT_DIR}",
+      "env": {
+        "ZCODE_WORKSPACE_ROOT": "${AOPC_PROJECT_DIR}",
+        "ZCODE_PLUGIN_ROOT": "${AOPC_PLUGIN_ROOT}",
+        "AOPC_PLUGIN_DATA": "${AOPC_PLUGIN_DATA}"
       }
     }
   },
@@ -82,6 +95,17 @@
         "icon": "rocket",
         "server": "wudi",
         "resourceUri": "ui://wudi-coding/panel.html",
+        "availability": "session"
+      },
+      {
+        "id": "openpencil",
+        "title": {
+          "zh-CN": "OpenPencil 设计稿",
+          "en-US": "OpenPencil"
+        },
+        "icon": "pen-tool",
+        "server": "openpencil",
+        "resourceUri": "ui://openpencil/panel.html",
         "availability": "session"
       }
     ]

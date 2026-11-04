@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<!-- wudi-coding 内置设计模板：dashboard（管理后台/工作台）。
+     用法：复制到 .wudi/design/mockups/<名称>.html 后改造 —— 顶部 :root tokens 换成项目 tokens，
+     内容换成业务真实文案；标注可改区见注释。8pt 间距节奏，全部色值走 tokens 变量。 -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dashboard 模板</title>
+<style>
+  /* 【可改区①】design tokens：接入项目 .wudi/design/tokens.json 的值 */
+  :root {
+    --color-primary: #3565f0; --color-accent: #7c5cf0; --color-text: #171a21;
+    --color-bg: #f4f6fa; --color-card: #ffffff; --color-ok: #0e8a4f; --color-err: #c73a33;
+    --radius: 12px; --gap: 8px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, "PingFang SC", sans-serif; }
+  body { display: flex; min-height: 100vh; background: var(--color-bg); color: var(--color-text); }
+  /* 【可改区②】侧栏导航 */
+  .side { width: 200px; background: var(--color-card); border-right: 1px solid rgba(0,0,0,.06); padding: 20px 12px; }
+  .side .logo { width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(135deg, var(--color-primary), var(--color-accent)); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; margin-bottom: 18px; }
+  .side a { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 8px; font-size: 13px; color: #5b6472; text-decoration: none; margin-bottom: 2px; }
+  .side a.active { background: var(--color-primary); color: #fff; font-weight: 600; }
+  .main { flex: 1; padding: 20px 24px; }
+  .topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .topbar h1 { font-size: 17px; }
+  .topbar .sp { flex: 1; }
+  .topbar .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--color-accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+  .btn { background: var(--color-primary); color: #fff; border: none; padding: 8px 16px; border-radius: 8px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  /* 【可改区③】统计卡 */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .stat { background: var(--color-card); border: 1px solid rgba(0,0,0,.05); border-radius: var(--radius); padding: 14px 16px; }
+  .stat .num { font-size: 24px; font-weight: 800; margin: 6px 0 2px; }
+  .stat .lbl { font-size: 11px; color: #8a93a3; }
+  .stat .delta { font-size: 11px; font-weight: 700; color: var(--color-ok); }
+  .stat .delta.down { color: var(--color-err); }
+  /* 【可改区④】表格 */
+  .card { background: var(--color-card); border: 1px solid rgba(0,0,0,.05); border-radius: var(--radius); padding: 16px; }
+  .card h3 { font-size: 13px; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; color: #8a93a3; font-weight: 600; padding: 8px; border-bottom: 1px solid rgba(0,0,0,.06); }
+  td { padding: 10px 8px; border-bottom: 1px solid rgba(0,0,0,.04); }
+  .badge { font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 12px; }
+  .badge.ok { background: rgba(14,138,79,.12); color: var(--color-ok); }
+  .badge.warn { background: rgba(180,83,9,.12); color: var(--color-err); }
+</style>
+</head>
+<body>
+  <nav class="side">
+    <div class="logo">无</div>
+    <!-- 【可改区②】导航项 -->
+    <a class="active" href="#">◱ 总览</a><a href="#">◧ 项目</a><a href="#">◨ 部署</a><a href="#">◪ 设计</a><a href="#">🕮 文档</a>
+  </nav>
+  <main class="main">
+    <div class="topbar"><h1>工作台</h1><span style="flex:1"></span><button class="btn">＋ 新建项目</button><div class="avatar">LJ</div></div>
+    <!-- 【可改区③】统计卡：换成业务真实指标 -->
+    <div class="stats">
+      <div class="stat"><div class="lbl">项目总数</div><div class="num">8</div><div class="delta">↑ 2 本周</div></div>
+      <div class="stat"><div class="lbl">本周部署</div><div class="num">23</div><div class="delta">↑ 5</div></div>
+      <div class="stat"><div class="lbl">成功率</div><div class="num">96%</div><div class="delta down">↓ 1.2%</div></div>
+      <div class="stat"><div class="lbl">待办事项</div><div class="num">5</div><div class="delta">3 项今天到期</div></div>
+    </div>
+    <div class="card">
+      <h3>最近部署</h3>
+      <!-- 【可改区④】表格：业务真实数据 -->
+      <table>
+        <tr><th>项目</th><th>版本</th><th>环境</th><th>状态</th><th>时间</th></tr>
+        <tr><td>zongheng-app</td><td>20261101-2201</td><td>prod</td><td><span class="badge ok">成功</span></td><td>11-01 22:01</td></tr>
+        <tr><td>zongheng-serve</td><td>20261031-1830</td><td>prod</td><td><span class="badge ok">回滚</span></td><td>10-31 18:30</td></tr>
+        <tr><td>freebound-mini</td><td>20261031-0912</td><td>staging</td><td><span class="badge warn">失败</span></td><td>10-31 09:12</td></tr>
+      </table>
+    </div>
+  </main>
+</body>
+</html>

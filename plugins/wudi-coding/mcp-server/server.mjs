@@ -8,7 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TOOLS, callTool } from "../lib/tools.mjs";
 
-const SERVER_INFO = { name: "wudi-coding", version: "0.12.0" };
+const SERVER_INFO = { name: "wudi-coding", version: "0.28.0" };
 const PANEL_URI = "ui://wudi-coding/panel.html";
 const PANEL_MIME = "text/html;profile=mcp-app";
 const panelPath = resolve(join(dirname(fileURLToPath(import.meta.url)), "..", "panel.html"));
@@ -51,6 +51,7 @@ function listDesignResources() {
   };
   scan("mockups", "mockup", "text/html");
   scan("figma", "image", "image/png");
+  scan("renders", "image", "image/png"); // DesignCraft 等外部设计工具的渲染 PNG
   return out;
 }
 
