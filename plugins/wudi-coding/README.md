@@ -195,7 +195,7 @@ aopc plugin install wudi-coding
 
 - **实时协同桥**：wudi server 内置 SSE 端点（127.0.0.1 随机端口），画布变更实时广播；面板 EventSource 订阅 —— Agent 的 `wudi_canvas_edit`/`clear` 操作**实时出现在用户眼前的画布上**（拖拽中自动避让），OpenPencil 同款活协同。
 
-## 版本
+## OpenPencil 按钮直连修复（v0.30.1）\n\n- 「新建 Figma 设计稿」「打开」「渲染到图墙」从 sendMessage（宿主 message 能力，连接不稳）改为 callTool 直连（经 wudi server 代理到 OpenPencil 子进程）\n\n## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。
 

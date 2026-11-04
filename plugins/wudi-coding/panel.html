@@ -447,7 +447,7 @@ const EmptyResultSchema = {
     <div class="c"><b>健康检查</b><div class="num">200</div><div class="muted">全部通过</div><span class="btn">体检报告</span></div>
   </div></body></html>`;
   const app = new App(
-    { name: "wudi-coding", version: "0.30.0" },
+    { name: "wudi-coding", version: "0.30.1" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -1987,7 +1987,7 @@ const EmptyResultSchema = {
             render();
             return;
           }
-          await app.sendMessage({ role: "user", content: { type: "text", text: `请用 OpenPencil 的 open_design 打开 ${path}，并把侧栏 OpenPencil 面板打开，我要继续编辑。` } });
+          await callTool("open_design", { path });
         } catch (err) {
           state.notice = { kind: "err", text: `唤起失败：${String(err.message ?? err).slice(0, 300)}` };
           render();
@@ -2005,7 +2005,8 @@ const EmptyResultSchema = {
           }
           state.notice = { kind: "ok", text: `已唤起 Agent 渲染 ${path}，完成后点「刷新」即可在下方设计图墙看到。` };
           render();
-          await app.sendMessage({ role: "user", content: { type: "text", text: `请用 OpenPencil 的 open_design 打开 ${path}，然后 export_image 把整页渲染为 PNG 保存到 .wudi/design/renders/（文件名 ${path.split("/").pop().replace(".fig", "")}-${Date.now().toString(36)}.png），完成后告诉我路径。` } });
+          const pngName = `${path.split("/").pop().replace(".fig", "")}-${Date.now().toString(36)}.png`;
+          await callTool("export_image", { design: path, format: "PNG", path: `.wudi/design/renders/${pngName}` });
         } catch (err) {
           state.notice = { kind: "err", text: `唤起失败：${String(err.message ?? err).slice(0, 300)}` };
           render();
@@ -2029,17 +2030,15 @@ const EmptyResultSchema = {
     document.getElementById("btn-tokens-edit")?.addEventListener("click", tokensEditDialog);
     document.getElementById("btn-op-new")?.addEventListener("click", async () => {
       const name = String(document.getElementById("gen-name")?.value ?? "").trim() || `design-${Date.now().toString(36)}`;
+      setBusy(true);
       try {
-        if (!app.getHostCapabilities()?.message) {
-          state.notice = { kind: "err", text: "宿主不支持从面板发消息；请在会话里说「用 openpencil 新建设计稿 designs/" + name + ".fig」。" };
-          render();
-          return;
-        }
-        await app.sendMessage({ role: "user", content: { type: "text", text: `请用 OpenPencil 插件新建设计稿 designs/${name}.fig（new_design），在画板里放一个符合项目 tokens 的 hero 区块，并把侧栏 OpenPencil 面板打开，告诉我文档 id 与节点情况。` } });
+        const res = await callTool("new_design", { path: `designs/${name}.fig` });
+        state.notice = { kind: "ok", text: res.content?.map((c) => c.text).join("\n") ?? "设计稿已创建" };
+        await loadDesign();
       } catch (err) {
-        state.notice = { kind: "err", text: `唤起失败：${String(err.message ?? err).slice(0, 300)}` };
-        render();
+        state.notice = { kind: "err", text: String(err.message ?? err).slice(0, 500) };
       }
+      setBusy(false);
     });
     $root().querySelectorAll("[data-act]").forEach((b) =>
       b.addEventListener("click", () => {

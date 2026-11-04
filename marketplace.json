@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.30.0",
+      "version": "0.30.1",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,34 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.30.1",
+          "date": "2026-11-05",
+          "changes": [
+            "修复「新建 Figma 设计稿」等按钮触发 MCP App connection lost：sendMessage 改为 callTool 直连（OpenPencil 代理工具经 wudi server 转发，不依赖宿主 message 能力）",
+            "data-op-open / data-op-render 同步修复（open_design / export_image 直连）"
+          ]
+        },
+        {
+          "version": "0.30.0",
+          "date": "2026-11-05",
+          "changes": [
+            "杀死「选择插件界面」弹窗：移除 openpencil 独立 surface，面板打开即工作台（对齐 OpenPencil 模式）",
+            "OpenPencil 深度集成：wudi server 内嵌子进程代理 —— 117 工具/资源经 wudi server 转发给 Agent 与工作台",
+            "SSE 实时协同桥：Agent 画布操作实时同步到用户眼前的画布（拖拽中自动避让）",
+            "仓库结构对齐 zcode-plugins 惯例：根 marketplace.json + .zcode-plugin 双清单 + AGENTS.md + CONTRIBUTING + package.json + pnpm-workspace.yaml",
+            "smoke 95 项全绿"
+          ]
+        },
+        {
+          "version": "0.30.0",
+          "date": "2026-11-05",
+          "changes": [
+            "Agent↔面板实时协同桥（OpenPencil 式）：wudi server 内置 SSE 协同桥（127.0.0.1 随机端口），画布变更实时广播；面板 EventSource 订阅，Agent 的 wudi_canvas_edit/clear 操作实时同步到用户眼前的画布（拖拽中自动避让）",
+            "面板资源 _meta 声明 CSP connectDomains（动态桥端口），宿主放行本机连接；wudi_canvas_bridge 端点发现工具",
+            "smoke 95 项全绿"
+          ]
+        },
         {
           "version": "0.29.0",
           "date": "2026-11-04",

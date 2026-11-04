@@ -10,7 +10,7 @@ import { TOOLS, callTool, bridgeConnectDomains } from "../lib/tools.mjs";
 import { openpencilTools, openpencilCall, openpencilReadResource, openpencilResourcesList } from "../lib/openpencil-runtime.mjs";
 let opToolsCache = []; // openpencil 工具缓存（首次 tools/list 后后台填充）
 
-const SERVER_INFO = { name: "wudi-coding", version: "0.30.0" };
+const SERVER_INFO = { name: "wudi-coding", version: "0.30.1" };
 const PANEL_URI = "ui://wudi-coding/panel.html";
 const PANEL_MIME = "text/html;profile=mcp-app";
 const panelPath = resolve(join(dirname(fileURLToPath(import.meta.url)), "..", "panel.html"));
