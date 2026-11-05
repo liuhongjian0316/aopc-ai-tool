@@ -293,6 +293,12 @@ plugins/wudi-coding/
 
 版本号由 smoke 守卫强制 **五处一致**：`.aopc-plugin/plugin.json`、`.zcode-plugin/plugin.json`、`package.json`、`ui/panel.js`、`src/server.ts`。
 
+## 打开画布自动适应视图（v0.34.1）
+
+- 编辑器就绪后（`__openpencilPanel.canvasReady`）**自动调用 `editor.zoomToFit()`**，解决「已连接但画布空白」（文档加载后视口偏离内容）。
+- 顶栏「适应视图」按钮（同源 srcdoc 直接调用编辑器 zoomToFit）；渲染器未就绪时状态栏直接报「CanvasKit/wasm 可能被限制」。
+- 自检逻辑读编辑器全局接口而非 canvas 探测，状态判断更精确：已连接 · 已自动适应视图 / 画布渲染器未就绪 / 渲染异常：<错误>。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。

@@ -36,7 +36,7 @@ const EmptyResultSchema = {
     <div class="c"><b>健康检查</b><div class="num">200</div><div class="muted">全部通过</div><span class="btn">体检报告</span></div>
   </div></body></html>`;
   const app = new App(
-    { name: "wudi-coding", version: "0.34.0" },
+    { name: "wudi-coding", version: "0.34.1" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -1556,12 +1556,17 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
         <span class="op-path mono"></span>
         <span id="op-status" class="muted"></span>
         <span style="flex:1"></span>
+        <button class="btn" id="op-layer-fit" title="缩放到全部内容（调用编辑器 zoomToFit）">适应视图</button>
         <button class="btn" id="op-layer-reload" title="重新加载编辑器">重载</button>
         <button class="btn danger" id="op-layer-close">关闭编辑器</button>
       </div>
       <div class="op-frame-holder"></div>`;
     document.body.appendChild(layer);
     layer.querySelector("#op-layer-close").addEventListener("click", () => closeOpEmbed());
+    layer.querySelector("#op-layer-fit").addEventListener("click", () => {
+      const frame = document.getElementById("op-frame");
+      if (frame) opAutoFit(frame);
+    });
     layer.querySelector("#op-layer-reload").addEventListener("click", () => {
       const frame = layer.querySelector("#op-frame");
       if (!frame) return;
@@ -1599,7 +1604,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.34.0" },
+              hostInfo: { name: "wudi-workbench", version: "0.34.1" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -1682,24 +1687,44 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
     opReadyTimer = setTimeout(() => {
       if (!opReady) opSetStatus("加载超时：编辑器未握手。先「重载」，仍失败请重启会话；还有问题把开发者工具 Console 报错发我。", "err");
     }, 15000);
-    /* 渲染自检：连接后 5s 检查画布渲染器状态（srcdoc 同源，可直接读 canvas/错误采集） */
+    /* 渲染自检：连接后 6s 读编辑器全局接口（srcdoc 同源）：
+     * - canvasReady 判断渲染器是否真的起来了；
+     * - 就绪则自动 zoomToFit()（文档加载后视口可能偏离内容，避免“已连接但画布空”）。 */
     setTimeout(() => {
       const live = document.getElementById("op-frame");
       if (!live || !opReady) return;
       try {
-        const doc = live.contentDocument;
-        if (!doc) return; // src 真实 origin 加载时跨源，无法内省（状态以握手为准）
-        const errs = live.contentWindow?.__wudiErrs ?? [];
-        const canvases = [...(doc?.querySelectorAll("canvas") ?? [])];
-        const hasCtx = canvases.some((c) => {
-          try { return !!(c.getContext("webgl2") || c.getContext("webgl") || c.getContext("2d")); } catch { return false; }
-        });
-        if (errs.length) opSetStatus(`编辑器渲染异常：${String(errs[0]).slice(0, 160)}`, "err");
-        else if (!canvases.length) opSetStatus("画布元素未创建：渲染器未启动（wasm/CanvasKit 可能被拦截）", "err");
-        else if (!hasCtx) opSetStatus("画布未初始化渲染上下文（CanvasKit/wasm 可能被拦截）", "err");
-        else opSetStatus("已连接 · 看不到内容时按 Shift+1 适应视图", "ok");
+        const win = live.contentWindow;
+        const errs = win?.__wudiErrs ?? [];
+        if (errs.length) { opSetStatus(`编辑器渲染异常：${String(errs[0]).slice(0, 160)}`, "err"); return; }
+        const api = win?.__openpencilPanel;
+        if (!api) { opSetStatus("编辑器接口未就绪（仍可用；看不到内容请在编辑器内按 Shift+1）", "ok"); return; }
+        let ready = false;
+        try { ready = !!api.canvasReady; } catch { ready = false; }
+        if (!ready) {
+          // 再给 4s 渲染器初始化（大文档 / 慢机器）
+          setTimeout(() => {
+            try {
+              if (api.canvasReady) { opAutoFit(live); }
+              else opSetStatus("画布渲染器未就绪（CanvasKit/wasm 可能被限制）", "err");
+            } catch { /* ignore */ }
+          }, 4000);
+          return;
+        }
+        opAutoFit(live);
       } catch { /* 读不到 iframe 就跳过 */ }
-    }, 5000);
+    }, 6000);
+  }
+
+  /** 自动适应视图：直接调用编辑器暴露的 zoomToFit（同源 srcdoc）。 */
+  function opAutoFit(frameEl) {
+    try {
+      const api = frameEl.contentWindow?.__openpencilPanel;
+      api?.editor?.zoomToFit?.();
+      opSetStatus("已连接 · 已自动适应视图", "ok");
+    } catch {
+      opSetStatus("已连接 · 看不到内容请在编辑器内按 Shift+1", "ok");
+    }
   }
 
   function closeOpEmbed() {

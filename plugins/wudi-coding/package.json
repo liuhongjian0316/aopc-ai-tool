@@ -1,6 +1,6 @@
 {
   "name": "wudi-coding",
-  "version": "0.34.0",
+  "version": "0.34.1",
   "private": true,
   "type": "module",
   "description": "无敌编程：程序员全生命周期 AOPC 插件（开发 / UI 设计 / 部署 / 文档）。工作台面板 = 项目选择 + 项目画布，设计页内嵌 OpenPencil 编辑器（官方源码 vendor，含构建环境）",
