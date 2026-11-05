@@ -387,12 +387,17 @@ async function protocolTests() {
         `HTTP ${frameRes?.status ?? "?"} · ${frameHtml.length}B`);
     }
     r = await s.call("resources/read", { uri: "ui://wudi-coding/panel.html" });
-    const cspMeta = r?.result?._meta?.ui?.csp ?? {};
-    check("op_embed: 面板 CSP 声明 frameDomains",
+    // 宿主读内容项级 _meta（规范）；结果级仅兼容兜底
+    const cspMeta = r?.result?.contents?.[0]?._meta?.ui?.csp ?? r?.result?._meta?.ui?.csp ?? {};
+    check("op_embed: 面板资源项 _meta 声明 frameDomains",
       Array.isArray(cspMeta.frameDomains) && cspMeta.frameDomains.some((d) => /^http:\/\/127\.0\.0\.1:\d+$/.test(d)),
       JSON.stringify(cspMeta).slice(0, 180));
-    check("op_embed: 面板 CSP 声明 connectDomains",
+    check("op_embed: 面板资源项 _meta 声明 connectDomains",
       Array.isArray(cspMeta.connectDomains) && cspMeta.connectDomains.length > 0);
+    r = await s.call("resources/list", {});
+    const listMeta = (r?.result?.resources ?? []).find((x) => x.uri === "ui://wudi-coding/panel.html")?._meta?.ui?.csp ?? {};
+    check("op_embed: resources/list 兜底声明 frameDomains",
+      Array.isArray(listMeta.frameDomains) && listMeta.frameDomains.length > 0);
 
     r = await s.call("tools/call", { name: "wudi_doctor", arguments: { env: "staging" } });
     // 无真实 SSH（TEST-NET 地址 2s 超时）：SSH/远端/健康检查应失败或跳过，但档案项应 PASS

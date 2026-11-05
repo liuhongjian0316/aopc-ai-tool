@@ -215,6 +215,12 @@ aopc plugin install wudi-coding
 - **杂项全部收纳**：HTML 设计稿 / 渲染图墙 / tokens / 全部产物收进「设计资产」折叠区；线框转 .fig / HTML 稿生成 / DesignCraft / Figma 收进「更多工具」折叠区。主页面不再是一堆卡片。
 - 编辑器会话走 overlay 层（不参与 render 循环），关闭后回到画布页；Agent 的 openpencil 工具与画布实时双向协同。
 
+## 资源级 CSP 修复：画布白屏（v0.33.1）
+
+- **白屏根因**：面板资源 CSP 此前只写在 `resources/read` 的**结果层 `_meta`**，而 AOPC 宿主按规范从**内容项 `contents[*]._meta.ui.csp`** 读取（`resources/list` 项兜底）——读不到 → `frame-src 'none'` → 内嵌编辑器 iframe 被整帧拦截（SSE 协同桥的 `connect-src` 同样一直未生效）。
+- 修复：CSP 同时写入内容项级 + 结果级 + `resources/list` 项级三处；宿主任一路径都能拿到 `connectDomains`/`frameDomains`。
+- **加载看门狗**：编辑器 overlay 顶栏新增状态位——「正在加载编辑器…」→「已连接」；12 秒不握手会明确提示 CSP/桥不可达原因并建议重载/重启会话，不再无声白屏。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。

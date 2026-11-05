@@ -483,7 +483,7 @@ const EmptyResultSchema = {
     <div class="c"><b>健康检查</b><div class="num">200</div><div class="muted">全部通过</div><span class="btn">体检报告</span></div>
   </div></body></html>`;
   const app = new App(
-    { name: "wudi-coding", version: "0.33.0" },
+    { name: "wudi-coding", version: "0.33.1" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -1939,6 +1939,15 @@ const EmptyResultSchema = {
    * 直连本机 WS 桥，与 Agent 的 openpencil 工具双向实时同步。
    * overlay 挂在 body 上、不参与 render() 内外重建，保证编辑器会话不被面板刷新打断。 */
   let opShimHandler = null;
+  let opReady = false;        // 编辑器握手（ui/initialize）是否完成
+  let opReadyTimer = null;    // 加载看门狗：超时给出白屏原因提示
+
+  function opSetStatus(text, kind = "") {
+    const el = document.getElementById("op-status");
+    if (!el) return;
+    el.textContent = text;
+    el.style.color = kind === "ok" ? "var(--ok)" : kind === "err" ? "var(--err)" : "";
+  }
 
   function buildOpOverlay() {
     let layer = document.getElementById("op-layer");
@@ -1950,6 +1959,7 @@ const EmptyResultSchema = {
       <div class="op-bar">
         <span class="chip accent">OpenPencil 编辑器</span>
         <span class="op-path mono"></span>
+        <span id="op-status" class="muted"></span>
         <span style="flex:1"></span>
         <button class="btn" id="op-layer-reload" title="重新加载编辑器">重载</button>
         <button class="btn danger" id="op-layer-close">关闭编辑器</button>
@@ -1979,9 +1989,12 @@ const EmptyResultSchema = {
       try {
         switch (msg.method) {
           case "ui/initialize":
+            opReady = true;
+            if (opReadyTimer) { clearTimeout(opReadyTimer); opReadyTimer = null; }
+            opSetStatus("已连接", "ok");
             reply({
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.33.0" },
+              hostInfo: { name: "wudi-workbench", version: "0.33.1" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -2048,16 +2061,26 @@ const EmptyResultSchema = {
     frame.id = "op-frame";
     frame.className = "op-frame";
     frame.src = `${origin}/openpencil/frame`;
+    frame.title = `OpenPencil · ${origin}/openpencil/frame`;
     frame.setAttribute("allow", "clipboard-write");
     holder.appendChild(frame);
     layer.classList.add("on");
     bindOpShim(frame);
+    /* 看门狗：编辑器 12s 内不握手，多半是宿主 CSP 拦了内嵌 frame（或本机桥不可达），给出可操作提示 */
+    opReady = false;
+    if (opReadyTimer) clearTimeout(opReadyTimer);
+    opSetStatus("正在加载编辑器…");
+    opReadyTimer = setTimeout(() => {
+      if (!opReady) opSetStatus("加载超时：宿主可能拦截了内嵌 frame（CSP frameDomains 未生效）或本机桥不可达。先「重载」，仍失败请重启会话并查看 Console。", "err");
+    }, 12000);
   }
 
   function closeOpEmbed() {
     state.opEmbed = null;
     state.opFrameOrigin = "";
     if (opShimHandler) { window.removeEventListener("message", opShimHandler); opShimHandler = null; }
+    if (opReadyTimer) { clearTimeout(opReadyTimer); opReadyTimer = null; }
+    opReady = false;
     document.getElementById("op-layer")?.remove();
     render();
     saveWidgetState();

@@ -21,7 +21,7 @@ let opToolsCache = (() => {
   catch { return []; }
 })(); // 静态工具定义（117 个），后台动态刷新
 
-const SERVER_INFO = { name: "wudi-coding", version: "0.33.0" };
+const SERVER_INFO = { name: "wudi-coding", version: "0.33.1" };
 const PANEL_URI = "ui://wudi-coding/panel.html";
 const PANEL_MIME = "text/html;profile=mcp-app";
 const panelPath = resolve(join(dirname(fileURLToPath(import.meta.url)), "..", "panel.html"));
@@ -123,8 +123,10 @@ function handleMessage(line) {
           uri: PANEL_URI,
           name: "无敌编程工作台",
           title: "无敌编程工作台",
-          description: "项目档案、SSH 状态、部署历史与健康检查、文档库",
+          description: "项目档案、SSH 状态、部署历史与健康检查、文档库、内嵌设计画布",
           mimeType: PANEL_MIME,
+          // 宿主对「内容项无 _meta」的兜底读取路径（resources/list 项级）
+          _meta: { ui: { csp: { connectDomains: bridgeConnectDomains(), frameDomains: frameDomains() } } },
         },
         ...listDesignResources(),
       ],
@@ -135,12 +137,14 @@ function handleMessage(line) {
     const uri = params?.uri ?? "";
     try {
       if (uri === PANEL_URI) {
-        // 域 CSP 只在 ui.csp 声明（aopc/csp 键仅承载 eval/wasm 放宽，面板不需要）
+        // 域 CSP 必须声明在「内容项级」_meta（MCP Apps 规范；AOPC 宿主只读 contents[*]._meta.ui.csp，
+        // resources/list 项兜底）。放在结果层会导致 frame-src/connect-src 全部落空 ——
+        // 面板内嵌编辑器 iframe 被拦成白屏。结果层再放一份兼容旧读取方。
+        const csp = { connectDomains: bridgeConnectDomains(), frameDomains: frameDomains() };
+        const meta = { ui: { csp } };
         send(id, {
-          contents: [{ uri: PANEL_URI, mimeType: PANEL_MIME, text: readPanel() }],
-          _meta: {
-            ui: { csp: { connectDomains: bridgeConnectDomains(), frameDomains: frameDomains() } },
-          },
+          contents: [{ uri: PANEL_URI, mimeType: PANEL_MIME, text: readPanel(), _meta: meta }],
+          _meta: meta,
         });
         return;
       }
