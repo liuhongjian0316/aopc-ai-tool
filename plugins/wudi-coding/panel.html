@@ -483,7 +483,7 @@ const EmptyResultSchema = {
     <div class="c"><b>健康检查</b><div class="num">200</div><div class="muted">全部通过</div><span class="btn">体检报告</span></div>
   </div></body></html>`;
   const app = new App(
-    { name: "wudi-coding", version: "0.33.3" },
+    { name: "wudi-coding", version: "0.33.4" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -1961,20 +1961,12 @@ const EmptyResultSchema = {
         <span class="op-path mono"></span>
         <span id="op-status" class="muted"></span>
         <span style="flex:1"></span>
-        <button class="btn" id="op-layer-fit" title="等价于编辑器内 Shift+1：缩放到全部内容">适应视图</button>
         <button class="btn" id="op-layer-reload" title="重新加载编辑器">重载</button>
         <button class="btn danger" id="op-layer-close">关闭编辑器</button>
       </div>
       <div class="op-frame-holder"></div>`;
     document.body.appendChild(layer);
     layer.querySelector("#op-layer-close").addEventListener("click", () => closeOpEmbed());
-    layer.querySelector("#op-layer-fit").addEventListener("click", () => {
-      const frame = document.getElementById("op-frame");
-      try {
-        frame?.contentWindow?.dispatchEvent(new KeyboardEvent("keydown", { key: "1", code: "Digit1", shiftKey: true, bubbles: true }));
-        opSetStatus("已发送「适应视图」（Shift+1）");
-      } catch { /* ignore */ }
-    });
     layer.querySelector("#op-layer-reload").addEventListener("click", () => {
       const frame = layer.querySelector("#op-frame");
       if (!frame) return;
@@ -2006,13 +1998,13 @@ const EmptyResultSchema = {
           case "ui/initialize":
             opReady = true;
             if (opReadyTimer) { clearTimeout(opReadyTimer); opReadyTimer = null; }
-            opSetStatus("已连接", "ok");
+            opSetStatus("已连接 · 看不到内容按 Shift+1 适应视图", "ok");
             // 结果 schema 四项必填（protocolVersion/hostInfo/hostCapabilities/hostContext），
             // protocolVersion 回显 app 请求的版本 —— 漏掉会让 SDK 校验失败、编辑器启动即报错
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.33.3" },
+              hostInfo: { name: "wudi-workbench", version: "0.33.4" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -2051,15 +2043,18 @@ const EmptyResultSchema = {
       return;
     }
     setBusy(true);
-    /* loader 走 MCP 资源管线取回（ui://openpencil/panel.html → wudi server → 子进程），
-     * 以 srcdoc 注入 iframe —— 子帧按宿主契约不受 frame-src 限制；资产仍由 loader 经 postMessage 桥读取 */
-    let loaderHtml = "";
+    /* 编辑器以真实 origin 加载（协同桥 /openpencil/frame）：
+     * 编辑器内部资产拦截器用 location.origin 做同源判断（/canvaskit.wasm、字体），
+     * srcdoc 的不透明源会让这些 fetch 变成 Failed to fetch（画布渲染器起不来）。
+     * 宿主侧 frame-src 放行已由面板资源 _meta.ui.csp.frameDomains 声明。 */
+    let origin = "";
     try {
-      const res = await app.readServerResource({ uri: "ui://openpencil/panel.html" });
-      loaderHtml = res?.contents?.[0]?.text ?? "";
-      if (!loaderHtml) throw new Error("loader 内容为空");
+      const res = await callTool("wudi_canvas_bridge", {});
+      const url = struct(res)?.url ?? "";
+      origin = url ? new URL(url).origin : "";
+      if (!origin) throw new Error("桥端点为空");
     } catch (err) {
-      state.notice = { kind: "err", text: `编辑器资源不可用：${String(err.message ?? err).slice(0, 300)}` };
+      state.notice = { kind: "err", text: `协同桥未就绪，无法内嵌编辑器：${String(err.message ?? err).slice(0, 200)}` };
       setBusy(false);
       return;
     }
@@ -2080,10 +2075,10 @@ const EmptyResultSchema = {
     const frame = document.createElement("iframe");
     frame.id = "op-frame";
     frame.className = "op-frame";
-    frame.title = `OpenPencil · ${path || "workspace designs"}`;
+    frame.title = `OpenPencil · ${origin}/openpencil/frame`;
     frame.setAttribute("allow", "clipboard-write");
+    frame.src = `${origin}/openpencil/frame`;
     holder.appendChild(frame);
-    frame.srcdoc = `<script>window.__wudiErrs=[];addEventListener("error",function(e){window.__wudiErrs.push(String(e.message||e.error||"error"))});addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(e.reason||"rejection"))});<\/script>${loaderHtml}`;
     layer.classList.add("on");
     bindOpShim(frame);
     /* 看门狗：编辑器 15s 内不握手，多半是 CSP（connect-src/wasm 放宽）或桥不可达，给出可操作提示 */
@@ -2099,6 +2094,7 @@ const EmptyResultSchema = {
       if (!live || !opReady) return;
       try {
         const doc = live.contentDocument;
+        if (!doc) return; // src 真实 origin 加载时跨源，无法内省（状态以握手为准）
         const errs = live.contentWindow?.__wudiErrs ?? [];
         const canvases = [...(doc?.querySelectorAll("canvas") ?? [])];
         const hasCtx = canvases.some((c) => {

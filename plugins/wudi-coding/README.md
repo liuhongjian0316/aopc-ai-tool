@@ -233,6 +233,12 @@ aopc plugin install wudi-coding
 - **渲染自检**：编辑器握手后 5s，面板自动检查 iframe 内 canvas 是否创建、是否拿到 WebGL/2D 上下文，并把 iframe 内注入采集的运行时错误显示在 overlay 顶栏——「画布未初始化渲染上下文（CanvasKit/wasm 可能被拦截）」/「已连接 · 看不到内容时按 Shift+1 适应视图」，无需开 Console 即可判断空画布原因。
 - **适应视图**：overlay 顶栏新增按钮，向编辑器窗口派发 Shift+1（缩放到全部内容），用于视口漂移/内容在视野外的一键自救。
 
+## 空画布根因：真实 origin 加载（v0.33.4）
+
+- **空画布根因**：编辑器 bundle 内部资产拦截器用 `location.origin` 做同源判断（`/canvaskit.wasm`、字体等），srcdoc 的**不透明源（origin=null）**使这些 fetch 全部 `Failed to fetch` → CanvasKit 起不来 → 中间的画布空白（DOM 编辑器正常、WS 已连接）。
+- **修复**：改回经协同桥 **`/openpencil/frame` 以真实 http origin** 加载（0.33.1 的白屏其实是 `protocolVersion` 握手缺陷，已修；frame-src 放行由资源 `_meta` 声明且实测生效）。
+- 真实 origin 探针实测：`canvaskit.wasm`/字体全部经资源管线读取、canvas 拿到 WebGL 上下文（819×860）、零错误；srcdoc 模式同指标为 300×150 + 无上下文 + Failed to fetch。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。
