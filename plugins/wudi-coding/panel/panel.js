@@ -17,17 +17,17 @@ const EmptyResultSchema = {
   const DEMO = String(location.hash || "").includes("demo");
   /* demo 模式的内置设计稿样例与 PNG 渐变占位 */
   const DEMO_PNG_GRADIENTS = {
-    "workbench-home.png": "linear-gradient(135deg,#3565f0,#7c5cf0)",
-    "deploy-flow.png": "linear-gradient(135deg,#0e8a4f,#3565f0)",
+    "workbench-home.png": "#0066dd",
+    "deploy-flow.png": "linear-gradient(135deg,#0e8a4f,#0066dd)",
   };
   const DEMO_MOCKUP_HTML = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>__NAME__</title><style>
   *{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,"PingFang SC",sans-serif}
   body{background:#f4f6fa;padding:24px;color:#171a21}
-  .top{display:flex;align-items:center;gap:10px;margin-bottom:20px}.logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#3565f0,#7c5cf0);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800}
+  .top{display:flex;align-items:center;gap:10px;margin-bottom:20px}.logo{width:34px;height:34px;border-radius:10px;background:#0066dd;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800}
   h1{font-size:16px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
   .c{background:#fff;border:1px solid #e3e7ee;border-radius:12px;padding:14px;box-shadow:0 1px 3px rgba(16,24,40,.06)}
-  .c b{font-size:13px}.num{font-size:26px;font-weight:800;margin:8px 0 2px;background:linear-gradient(135deg,#3565f0,#7c5cf0);-webkit-background-clip:text;background-clip:text;color:transparent}
-  .muted{color:#8a93a3;font-size:11px}.btn{display:inline-block;margin-top:10px;padding:7px 16px;border-radius:8px;background:linear-gradient(135deg,#3565f0,#7c5cf0);color:#fff;font-size:12px;font-weight:600}
+  .c b{font-size:13px}.num{font-size:26px;font-weight:800;margin:8px 0 2px;background:#0066dd;-webkit-background-clip:text;background-clip:text;color:transparent}
+  .muted{color:#8a93a3;font-size:11px}.btn{display:inline-block;margin-top:10px;padding:7px 16px;border-radius:8px;background:#0066dd;color:#fff;font-size:12px;font-weight:600}
   </style></head><body>
   <div class="top"><div class="logo">无敌</div><div><h1>__NAME__ 设计稿预览</h1><div class="muted">工作台 · 项目管理 · 部署 · 1440 设计画布</div></div></div>
   <div class="grid">
@@ -36,7 +36,7 @@ const EmptyResultSchema = {
     <div class="c"><b>健康检查</b><div class="num">200</div><div class="muted">全部通过</div><span class="btn">体检报告</span></div>
   </div></body></html>`;
   const app = new App(
-    { name: "wudi-coding", version: "0.31.0" },
+    { name: "wudi-coding", version: "0.32.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -65,6 +65,8 @@ const EmptyResultSchema = {
     canvasBusy: false,
     designs: null,     // wudi_designs_list structuredContent {designs}
     figmaUrl: "",
+    opEmbed: null,     // 内嵌 OpenPencil 编辑器会话 {path}（overlay 层，不参与 render 循环）
+    opFrameOrigin: "", // 内嵌编辑器 iframe 的 http origin（wudi 协同桥）
     busy: false,
     connected: false,
     notice: null,
@@ -208,7 +210,7 @@ const EmptyResultSchema = {
           <button class="btn" id="btn-refresh" ${state.busy ? "disabled" : ""}>${state.busy ? '<span class="spin"></span>' : ""}刷新</button>
         </div>
         ${state.drill ? `<div style="margin-bottom:10px"><button class="backlink" id="btn-back">← 返回项目列表</button></div>` : ""}
-        ${inProject ? `<div class="nav">${nav}</div>` : ""}
+        ${inProject ? `<div style="margin-bottom:10px"><button class="backlink" id="btn-back-projects">← 项目列表</button></div><div class="nav">${nav}</div>` : ""}
         ${state.notice ? `<div class="notice ${state.notice.kind}"><span class="badge ${state.notice.kind}">${state.notice.kind === "ok" ? "完成" : "失败"}</span><span class="mono">${esc(state.notice.text)}</span></div>` : ""}
         ${body}
       </div>`;
@@ -232,6 +234,13 @@ const EmptyResultSchema = {
       if (state.view === "detail" && state.tab === "canvas") loadCanvas();
     });
     document.getElementById("btn-back")?.addEventListener("click", () => { state.drill = null; render(); saveWidgetState(); });
+    document.getElementById("btn-back-projects")?.addEventListener("click", () => {
+      state.view = "projects";
+      state.tab = "overview";
+      state.notice = null;
+      render();
+      saveWidgetState();
+    });
     bindActions();
     if (state.view === "detail" && state.tab === "design") {
       fillDesignAssets();
@@ -239,7 +248,7 @@ const EmptyResultSchema = {
       $root().querySelectorAll(".png-card[data-ok]").forEach((c) =>
         c.addEventListener("click", () => {
           if (DEMO) {
-            const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='800' height='500'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#3565f0'/><stop offset='1' stop-color='#7c5cf0'/></linearGradient></defs><rect width='800' height='500' fill='url(%23g)'/><text x='400' y='255' font-family='sans-serif' font-size='28' fill='white' text-anchor='middle'>${esc(c.dataset.png)}（demo 占位图）</text></svg>`;
+            const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='800' height='500'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#0066dd'/><stop offset='1' stop-color='#0047a3'/></linearGradient></defs><rect width='800' height='500' fill='url(%23g)'/><text x='400' y='255' font-family='sans-serif' font-size='28' fill='white' text-anchor='middle'>${esc(c.dataset.png)}（demo 占位图）</text></svg>`;
             previewImage(`data:image/svg+xml;charset=utf-8,${svg}`, c.dataset.png);
             return;
           }
@@ -308,7 +317,7 @@ const EmptyResultSchema = {
     const last = p.lastDeploy;
     return `
       <div class="banner">
-        <div class="row"><h2>${esc(p.name)}</h2>${p.isCurrent ? '<span class="badge" style="background:rgba(255,255,255,.2);color:#fff">当前工作区</span>' : ""}</div>
+        <div class="row"><h2>${esc(p.name)}</h2>${p.isCurrent ? '<span class="chip">当前工作区</span>' : ""}</div>
         <div class="meta">
           <span class="chip">${esc(shortPath(p.path, 56))}</span>
           ${p.techStack ? `<span class="chip">${esc(p.techStack)}</span>` : ""}
@@ -366,7 +375,7 @@ const EmptyResultSchema = {
       : "";
     return `
       <div class="banner">
-        <div class="row"><h2>${esc(p.name || "(未命名)")}</h2><span class="badge" style="background:rgba(255,255,255,.2);color:#fff">${esc(latest ? STATUS_ZH[latest.status] ?? latest.status : "未部署")}</span></div>
+        <div class="row"><h2>${esc(p.name || "(未命名)")}</h2><span class="chip">${esc(latest ? STATUS_ZH[latest.status] ?? latest.status : "未部署")}</span></div>
         <div class="meta">
           ${p.techStack ? `<span class="chip">${esc(p.techStack)}</span>` : ""}
           ${(state.data?.envs ?? []).map((e) => `<span class="chip">${esc(e)}${state.data.currentEnv === e ? " ✓" : ""}</span>`).join("")}
@@ -464,7 +473,7 @@ const EmptyResultSchema = {
         <div class="muted" style="margin:10px 0 6px;font-weight:650">▸ ${esc(g.group)}（${g.items.length}）</div>
         <div class="pngs">${g.items.map(({ f, name }) => {
           if (DEMO) {
-            return `<div class="png-card" data-png="${esc(name)}" data-ok="1"><div class="png-ph" style="background:${esc(DEMO_PNG_GRADIENTS[name] ?? "linear-gradient(135deg,#3565f0,#7c5cf0)")};height:110px"></div><div class="meta">${esc(name)}</div></div>`;
+            return `<div class="png-card" data-png="${esc(name)}" data-ok="1"><div class="png-ph" style="background:${esc(DEMO_PNG_GRADIENTS[name] ?? "#0066dd")};height:110px"></div><div class="meta">${esc(name)}</div></div>`;
           }
           return `<div class="png-card" data-png="${esc(name)}"><img data-uri="ui://wudi-coding/image/${esc(name)}" alt="${esc(name)}"><div class="meta">${esc(name)}</div></div>`;
         }).join("")}</div>`).join("")}</div>`
@@ -485,20 +494,22 @@ const EmptyResultSchema = {
       : "";
     return `
       ${assetStats}
-      <div class="card" style="border-color:var(--accent)"><h3 style="color:var(--accent)">OpenPencil · Figma 设计稿编辑器（推荐）<span class="line"></span></h3>
-        <div class="muted" style="margin-bottom:10px">直接编辑工作区里的 <b>.fig 设计稿</b>（Figma 同款格式），侧栏完整编辑器 + <b>Agent 117 个工具协同</b>（JSX 渲染节点、auto-layout、组件、变量、图标库、design_to_tokens、导出 SVG/PDF/PNG）。侧栏「OpenPencil 设计稿」面板打开后即可编辑。</div>
+      <div class="card"><h3 style="color:var(--accent-strong)">OpenPencil · 设计稿编辑器（内嵌工作台）<span class="line"></span></h3>
+        <div class="muted" style="margin-bottom:10px">完整设计编辑器<b>直接在工作台面板内运行</b>（不需要宿主另装 openpencil 环境）：编辑工作区 <b>.fig 设计稿</b>（Figma 同款格式），<b>Agent 117 个工具实时协同</b>（auto-layout、组件/实例、设计变量、design_to_tokens、导出 SVG/PDF/PNG）。文档操作经本机 WS 桥直连，编辑器与 Agent 双向实时同步。</div>
         <div class="btnrow">
-          <button class="btn primary" id="btn-op-new" ${state.busy ? "disabled" : ""}>生成设计稿</button>
+          <button class="btn primary" id="btn-op-editor" ${state.busy ? "disabled" : ""}>打开编辑器</button>
+          <button class="btn" id="btn-op-new" ${state.busy ? "disabled" : ""}>新建 Figma 设计稿</button>
           <button class="btn" id="btn-op-wire" ${state.busy ? "disabled" : ""} title="把无敌画布的线框按坐标重建为 .fig 设计稿（Agent 双工具集转换）">把无敌线框转入 .fig</button>
-          <span class="muted">文件落 designs/&lt;名称&gt;.fig，Agent 可持续协同修改</span>
+          <span class="muted">文件落 designs/&lt;名称&gt;.fig</span>
         </div>
         ${(state.designs?.designs ?? []).length ? `<div style="margin-top:10px">${(state.designs?.designs ?? []).map((d) => `
           <div class="row"><span class="chip">${esc(d.format)}</span><span class="path">${esc(d.path)}</span><span class="muted">${esc(String(d.sizeKB))} KB</span>
-            <button class="btn" data-op-open="${esc(d.path)}" ${state.busy ? "disabled" : ""}>打开</button>
+            <button class="btn primary" data-op-embed="${esc(d.path)}" ${state.busy ? "disabled" : ""}>编辑</button>
+            <button class="btn" data-op-open="${esc(d.path)}" ${state.busy ? "disabled" : ""} title="登记为活动设计稿（Agent 侧）">打开</button>
             <button class="btn" data-op-render="${esc(d.path)}" ${state.busy ? "disabled" : ""} title="渲染 PNG 到 .wudi/design/renders/ 进图墙">渲染到图墙</button>
           </div>`).join("")}</div>` : '<div class="muted" style="margin-top:8px">还没有 .fig 设计稿 —— 用上方按钮新建第一个。</div>'}
       </div>
-      <div class="card" style="border-color:var(--accent)"><h3 style="color:var(--accent)">DesignCraft · 完整设计编辑器<span class="line"></span></h3>
+      <div class="card"><h3 style="color:var(--accent-strong)">DesignCraft · 完整设计编辑器<span class="line"></span></h3>
         <div class="muted" style="margin-bottom:10px">官方插件：面板内完整设计编辑器（工具/图层/菜单），<b>Agent 25 个工具直接读写</b> —— 建文档、放图、改文字、驱动画布，渲染 PNG 自动进下方设计图墙。需在 AOPC 插件市场安装 designcraft。</div>
         <div class="btnrow">
           <button class="btn primary" id="btn-dc-new" ${state.busy ? "disabled" : ""}>新建设计文档</button>
@@ -736,7 +747,7 @@ const EmptyResultSchema = {
 
   /* 组件形状库：每个 stamp 返回一组形状（x,y 为放置原点） */
   function stampShapes(kind, x, y) {
-    const P = "#3565f0";
+    const P = "#0066dd";
     const DIM = "#8a93a3";
     const BORDER = "#d4dae4";
     const F = state.canvasFill || "#dbe4fd";
@@ -795,15 +806,15 @@ const EmptyResultSchema = {
     const labelSize = 14 / state.cv.scale;
     return `
       <g data-frame="${esc(f.id)}">
-        <text data-framelabel="${esc(f.id)}" x="${f.x}" y="${f.y - 6 / state.cv.scale}" font-size="${labelSize}" fill="${framesSelected ? "#3565f0" : "#8a93a3"}" font-family="sans-serif" font-weight="${framesSelected ? 700 : 600}" style="cursor:move">${esc(f.name)} · ${f.w}×${f.h}</text>
-        <rect data-framebg="${esc(f.id)}" x="${f.x}" y="${f.y}" width="${f.w}" height="${f.h}" fill="${f.background}" stroke="${framesSelected ? "#3565f0" : "#d4dae4"}" stroke-width="${(framesSelected ? 2 : 1) / state.cv.scale}" style="cursor:move"/>
+        <text data-framelabel="${esc(f.id)}" x="${f.x}" y="${f.y - 6 / state.cv.scale}" font-size="${labelSize}" fill="${framesSelected ? "#0066dd" : "#8a93a3"}" font-family="sans-serif" font-weight="${framesSelected ? 700 : 600}" style="cursor:move">${esc(f.name)} · ${f.w}×${f.h}</text>
+        <rect data-framebg="${esc(f.id)}" x="${f.x}" y="${f.y}" width="${f.w}" height="${f.h}" fill="${f.background}" stroke="${framesSelected ? "#0066dd" : "#d4dae4"}" stroke-width="${(framesSelected ? 2 : 1) / state.cv.scale}" style="cursor:move"/>
         <g clip-path="url(#cv-clip-${esc(f.id)})">${shapes}</g>
       </g>`;
   }
 
   function shapeNode(s, selected) {
     const common = `data-id="${esc(s.id)}" style="cursor:${state.canvasTool === "select" ? "move" : "crosshair"}"`;
-    const stroke = s.stroke || "#3565f0";
+    const stroke = s.stroke || "#0066dd";
     if (s.type === "rect") return `<rect ${common} x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" rx="8" fill="${s.fill || "none"}" stroke="${stroke}" stroke-width="${(selected ? 2.5 : 1.5) / state.cv.scale}"/>${shapeText(s)}`;
     if (s.type === "ellipse") return `<ellipse ${common} cx="${s.x + s.w / 2}" cy="${s.y + s.h / 2}" rx="${s.w / 2}" ry="${s.h / 2}" fill="${s.fill || "none"}" stroke="${stroke}" stroke-width="${(selected ? 2.5 : 1.5) / state.cv.scale}"/>${shapeText(s)}`;
     if (s.type === "diamond") { const cx = s.x + s.w / 2, cy = s.y + s.h / 2; return `<polygon ${common} points="${cx},${s.y} ${s.x + s.w},${cy} ${cx},${s.y + s.h} ${s.x},${cy}" fill="${s.fill || "none"}" stroke="${stroke}" stroke-width="${(selected ? 2.5 : 1.5) / state.cv.scale}"/>${shapeText(s)}`; }
@@ -823,7 +834,7 @@ const EmptyResultSchema = {
     const STAMPS = [["button", "🔘 按钮"], ["input", "▭ 输入框"], ["card", "▤ 卡片"], ["heading", "H 标题"], ["body", "¶ 正文"], ["divider", "— 分割线"], ["toggle", "⏻ 开关"], ["checkbox", "☑ 复选框"], ["avatar", "😊 头像"], ["image", "🖼 图片占位"], ["chart", "📊 图表占位"], ["progress", "▰ 进度条"]];
     const stampSel = `<select id="cv-stamp" style="width:118px">${STAMPS.map(([v, label]) =>
       `<option value="${v}" ${state.canvasStamp === v ? "selected" : ""}>${label}</option>`).join("")}</select>`;
-    const fills = ["", "#dbe4fd", "#3565f0", "#7c5cf0", "#e2f5ea", "#fde9e7", "#fdf0dd", "#171a21"].map((c) =>
+    const fills = ["", "#dbe4fd", "#0066dd", "#7c5cf0", "#e2f5ea", "#fde9e7", "#fdf0dd", "#171a21"].map((c) =>
       `<button class="swatch-btn ${state.canvasFill === c ? "on" : ""}" data-cfill="${esc(c)}" title="${c || "透明"}"><span style="background:${c || "repeating-linear-gradient(45deg,#ccc,#ccc 2px,#fff 2px,#fff 4px)"}"></span></button>`).join("");
     const frameOpts = FRAME_PRESETS.map(([label, w, h], i) => `<option value="${i}">${esc(label)}</option>`).join("");
     const frames = state.canvas.frames ?? [];
@@ -843,7 +854,7 @@ const EmptyResultSchema = {
           : "")
       : "";
     const handle = sel && sel.type !== "arrow"
-      ? `<rect id="cv-handle" x="${sel.x + sel.w - 6 / cv.scale}" y="${sel.y + sel.h - 6 / cv.scale}" width="${12 / cv.scale}" height="${12 / cv.scale}" fill="#fff" stroke="#3565f0" stroke-width="${2 / cv.scale}" style="cursor:nwse-resize"/>`
+      ? `<rect id="cv-handle" x="${sel.x + sel.w - 6 / cv.scale}" y="${sel.y + sel.h - 6 / cv.scale}" width="${12 / cv.scale}" height="${12 / cv.scale}" fill="#fff" stroke="#0066dd" stroke-width="${2 / cv.scale}" style="cursor:nwse-resize"/>`
       : "";
     const layers = frames.length
       ? frames.map((f) => `
@@ -854,7 +865,7 @@ const EmptyResultSchema = {
           </div>`).join("")
       : '<div class="muted" style="padding:6px">还没有画板</div>';
     return `
-      <div class="card" style="border-color:var(--accent)"><h3 style="color:var(--accent)">Excalidraw · 完整设计画布（推荐）<span class="line"></span></h3>
+      <div class="card"><h3 style="color:var(--accent-strong)">Excalidraw · 完整设计画布（推荐）<span class="line"></span></h3>
         <div class="muted" style="margin-bottom:10px">成熟的开源白板：自由绘制、连线、无限画布，<b>Agent 可直接读写</b>（create_diagram / apply_operations）。设计画布请在 Excalidraw 中完成。</div>
         <div class="btnrow">
           <button class="btn primary" id="btn-ex-new" ${state.busy ? "disabled" : ""}>新建 Excalidraw 画板</button>
@@ -888,14 +899,14 @@ const EmptyResultSchema = {
             <defs>
               ${clipDefs}
               <pattern id="cv-grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0v24" fill="none" stroke="#e6eaf2" stroke-width="1"/></pattern>
-              <marker id="cv-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#3565f0"/></marker>
+              <marker id="cv-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#0066dd"/></marker>
             </defs>
             <rect x="-4000" y="-4000" width="12000" height="12000" fill="url(#cv-grid)"/>
             <g id="cv-world" transform="translate(${cv.tx},${cv.ty}) scale(${cv.scale})">
               ${frameNodes}
               ${state.canvas.shapes.filter((s) => !s.frameId).map((s) => shapeNode(s, s.id === state.canvasSel)).join("\n")}
               ${handle}
-              ${state.marquee ? `<rect x="${state.marquee.x}" y="${state.marquee.y}" width="${state.marquee.w}" height="${state.marquee.h}" fill="rgba(53,101,240,.08)" stroke="#3565f0" stroke-width="1" stroke-dasharray="4 3"/>` : ""}
+              ${state.marquee ? `<rect x="${state.marquee.x}" y="${state.marquee.y}" width="${state.marquee.w}" height="${state.marquee.h}" fill="rgba(0,102,221,.08)" stroke="#0066dd" stroke-width="1" stroke-dasharray="4 3"/>` : ""}
             </g>
           </svg>
           <div class="layers" style="width:190px">
@@ -1172,7 +1183,7 @@ const EmptyResultSchema = {
         const id2 = `s-${Date.now().toString(36)}-tmp`;
         drag.id = id2;
         const fid = frameIdAt(p.x, p.y);
-        state.canvas.shapes.push({ id: id2, type: state.canvasTool, frameId: fid, x: p.x, y: p.y, w: 2, h: 2, x2: p.x, y2: p.y, stroke: "#3565f0", fill: state.canvasFill, fontSize: 14, text: "" });
+        state.canvas.shapes.push({ id: id2, type: state.canvasTool, frameId: fid, x: p.x, y: p.y, w: 2, h: 2, x2: p.x, y2: p.y, stroke: "#0066dd", fill: state.canvasFill, fontSize: 14, text: "" });
       } else {
         drag = { mode: "pan", startX: ev.clientX, startY: ev.clientY, tx: state.cv.tx, ty: state.cv.ty };
       }
@@ -1449,6 +1460,138 @@ const EmptyResultSchema = {
     });
   }
 
+  /* ---------- 内嵌 OpenPencil 编辑器（overlay + 宿主协议 shim） ----------
+   * 编辑器本体（vendor 官方 dist 的 loader + bundle 资产）经 wudi 协同桥 HTTP 端点 /openpencil/frame
+   * 加载进 iframe；loader 按官方架构走 MCP App 协议连 window.parent —— 这里由面板扮演宿主：
+   * ui/initialize 握手，tools/call 与 resources/read 经面板自己的 App 连接转发到 wudi server
+   * （再代理到 openpencil 子进程）。文档操作由编辑器拿 get_design_status 的 endpoint+token
+   * 直连本机 WS 桥，与 Agent 的 openpencil 工具双向实时同步。
+   * overlay 挂在 body 上、不参与 render() 内外重建，保证编辑器会话不被面板刷新打断。 */
+  let opShimHandler = null;
+
+  function buildOpOverlay() {
+    let layer = document.getElementById("op-layer");
+    if (layer) return layer;
+    layer = document.createElement("div");
+    layer.id = "op-layer";
+    layer.className = "op-layer";
+    layer.innerHTML = `
+      <div class="op-bar">
+        <span class="chip accent">OpenPencil 编辑器</span>
+        <span class="op-path mono"></span>
+        <span style="flex:1"></span>
+        <button class="btn" id="op-layer-reload" title="重新加载编辑器">重载</button>
+        <button class="btn danger" id="op-layer-close">关闭编辑器</button>
+      </div>
+      <div class="op-frame-holder"></div>`;
+    document.body.appendChild(layer);
+    layer.querySelector("#op-layer-close").addEventListener("click", () => closeOpEmbed());
+    layer.querySelector("#op-layer-reload").addEventListener("click", () => {
+      const frame = layer.querySelector("#op-frame");
+      if (frame) frame.src = frame.src;
+    });
+    return layer;
+  }
+
+  function bindOpShim(iframeEl) {
+    if (opShimHandler) { window.removeEventListener("message", opShimHandler); opShimHandler = null; }
+    if (!iframeEl) return;
+    opShimHandler = async (ev) => {
+      if (ev.source !== iframeEl.contentWindow) return;
+      const msg = ev.data;
+      if (!msg || typeof msg !== "object" || msg.jsonrpc !== "2.0") return;
+      if (msg.id === undefined || msg.id === null) return; // 通知（initialized / size-changed…）不回应
+      const post = (payload) => { try { ev.source.postMessage(payload, "*"); } catch { /* iframe 已关闭 */ } };
+      const reply = (result) => post({ jsonrpc: "2.0", id: msg.id, result });
+      const fail = (message, code = -32603) => post({ jsonrpc: "2.0", id: msg.id, error: { code, message: String(message).slice(0, 500) } });
+      const p = msg.params ?? {};
+      try {
+        switch (msg.method) {
+          case "ui/initialize":
+            reply({
+              hostCapabilities: { experimental: {} },
+              hostInfo: { name: "wudi-workbench", version: "0.32.0" },
+              hostContext: {
+                theme: app.getHostContext()?.theme ?? "light",
+                displayMode: "inline",
+                locale: navigator.language || "zh-CN",
+              },
+            });
+            break;
+          case "tools/call": reply(await callTool(p.name, p.arguments ?? {})); break;
+          case "resources/read": reply(await app.readServerResource({ uri: p.uri })); break;
+          case "resources/list": reply(await app.listServerResources?.() ?? { resources: [] }); break;
+          case "ping": reply({}); break;
+          case "ui/open-link": await app.openLink?.({ url: p.url }); reply({}); break;
+          case "ui/message":
+            await app.sendMessage?.({ role: "user", content: p.content ?? { type: "text", text: "" } });
+            reply({});
+            break;
+          case "ui/update-model-context": reply({}); break; // 模型上下文上报：内嵌模式 no-op
+          case "ui/set-widget-state": reply({}); break;
+          default: fail(`工作台内嵌桥未实现方法：${msg.method}`, -32601);
+        }
+      } catch (err) {
+        fail(err?.message ?? err);
+      }
+    };
+    window.addEventListener("message", opShimHandler);
+  }
+
+  async function openOpEmbed(path) {
+    if (DEMO) {
+      const layer = buildOpOverlay();
+      layer.querySelector(".op-path").textContent = path || "（demo：未指定设计稿）";
+      layer.querySelector(".op-frame-holder").innerHTML =
+        `<div class="empty" style="margin:18px;padding:56px 20px">demo 模式：OpenPencil 编辑器占位。<br>宿主内此处经本机桥加载完整编辑器（画布 / 图层 / Agent 117 工具协同）。</div>`;
+      layer.classList.add("on");
+      state.opEmbed = { path: path ?? "" };
+      return;
+    }
+    setBusy(true);
+    let origin = "";
+    try {
+      const res = await callTool("wudi_canvas_bridge", {});
+      const url = struct(res)?.url ?? "";
+      origin = url ? new URL(url).origin : "";
+    } catch (err) {
+      state.notice = { kind: "err", text: `协同桥未就绪，无法内嵌编辑器：${String(err.message ?? err).slice(0, 200)}` };
+      setBusy(false);
+      return;
+    }
+    if (path) {
+      try {
+        await callTool("open_design", { path }); // 子进程侧登记活动设计稿，编辑器起来即加载
+      } catch (err) {
+        state.notice = { kind: "err", text: `登记活动设计稿失败（编辑器内仍可手动打开）：${String(err.message ?? err).slice(0, 200)}` };
+      }
+    }
+    setBusy(false);
+    state.opEmbed = { path: path ?? "" };
+    state.opFrameOrigin = origin;
+    const layer = buildOpOverlay();
+    layer.querySelector(".op-path").textContent = path ? shortPath(path, 60) : "未指定设计稿 —— 编辑器内点「OpenPencil」选择工作区设计稿";
+    const holder = layer.querySelector(".op-frame-holder");
+    holder.innerHTML = "";
+    const frame = document.createElement("iframe");
+    frame.id = "op-frame";
+    frame.className = "op-frame";
+    frame.src = `${origin}/openpencil/frame`;
+    frame.setAttribute("allow", "clipboard-write");
+    holder.appendChild(frame);
+    layer.classList.add("on");
+    bindOpShim(frame);
+  }
+
+  function closeOpEmbed() {
+    state.opEmbed = null;
+    state.opFrameOrigin = "";
+    if (opShimHandler) { window.removeEventListener("message", opShimHandler); opShimHandler = null; }
+    document.getElementById("op-layer")?.remove();
+    render();
+    saveWidgetState();
+  }
+
   /* ---------- 动作 ---------- */
   function envArg() {
     return state.env ? { env: state.env } : {};
@@ -1594,6 +1737,10 @@ const EmptyResultSchema = {
         setBusy(false);
       }
     });
+    document.getElementById("btn-op-editor")?.addEventListener("click", () => openOpEmbed(""));
+    $root().querySelectorAll("[data-op-embed]").forEach((b) =>
+      b.addEventListener("click", () => openOpEmbed(b.dataset.opEmbed))
+    );
     $root().querySelectorAll("[data-op-open]").forEach((b) =>
       b.addEventListener("click", async () => {
         const path = b.dataset.opOpen;
@@ -1656,7 +1803,7 @@ const EmptyResultSchema = {
         // 建画板 + 放布局骨架 + 导出设计稿（全 callTool 直连，必定成功）
         await callTool("wudi_canvas_edit", { ops: [
           { op: "add_frame", frame: { name: `${name}-1440`, x: 0, y: 0, w: 1440, h: 900 } },
-          { op: "add", shape: { type: "rect", x: 20, y: 20, w: 260, h: 860, fill: "#e9eefe", stroke: "#3565f0", text: "侧栏导航" } },
+          { op: "add", shape: { type: "rect", x: 20, y: 20, w: 260, h: 860, fill: "#e9eefe", stroke: "#0066dd", text: "侧栏导航" } },
           { op: "add", shape: { type: "rect", x: 300, y: 20, w: 1100, h: 120, fill: "#f3ecfe", stroke: "#7c5cf0", text: "顶栏 / Hero 区" } },
           { op: "add", shape: { type: "rect", x: 300, y: 160, w: 520, h: 340, fill: "#e2f5ea", stroke: "#0e8a4f", text: "内容卡片 A" } },
           { op: "add", shape: { type: "rect", x: 840, y: 160, w: 560, h: 340, fill: "#fdf0dd", stroke: "#b45309", text: "内容卡片 B" } },
@@ -1949,7 +2096,7 @@ const EmptyResultSchema = {
     state.history = { deploys: state.data.deploys };
     state.design = {
       tokens: {
-        color: { primary: "#3565f0", accent: "#7c5cf0", text: "#171a21", bg: "#ffffff", ok: "#0e8a4f", err: "#c73a33" },
+        color: { primary: "#0066dd", accent: "#7c5cf0", text: "#171a21", bg: "#ffffff", ok: "#0e8a4f", err: "#c73a33" },
         spacing: { sm: "8px", md: "16px", lg: "24px" },
         radius: { md: "12px" },
         typography: { "font-size-base": "13px" },
@@ -1973,7 +2120,7 @@ const EmptyResultSchema = {
         { id: "f-d2", name: "移动端-375", x: 1560, y: 0, w: 375, h: 812, background: "#ffffff" },
       ],
       shapes: [
-        { id: "d-r1", type: "rect", frameId: "f-d1", x: 40, y: 40, w: 260, h: 800, fill: "#e9eefe", stroke: "#3565f0", fontSize: 14, text: "" },
+        { id: "d-r1", type: "rect", frameId: "f-d1", x: 40, y: 40, w: 260, h: 800, fill: "#e9eefe", stroke: "#0066dd", fontSize: 14, text: "" },
         { id: "d-t1", type: "text", frameId: "f-d1", x: 70, y: 90, w: 200, h: 24, fill: "", stroke: "#171a21", fontSize: 18, text: "侧栏导航" },
         { id: "d-r2", type: "rect", frameId: "f-d1", x: 330, y: 40, w: 1070, h: 120, fill: "#f3ecfe", stroke: "#7c5cf0", fontSize: 14, text: "" },
         { id: "d-t2", type: "text", frameId: "f-d1", x: 360, y: 90, w: 300, h: 22, fill: "", stroke: "#171a21", fontSize: 16, text: "统计卡片区 ×4" },
@@ -1981,7 +2128,7 @@ const EmptyResultSchema = {
         { id: "d-t3", type: "text", frameId: "f-d1", x: 360, y: 220, w: 300, h: 22, fill: "", stroke: "#171a21", fontSize: 16, text: "表格区" },
         { id: "d-m1", type: "rect", frameId: "f-d2", x: 1590, y: 60, w: 315, h: 120, fill: "#f3ecfe", stroke: "#7c5cf0", fontSize: 14, text: "" },
         { id: "d-m2", type: "text", frameId: "f-d2", x: 1610, y: 100, w: 240, h: 22, fill: "", stroke: "#171a21", fontSize: 15, text: "移动端首屏" },
-        { id: "d-m3", type: "rect", frameId: "f-d2", x: 1590, y: 200, w: 315, h: 420, fill: "#e9eefe", stroke: "#3565f0", fontSize: 14, text: "" },
+        { id: "d-m3", type: "rect", frameId: "f-d2", x: 1590, y: 200, w: 315, h: 420, fill: "#e9eefe", stroke: "#0066dd", fontSize: 14, text: "" },
         { id: "d-m4", type: "text", frameId: "f-d2", x: 1610, y: 240, w: 240, h: 22, fill: "", stroke: "#171a21", fontSize: 15, text: "列表区" },
       ],
     };

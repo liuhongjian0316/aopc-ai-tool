@@ -6,7 +6,7 @@
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { TOOLS, callTool, bridgeConnectDomains } from "../lib/tools.mjs";
+import { TOOLS, callTool, bridgeConnectDomains, frameDomains } from "../lib/tools.mjs";
 
 // 进程级兜底：任何未捕获错误都不能杀掉 server（宿主连接断开的根因）
 process.on("uncaughtException", (err) => console.error("[wudi] uncaught:", err.message));
@@ -21,7 +21,7 @@ let opToolsCache = (() => {
   catch { return []; }
 })(); // 静态工具定义（117 个），后台动态刷新
 
-const SERVER_INFO = { name: "wudi-coding", version: "0.31.0" };
+const SERVER_INFO = { name: "wudi-coding", version: "0.32.0" };
 const PANEL_URI = "ui://wudi-coding/panel.html";
 const PANEL_MIME = "text/html;profile=mcp-app";
 const panelPath = resolve(join(dirname(fileURLToPath(import.meta.url)), "..", "panel.html"));
@@ -135,11 +135,11 @@ function handleMessage(line) {
     const uri = params?.uri ?? "";
     try {
       if (uri === PANEL_URI) {
+        // 域 CSP 只在 ui.csp 声明（aopc/csp 键仅承载 eval/wasm 放宽，面板不需要）
         send(id, {
           contents: [{ uri: PANEL_URI, mimeType: PANEL_MIME, text: readPanel() }],
           _meta: {
-            ui: { csp: { connectDomains: bridgeConnectDomains() } },
-            "aopc/csp": { connectDomains: bridgeConnectDomains() },
+            ui: { csp: { connectDomains: bridgeConnectDomains(), frameDomains: frameDomains() } },
           },
         });
         return;

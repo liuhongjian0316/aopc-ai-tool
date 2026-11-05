@@ -27,9 +27,30 @@ const clip = (s, n = 1500) => String(s ?? "").trim().slice(-n);
 
 /* ---- 实时协同桥：canvas 变更 SSE 广播（OpenPencil 式 agent↔面板活同步） ---- */
 import http from "node:http";
+import { dirname as _dirname, join as _join } from "node:path";
+import { fileURLToPath as _fURL } from "node:url";
+
+/** 内嵌 OpenPencil 编辑器 loader（vendor 官方 dist，经 MCP postMessage 桥取资产、WS 桥连文档）。 */
+const OP_FRAME_HTML = _join(_dirname(_fURL(import.meta.url)), "..", "vendor", "openpencil", "dist", "ui", "panel.html");
+
 const bridgeSubscribers = new Set();
 let bridgePort = 0;
 const bridgeServer = http.createServer((req, res) => {
+  if (req.url === "/openpencil/frame") {
+    // 工作台面板的内嵌编辑器 iframe 文档：不注入 CSP（编辑器需 WS/wasm/字体全量能力，隔离边界是本机随机端口 + token）
+    try {
+      const html = readFileSync(OP_FRAME_HTML, "utf-8");
+      res.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+        "Access-Control-Allow-Origin": "*",
+      });
+      res.end(html);
+    } catch (err) {
+      res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" }).end(`编辑器加载失败：${String(err?.message ?? err)}`);
+    }
+    return;
+  }
   if (req.url !== "/bridge") {
     res.writeHead(404).end();
     return;
@@ -57,8 +78,12 @@ function broadcastCanvasChanged() {
   }
 }
 
-/** 面板资源 CSP：放行本机协同桥连接。 */
+/** 面板资源 CSP：放行本机协同桥连接与内嵌编辑器 iframe（同一 origin）。 */
 export function bridgeConnectDomains() {
+  return bridgePort ? [`http://127.0.0.1:${bridgePort}`] : [];
+}
+
+export function frameDomains() {
   return bridgePort ? [`http://127.0.0.1:${bridgePort}`] : [];
 }
 

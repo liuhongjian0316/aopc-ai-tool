@@ -201,6 +201,12 @@ aopc plugin install wudi-coding
 - **创建入口前置**：没有项目时登记表单直接展开；有项目时收进网格尾部的「＋ 登记项目」卡，点开即填路径登记。当前工作区项目在打开面板时自动登记并置顶标记，一键进入。
 - 下钻只读总览不变；内容导航里的「项目」页签随时回到选择页。
 
+## AOPC 设计语言与 OpenPencil 内嵌编辑器（v0.32）
+
+- **返回按钮**：项目内容页顶部新增「← 项目列表」，随时回到项目选择页（与只读下钻的返回一致）。
+- **UI 对齐 AOPC**：整套设计系统按宿主 DESIGN.md 重做——Zai Light/Zai Dark 同款 tokens（背景 #f8f8f8/#161616、品牌黑/白、hairline 边框、可交互蓝 #0066dd、语义成功/警告/错误色），移除装饰性渐变与整面品牌色填充，横幅改 accent surface，按钮/焦点/徽章/chip 全部走宿主语义。
+- **OpenPencil 编辑器内嵌工作台**（不再依赖宿主 openpencil 环境）：官方插件程序已 vendor 进本插件——wudi server 内嵌子进程 + 本机协同桥新增 `/openpencil/frame` 端点，设计页「打开编辑器」/ 设计稿行「编辑」把**完整编辑器 iframe 直接开在工作台面板里**；面板按 MCP App 协议扮演宿主（ui/initialize 握手 + tools/call、resources/read 转发），文档操作由编辑器拿 token 直连 WS 桥，**与 Agent 的 117 个 openpencil 工具双向实时协同**。面板资源 CSP 声明 frameDomains（宿主 frame-src 白名单），overlay 挂 body 不参与 render 循环，编辑会话不被面板刷新打断。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。

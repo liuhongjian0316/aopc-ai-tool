@@ -371,6 +371,25 @@ async function protocolTests() {
     const designsSc = r?.result?.structuredContent?.designs ?? [];
     check("designs_list: 发现 openpencil 建的 .fig", !errOf(r) && designsSc.some((d) => d.name === "smoke.fig"), JSON.stringify(designsSc).slice(0, 150));
 
+    /* ---- 内嵌 OpenPencil 编辑器（协同桥 frame 端点 + 面板 CSP frameDomains）---- */
+    r = await s.call("tools/call", { name: "wudi_canvas_bridge", arguments: {} });
+    const bridgeUrlSc = r?.result?.structuredContent?.url ?? "";
+    check("op_embed: 协同桥端点可用", bridgeUrlSc.startsWith("http://127.0.0.1:"));
+    if (bridgeUrlSc) {
+      const frameRes = await fetch(`${new URL(bridgeUrlSc).origin}/openpencil/frame`).catch(() => null);
+      const frameHtml = await frameRes?.text().catch(() => "") ?? "";
+      check("op_embed: /openpencil/frame 返回编辑器 loader",
+        frameRes?.status === 200 && frameHtml.length > 500 && frameHtml.includes("正在加载设计稿编辑器"),
+        `HTTP ${frameRes?.status ?? "?"} · ${frameHtml.length}B`);
+    }
+    r = await s.call("resources/read", { uri: "ui://wudi-coding/panel.html" });
+    const cspMeta = r?.result?._meta?.ui?.csp ?? {};
+    check("op_embed: 面板 CSP 声明 frameDomains",
+      Array.isArray(cspMeta.frameDomains) && cspMeta.frameDomains.some((d) => /^http:\/\/127\.0\.0\.1:\d+$/.test(d)),
+      JSON.stringify(cspMeta).slice(0, 180));
+    check("op_embed: 面板 CSP 声明 connectDomains",
+      Array.isArray(cspMeta.connectDomains) && cspMeta.connectDomains.length > 0);
+
     r = await s.call("tools/call", { name: "wudi_doctor", arguments: { env: "staging" } });
     // 无真实 SSH（TEST-NET 地址 2s 超时）：SSH/远端/健康检查应失败或跳过，但档案项应 PASS
     check("doctor: 档案项 PASS", textOf(r).includes("[PASS] 档案关键字段"));
