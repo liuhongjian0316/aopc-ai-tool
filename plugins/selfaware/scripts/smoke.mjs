@@ -1368,6 +1368,33 @@ console.log("\n[T53] 周报条目自动附本周学习档案链接;横幅列全�
   fs.rmSync(kb, { recursive: true, force: true });
 }
 
+// ---------- T54 用户在途笔记保护(精准 add) ----------
+
+console.log("\n[T54] git 提交只含 agent 笔记,不裹挟用户未提交的在途文件");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const kb = fs.mkdtempSync(path.join(os.tmpdir(), "sa-kb-"));
+  spawnSync("git", ["init"], { cwd: kb, encoding: "utf8" });
+  spawnSync("git", ["config", "user.email", "agent@test"], { cwd: kb, encoding: "utf8" });
+  spawnSync("git", ["config", "user.name", "guanji-test"], { cwd: kb, encoding: "utf8" });
+  fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify({ knowledgeBase: { path: kb } }));
+  // 用户自己的在途笔记(未提交)——绝不能被 agent 的提交裹挟
+  fs.writeFileSync(path.join(kb, "我的未完成草稿.md"), "# 用户 WIP,严禁被 agent 提交\n");
+  fs.mkdirSync(path.join(kb, "观己学习"), { recursive: true });
+  const rpc = [
+    { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "self_learn", arguments: { action: "record", title: "精准提交测试", body: "只提交我自己的文件。" } } },
+  ].map((m) => JSON.stringify(m)).join("\n") + "\n";
+  const r = spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000 });
+  const txt = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).map((m) => m?.result?.content?.[0]?.text || "").join("");
+  check("记录+提交成功", txt.includes("已写入知识库") && txt.includes("已 git 提交"), txt.slice(0, 200));
+  const stat = spawnSync("git", ["show", "--stat", "--format=", "HEAD"], { cwd: kb, encoding: "utf8" });
+  check("提交只含 agent 笔记", (stat.stdout || "").includes("观己学习") && !(stat.stdout || "").includes("我的未完成草稿"), stat.stdout);
+  const status = spawnSync("git", ["status", "--porcelain"], { cwd: kb, encoding: "utf8" });
+  check("用户草稿仍在未跟踪区(未被提交)", (status.stdout || "").includes("我的未完成草稿.md"), status.stdout);
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(kb, { recursive: true, force: true });
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);

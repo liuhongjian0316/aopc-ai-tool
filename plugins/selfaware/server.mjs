@@ -31,7 +31,7 @@ import {
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "2.10.0";
+const VERSION = "2.11.0";
 
 const TOOLS = [
   {
@@ -1012,10 +1012,14 @@ function kbSlug(title) {
   return `${today}-${t}.md`;
 }
 
-function kbGitCommit(root, message) {
+function kbGitCommit(root, message, filePath) {
   try {
     if (!fs.existsSync(path.join(root, ".git"))) return { committed: false, reason: "非 git 仓库" };
-    execSync(`git add -A && git commit -m ${JSON.stringify(message)}`, { cwd: root, timeout: 30000, stdio: "pipe" });
+    // 2.11.0:精准 add(相对路径)——用户的 Obsidian 是他们自己的工作区,
+    // git add -A 会把用户未提交的在途笔记一起裹进 agent 的提交(用户资产保护)
+    const rel = filePath ? path.relative(root, filePath) : "";
+    if (!rel || rel.startsWith("..")) throw new Error(`知识库文件越界:${filePath}`);
+    execSync(`git add -- ${JSON.stringify(rel)} && git commit -m ${JSON.stringify(message)} -- ${JSON.stringify(rel)}`, { cwd: root, timeout: 30000, stdio: "pipe" });
     return { committed: true };
   } catch (e) {
     return { committed: false, reason: String(e?.message || e).slice(0, 160) };
@@ -1231,7 +1235,7 @@ function kbRecord(cfg, { title, body, tags, type }) {
   let git = { committed: false };
   const root = cfg.knowledgeBase?.path;
   if (cfg.knowledgeBase?.autoCommit) {
-    git = kbGitCommit(root, `agent(观己): ${kind === "experience" ? "经验沉淀" : "学习记录"} ${title}`);
+    git = kbGitCommit(root, `agent(观己): ${kind === "experience" ? "经验沉淀" : "学习记录"} ${title}`, file);
     if (cfg.knowledgeBase?.autoPush && git.committed) {
       try {
         execSync("git push", { cwd: root, timeout: 60000, stdio: "pipe" });

@@ -611,7 +611,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "2.10.0",
+      "version": "2.11.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -626,6 +626,15 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "2.11.0",
+          "date": "2026-11-05",
+          "changes": [
+            "用户资产保护(重要修复):kbGitCommit 从 git add -A 改为精准 add 相对路径——用户的 Obsidian 是他们自己的工作区,agent 的提交绝不再裹挟用户未提交的在途笔记(T54:草稿保持未跟踪区断言)",
+            "越界防护:知识库文件路径越界(相对路径逃逸)直接报错",
+            "冒烟测试 222 → 225 项全绿"
+          ]
+        },
         {
           "version": "2.10.0",
           "date": "2026-11-04",
