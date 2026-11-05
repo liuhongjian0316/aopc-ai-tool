@@ -19,7 +19,8 @@ let initDone = null;
 
 function ensureChild(env = {}) {
   if (child) return child;
-  const wsRoot = env.workspaceRoot || process.env.AOPC_PROJECT_DIR || process.cwd();
+  // 与 store.projectRoot() 同根序：AOPC_PROJECT_DIR → AOPC_WORKSPACE_ROOT → cwd，保证 .fig 落进项目根
+  const wsRoot = env.workspaceRoot || process.env.AOPC_PROJECT_DIR || process.env.AOPC_WORKSPACE_ROOT || process.cwd();
   try {
   child = spawn(process.execPath, [childServerPath], {
     env: {
@@ -71,7 +72,7 @@ function request(method, params) {
   ensureChild();
   const id = ++pendingId;
   const p = new Promise((res, rej) => {
-    pending.set(id, { res, rej });
+    pending.set(id, res); // 存 resolver 本身：stdout 分发处按 pending.get(id)(msg) 调用
     setTimeout(() => {
       if (pending.has(id)) { pending.delete(id); rej(new Error(`openpencil 子进程请求超时：${method}\nstderr: ${childStderr.slice(-300)}`)); }
     }, 60_000);

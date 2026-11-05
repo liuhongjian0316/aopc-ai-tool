@@ -467,7 +467,7 @@ const EmptyResultSchema = {
     <div class="c"><b>健康检查</b><div class="num">200</div><div class="muted">全部通过</div><span class="btn">体检报告</span></div>
   </div></body></html>`;
   const app = new App(
-    { name: "wudi-coding", version: "0.32.0" },
+    { name: "wudi-coding", version: "0.32.1" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -928,10 +928,11 @@ const EmptyResultSchema = {
       <div class="card"><h3 style="color:var(--accent-strong)">OpenPencil · 设计稿编辑器（内嵌工作台）<span class="line"></span></h3>
         <div class="muted" style="margin-bottom:10px">完整设计编辑器<b>直接在工作台面板内运行</b>（不需要宿主另装 openpencil 环境）：编辑工作区 <b>.fig 设计稿</b>（Figma 同款格式），<b>Agent 117 个工具实时协同</b>（auto-layout、组件/实例、设计变量、design_to_tokens、导出 SVG/PDF/PNG）。文档操作经本机 WS 桥直连，编辑器与 Agent 双向实时同步。</div>
         <div class="btnrow">
-          <button class="btn primary" id="btn-op-editor" ${state.busy ? "disabled" : ""}>打开编辑器</button>
-          <button class="btn" id="btn-op-new" ${state.busy ? "disabled" : ""}>新建 Figma 设计稿</button>
+          <input id="op-name" placeholder="设计稿名称，如 login-page" style="width:190px;flex:none">
+          <button class="btn primary" id="btn-op-new" ${state.busy ? "disabled" : ""}>新建并编辑</button>
+          <button class="btn" id="btn-op-editor" ${state.busy ? "disabled" : ""} title="不指定设计稿打开编辑器，在编辑器内点「OpenPencil」选择工作区设计稿">打开编辑器</button>
           <button class="btn" id="btn-op-wire" ${state.busy ? "disabled" : ""} title="把无敌画布的线框按坐标重建为 .fig 设计稿（Agent 双工具集转换）">把无敌线框转入 .fig</button>
-          <span class="muted">文件落 designs/&lt;名称&gt;.fig</span>
+          <span class="muted">文件落 designs/&lt;名称&gt;.fig，建稿后自动进编辑器</span>
         </div>
         ${(state.designs?.designs ?? []).length ? `<div style="margin-top:10px">${(state.designs?.designs ?? []).map((d) => `
           <div class="row"><span class="chip">${esc(d.format)}</span><span class="path">${esc(d.path)}</span><span class="muted">${esc(String(d.sizeKB))} KB</span>
@@ -1941,7 +1942,7 @@ const EmptyResultSchema = {
           case "ui/initialize":
             reply({
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.32.0" },
+              hostInfo: { name: "wudi-workbench", version: "0.32.1" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -2208,7 +2209,7 @@ const EmptyResultSchema = {
       })
     );
     document.getElementById("btn-op-wire")?.addEventListener("click", async () => {
-      const name = String(document.getElementById("gen-name")?.value ?? "").trim() || `wireframe-${Date.now().toString(36)}`;
+      const name = String(document.getElementById("op-name")?.value ?? "").trim() || `wireframe-${Date.now().toString(36)}`;
       try {
         if (!app.getHostCapabilities()?.message) {
           state.notice = { kind: "err", text: "宿主不支持从面板发消息；请在会话里说「把无敌画布线框转入 OpenPencil 设计稿」。" };
@@ -2223,30 +2224,21 @@ const EmptyResultSchema = {
     });
     document.getElementById("btn-tokens-edit")?.addEventListener("click", tokensEditDialog);
     document.getElementById("btn-op-new")?.addEventListener("click", async () => {
-      const name = String(document.getElementById("gen-name")?.value ?? "").trim();
-      const tmpl = String(document.getElementById("gen-template")?.value ?? "dashboard");
-      if (!name) {
-        state.notice = { kind: "err", text: "请先填页面名称。" };
-        render(); return;
-      }
+      // 一步创建：new_design 建稿（经 wudi 代理直连 openpencil 子进程）→ 自动进内嵌编辑器
+      const name = String(document.getElementById("op-name")?.value ?? "").trim() || `design-${Date.now().toString(36)}`;
+      if (DEMO) { await openOpEmbed(`designs/${name}.fig`); return; }
       setBusy(true);
       try {
-        // 建画板 + 放布局骨架 + 导出设计稿（全 callTool 直连，必定成功）
-        await callTool("wudi_canvas_edit", { ops: [
-          { op: "add_frame", frame: { name: `${name}-1440`, x: 0, y: 0, w: 1440, h: 900 } },
-          { op: "add", shape: { type: "rect", x: 20, y: 20, w: 260, h: 860, fill: "#e9eefe", stroke: "#0066dd", text: "侧栏导航" } },
-          { op: "add", shape: { type: "rect", x: 300, y: 20, w: 1100, h: 120, fill: "#f3ecfe", stroke: "#7c5cf0", text: "顶栏 / Hero 区" } },
-          { op: "add", shape: { type: "rect", x: 300, y: 160, w: 520, h: 340, fill: "#e2f5ea", stroke: "#0e8a4f", text: "内容卡片 A" } },
-          { op: "add", shape: { type: "rect", x: 840, y: 160, w: 560, h: 340, fill: "#fdf0dd", stroke: "#b45309", text: "内容卡片 B" } },
-          { op: "add", shape: { type: "rect", x: 300, y: 520, w: 1100, h: 360, fill: "#fde9e7", stroke: "#c73a33", text: "底部区域" } },
-        ]});
-        const res = await callTool("wudi_canvas_export", { name: `${name}-${tmpl}`, format: "html" });
-        state.notice = { kind: "ok", text: res.content?.map((c) => c.text).join("\n") ?? "设计稿已生成" };
-        await loadAll();
-      } catch (err) {
-        state.notice = { kind: "err", text: `生成失败：${String(err.message ?? err).slice(0, 400)}` };
+        const res = await callTool("new_design", { path: `designs/${name}.fig` });
+        state.notice = { kind: "ok", text: res.content?.map((c) => c.text).join("\n") ?? `已创建 designs/${name}.fig` };
         setBusy(false);
+        await loadDesign();
+        await openOpEmbed(`designs/${name}.fig`);
+        return;
+      } catch (err) {
+        state.notice = { kind: "err", text: `建稿失败：${String(err.message ?? err).slice(0, 400)}` };
       }
+      setBusy(false);
     });$root().querySelectorAll("[data-act]").forEach((b) =>
       b.addEventListener("click", () => {
         const act = b.dataset.act;
@@ -2355,7 +2347,7 @@ const EmptyResultSchema = {
       const name = String(document.getElementById("gen-name")?.value ?? "").trim();
       const tmpl = String(document.getElementById("gen-template")?.value ?? "dashboard");
       if (!name) {
-        state.notice = { kind: "err", text: "请先填页面名称（生成的设计稿文件名会用它）。" };
+        state.notice = { kind: "err", text: "请先填页面名称（这是生成 HTML 设计稿的流程；只想快速建 .fig？用上方「新建并编辑」）。" };
         render();
         return;
       }

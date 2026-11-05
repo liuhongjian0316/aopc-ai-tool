@@ -372,6 +372,10 @@ async function protocolTests() {
     check("designs_list: 发现 openpencil 建的 .fig", !errOf(r) && designsSc.some((d) => d.name === "smoke.fig"), JSON.stringify(designsSc).slice(0, 150));
 
     /* ---- 内嵌 OpenPencil 编辑器（协同桥 frame 端点 + 面板 CSP frameDomains）---- */
+    r = await s.call("tools/call", { name: "new_design", arguments: { path: "designs/proxy-smoke.fig" } });
+    check("op_proxy: new_design 经 wudi 代理建稿", !errOf(r) && textOf(r).includes("proxy-smoke.fig"), textOf(r).slice(0, 160));
+    r = await s.call("tools/call", { name: "wudi_designs_list", arguments: {} });
+    check("op_proxy: designs_list 发现代理建的稿", (r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "proxy-smoke.fig"));
     r = await s.call("tools/call", { name: "wudi_canvas_bridge", arguments: {} });
     const bridgeUrlSc = r?.result?.structuredContent?.url ?? "";
     check("op_embed: 协同桥端点可用", bridgeUrlSc.startsWith("http://127.0.0.1:"));
