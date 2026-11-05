@@ -483,7 +483,7 @@ const EmptyResultSchema = {
     <div class="c"><b>健康检查</b><div class="num">200</div><div class="muted">全部通过</div><span class="btn">体检报告</span></div>
   </div></body></html>`;
   const app = new App(
-    { name: "wudi-coding", version: "0.34.3" },
+    { name: "wudi-coding", version: "0.34.4" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -1950,7 +1950,7 @@ const EmptyResultSchema = {
 window.__wudiErrs=[];window.__wudiLogs=[];
 addEventListener("error",function(e){window.__wudiErrs.push(String(e.message||e.error||"error"))});
 addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(e.reason||"rejection"))});
-(function(){var ce=console.error.bind(console);console.error=function(){try{window.__wudiLogs.push(Array.prototype.map.call(arguments,function(a){return String(a).slice(0,200)}).join(" | "))}catch(e){};return ce.apply(null,arguments)}})();
+(function(){var ce=console.error.bind(console);console.error=function(){try{window.__wudiLogs.push("error: "+Array.prototype.map.call(arguments,function(a){return String(a).slice(0,200)}).join(" | "))}catch(e){};return ce.apply(null,arguments)};var cw=console.warn.bind(console);console.warn=function(){try{window.__wudiLogs.push("warn: "+Array.prototype.map.call(arguments,function(a){return String(a).slice(0,200)}).join(" | "))}catch(e){};return cw.apply(null,arguments)}})();
 (function(){
   var seq=0,pending=new Map();
   addEventListener("message",function(ev){
@@ -1972,7 +1972,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
   window.fetch=async function(input,init){
     var raw=(typeof input==="string")?input:(input&&input.url)||"";
     var m=raw.replace(/^https?:\\/\\/[^/]+/,"").replace(/^\\/+/,"");
-    var hit=m.match(/^(canvaskit\.wasm|[A-Za-z0-9-]+\.ttf)$/);
+    var hit=m.match(/^(canvaskit\.wasm|[A-Za-z0-9-]+\.(ttf|otf))$/);
     if(!hit)return origFetch(input,init);
     var name=hit[1];
     var res=await readAsset(name);
@@ -2052,7 +2052,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.34.3" },
+              hostInfo: { name: "wudi-workbench", version: "0.34.4" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",

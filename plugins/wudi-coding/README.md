@@ -312,6 +312,15 @@ plugins/wudi-coding/
 - 修复：面板资源 CSP 增加 `https://cdn.jsdelivr.net` 到 `connectDomains` / `resourceDomains`，字体兜底包可正常下载；内置 Inter 路径不受影响。
 - 自检优先级调整：渲染器正常时忽略无害 console 日志（不再误报「渲染异常」），仅未就绪时展示首条内部错误。
 
+## 中文文字渲染：内置 Noto Sans SC（v0.34.4）
+
+- **根因**：文本渲染按 `nodeFontReadiness` 阻塞——缺字形时节点永远 pending、不绘制。官方插件沙箱内**禁用了在线字体下载**（`setOnlineFontProviders({})` + `setWebFontFetch(null)`），本地系统字体也拿不到 → **中文（CJK）文字永远不显示**（拉丁 Inter 正常）。
+- **修复**：向 vendor 的 openpencil 源码内置 **Noto Sans SC（OFL，8.3MB OTF）**并注册为 CJK fallback：
+  - `ui/fonts/NotoSansSC-Regular.otf` + `ui/assets.ts` 资产表 + `ui/fonts.ts: configureBundledCjkFont()`（fetch → `fontManager.registerAndCache` → `setCJKFallbackFamily`）+ `ui/web/main.ts` 调用；
+  - `src/adapters/resources.ts` 二进制白名单放行 `.otf`；构建脚本拷贝 `*.otf`；
+  - 面板 prelude 的资产正则同步支持 `.otf`。
+- 实测（真实子进程 + 真编辑器链路）：中英混排文本 `nodeFontReadiness → ready`、`buildTextPicture` 成功、OTF 经资源管线加载；纯英文与中文均可渲染。离线可用，无 CDN 依赖。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。

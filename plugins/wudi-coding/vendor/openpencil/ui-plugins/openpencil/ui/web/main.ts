@@ -6,13 +6,14 @@ import { useEditorStore } from "@/app/editor/active-store";
 import router from "#ui/web/router.ts";
 import App from "#ui/web/App.vue";
 import { installFetchShim, installWorkerShim } from "#ui/assets.ts";
-import { configureFonts } from "#ui/fonts.ts";
+import { configureBundledCjkFont, configureFonts } from "#ui/fonts.ts";
 import "@/app.css";
 import "#ui/web/host.css";
 
 installFetchShim();
 await installWorkerShim();
 configureFonts();
+void configureBundledCjkFont();
 createTab();
 await router.push("/");
 const app = createApp(App);

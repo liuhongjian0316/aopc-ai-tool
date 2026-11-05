@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.34.3",
+      "version": "0.34.4",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,14 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.34.4",
+          "date": "2026-11-05",
+          "changes": [
+            "修复中文文字不渲染：文本按 nodeFontReadiness 阻塞，官方沙箱禁用在线字体下载且拿不到系统字体，CJK 永远 pending；向 vendor openpencil 源码内置 Noto Sans SC（OFL OTF）并注册为 CJK fallback（fonts.ts/assets.ts/resources.ts/构建脚本同步支持 .otf），离线可用",
+            "真实子进程+编辑器链路实测：中英混排文本 readiness=ready、buildTextPicture 成功、OTF 经资源管线加载；拉丁与中文均可渲染"
+          ]
+        },
         {
           "version": "0.34.3",
           "date": "2026-11-05",

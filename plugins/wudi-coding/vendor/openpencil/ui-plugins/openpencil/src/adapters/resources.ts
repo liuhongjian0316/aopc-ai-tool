@@ -13,7 +13,7 @@ import type { DesignRegistry } from "#openpencil/adapters/registry.ts";
 import type { UpstreamBridge } from "#openpencil/adapters/upstream.ts";
 
 const TEXT_ASSET = /^(assets\.json|panel\.css|bundle-\d+\.txt|worker-[a-z-]+\.js)$/;
-const BINARY_ASSET = /^(canvaskit\.wasm|[A-Za-z0-9-]+\.ttf)$/;
+const BINARY_ASSET = /^(canvaskit\.wasm|[A-Za-z0-9-]+\.(ttf|otf))$/;
 const toBuffer = (bytes: Uint8Array) =>
   Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 

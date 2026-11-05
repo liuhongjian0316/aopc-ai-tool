@@ -18,6 +18,9 @@ for (const font of [
 ])
   VIRTUAL_FILES[`/${font}.ttf`] = { asset: `${font}.ttf`, type: "font/ttf" };
 
+// wudi 增补：内置中文字体（Noto Sans SC，OFL），作为沙箱内 CJK fallback 的来源。
+VIRTUAL_FILES["/NotoSansSC-Regular.otf"] = { asset: "NotoSansSC-Regular.otf", type: "font/otf" };
+
 const cache = new Map<string, Promise<ArrayBuffer>>();
 function pathOf(input: RequestInfo | URL): string | null {
   try {

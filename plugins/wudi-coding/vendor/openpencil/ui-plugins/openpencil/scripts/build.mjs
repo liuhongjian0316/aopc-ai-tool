@@ -94,7 +94,7 @@ await copyFile(
   join(dist, "ui/canvaskit.wasm"),
 );
 for (const font of await readdir(join(root, "ui/fonts")))
-  if (font.endsWith(".ttf")) await copyFile(join(root, "ui/fonts", font), join(dist, "ui", font));
+  if (font.endsWith(".ttf") || font.endsWith(".otf")) await copyFile(join(root, "ui/fonts", font), join(dist, "ui", font));
 
 const server = await build({
   metafile: true,

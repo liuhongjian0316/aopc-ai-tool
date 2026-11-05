@@ -9,6 +9,26 @@ import type { SceneGraph } from "@open-pencil/scene-graph";
  * 字体策略：沙箱不允许联网取字体（CSP），所以关掉上游的在线字体提供商；
  * 内置 Inter / Noto Naskh Arabic 经 assets.ts 的 fetch 拦截提供；其余字体走上游的本地替代逻辑。
  */
+/**
+ * wudi 增补：沙箱内无法联网取字体（CSP），宿主也不提供系统字体；随面板资源内置的
+ * Noto Sans SC（OFL）注册为 CJK fallback —— 中文等字形离线可用，不再缺字/不渲染。
+ * 资源字节经 ui/assets.ts 的 fetch 拦截从 MCP readResource 获取。
+ */
+export async function configureBundledCjkFont(family = "Noto Sans SC") {
+  try {
+    const res = await fetch("/NotoSansSC-Regular.otf");
+    if (!res.ok) return;
+    const bytes = await res.arrayBuffer();
+    if (bytes.byteLength < 1024) return;
+    (fontManager as unknown as {
+      registerAndCache: (f: string, s: string, b: ArrayBuffer) => unknown;
+    }).registerAndCache(family, "Regular", bytes);
+    (fontManager as unknown as { setCJKFallbackFamily: (f: string) => void }).setCJKFallbackFamily(family);
+  } catch {
+    /* 字体缺失时保持上游行为（CJK 可能缺字） */
+  }
+}
+
 export function configureFonts() {
   fontManager.setOnlineFontProviders({});
   fontManager.setWebFontFetch(null);
