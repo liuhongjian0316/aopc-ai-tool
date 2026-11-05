@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.33.1",
+      "version": "0.33.2",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,14 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.33.2",
+          "date": "2026-11-05",
+          "changes": [
+            "修复进入画布仍白屏：①编辑器 loader 改经 MCP 资源管线取回并以 srcdoc 注入 iframe，不再依赖宿主 frame-src 放行；②面板宿主 shim 的 ui/initialize 应答补齐 protocolVersion（SDK 四字段必填，此前校验失败导致编辑器启动即报错）",
+            "面板资源 connectDomains 动态纳入 openpencil WS 桥 origin，并声明 aopc/csp wasm/eval 放宽（CanvasKit / kiwi schema）；浏览器探针实测 srcdoc → 握手 → 资源读取全链路通过"
+          ]
+        },
         {
           "version": "0.33.1",
           "date": "2026-11-05",

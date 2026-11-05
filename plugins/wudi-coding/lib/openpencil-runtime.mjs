@@ -123,6 +123,20 @@ export async function openpencilBridgeEndpoint() {
   return sc.bridge ?? null;
 }
 
+/** 带缓存的桥端点（面板资源 CSP 声明用，30s TTL；子进程重启换端口后自动刷新）。 */
+let _epCache = { at: 0, value: null };
+export async function openpencilBridgeEndpointCached() {
+  if (Date.now() - _epCache.at < 30_000) return _epCache.value;
+  try {
+    const ep = await openpencilBridgeEndpoint();
+    _epCache = { at: Date.now(), value: ep };
+    return ep;
+  } catch {
+    _epCache = { at: Date.now(), value: null };
+    return null;
+  }
+}
+
 // 预热：server 启动即 spawn 子进程并完成握手（消除首次工具调用的冷启动超时）
 try { ensureChild(); } catch (e) { console.error('[wudi] OpenPencil 预热失败:', e.message); }
 

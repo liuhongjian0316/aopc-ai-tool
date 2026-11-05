@@ -221,6 +221,13 @@ aopc plugin install wudi-coding
 - 修复：CSP 同时写入内容项级 + 结果级 + `resources/list` 项级三处；宿主任一路径都能拿到 `connectDomains`/`frameDomains`。
 - **加载看门狗**：编辑器 overlay 顶栏新增状态位——「正在加载编辑器…」→「已连接」；12 秒不握手会明确提示 CSP/桥不可达原因并建议重载/重启会话，不再无声白屏。
 
+## 内嵌编辑器 srcdoc 加载与握手修复（v0.33.2）
+
+- **iframe 白屏根因二连**：①编辑器 iframe 依赖宿主放行 `frame-src`（声明路径一旦未生效即整帧被拦）；②面板扮演宿主时 `ui/initialize` 应答缺 **`protocolVersion`**（SDK 结果 schema 四字段必填），验证失败 → 编辑器启动即抛错。
+- 修复：编辑器 loader 改走 MCP 资源管线（`ui://openpencil/panel.html`）取回、以 **srcdoc** 注入 iframe（按宿主契约不受 frame-src 限制）；`ui/initialize` 应答补齐 `protocolVersion` + hostInfo/hostCapabilities/hostContext。
+- 面板资源同时声明 openpencil WS 桥 origin 到 `connectDomains`（srcdoc 继承父文档 CSP，编辑器需直连随机端口的 WS 桥）与 `aopc/csp: {wasmUnsafeEval, unsafeEval}`（CanvasKit / kiwi schema）。
+- 已用浏览器探针实测：srcdoc 载入 loader → 握手通过 → 资源读取（assets.json / panel.css）全链路 OK。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。

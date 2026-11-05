@@ -11,7 +11,7 @@ import { TOOLS, callTool, bridgeConnectDomains, frameDomains } from "../lib/tool
 // 进程级兜底：任何未捕获错误都不能杀掉 server（宿主连接断开的根因）
 process.on("uncaughtException", (err) => console.error("[wudi] uncaught:", err.message));
 process.on("unhandledRejection", (err) => console.error("[wudi] unhandled:", String(err).slice(0, 300)));
-import { openpencilTools, openpencilCall, openpencilReadResource, openpencilResourcesList } from "../lib/openpencil-runtime.mjs";
+import { openpencilTools, openpencilCall, openpencilReadResource, openpencilResourcesList, openpencilBridgeEndpointCached } from "../lib/openpencil-runtime.mjs";
 import { readFileSync as _rf } from "node:fs";
 import { join as _join, dirname as _dn } from "node:path";
 import { fileURLToPath as _fURL } from "node:url";
@@ -21,7 +21,7 @@ let opToolsCache = (() => {
   catch { return []; }
 })(); // 静态工具定义（117 个），后台动态刷新
 
-const SERVER_INFO = { name: "wudi-coding", version: "0.33.1" };
+const SERVER_INFO = { name: "wudi-coding", version: "0.33.2" };
 const PANEL_URI = "ui://wudi-coding/panel.html";
 const PANEL_MIME = "text/html;profile=mcp-app";
 const panelPath = resolve(join(dirname(fileURLToPath(import.meta.url)), "..", "panel.html"));
@@ -137,15 +137,29 @@ function handleMessage(line) {
     const uri = params?.uri ?? "";
     try {
       if (uri === PANEL_URI) {
-        // 域 CSP 必须声明在「内容项级」_meta（MCP Apps 规范；AOPC 宿主只读 contents[*]._meta.ui.csp，
-        // resources/list 项兜底）。放在结果层会导致 frame-src/connect-src 全部落空 ——
-        // 面板内嵌编辑器 iframe 被拦成白屏。结果层再放一份兼容旧读取方。
-        const csp = { connectDomains: bridgeConnectDomains(), frameDomains: frameDomains() };
-        const meta = { ui: { csp } };
-        send(id, {
-          contents: [{ uri: PANEL_URI, mimeType: PANEL_MIME, text: readPanel(), _meta: meta }],
-          _meta: meta,
-        });
+        // 面板内嵌 OpenPencil 编辑器：srcdoc 加载（宿主契约允许子帧 srcdoc，不受 frame-src 限制）。
+        // 编辑器需 ①直连 openpencil 子进程的 WS 桥（独立随机端口）②wasm/eval 能力 —— 都在资源 _meta 声明。
+        // 桥端点探测最多等 800ms，避免拖慢面板挂载（拿到后 30s 缓存）。
+        Promise.race([
+          openpencilBridgeEndpointCached().catch(() => null),
+          new Promise((r) => setTimeout(() => r(null), 800)),
+        ]).then((ep) => {
+          const connect = [...bridgeConnectDomains()];
+          if (ep?.url) {
+            try {
+              const opOrigin = new URL(ep.url).origin; // ws://127.0.0.1:<port>
+              connect.push(opOrigin, opOrigin.replace(/^ws:/, "http:"));
+            } catch { /* 端点格式异常则忽略 */ }
+          }
+          const meta = {
+            ui: { csp: { connectDomains: [...new Set(connect)], frameDomains: frameDomains() } },
+            "aopc/csp": { wasmUnsafeEval: true, unsafeEval: true },
+          };
+          send(id, {
+            contents: [{ uri: PANEL_URI, mimeType: PANEL_MIME, text: readPanel(), _meta: meta }],
+            _meta: meta,
+          });
+        }).catch((err) => sendError(id, -32603, `面板资源读取失败：${String(err?.message ?? err).slice(0, 200)}`));
         return;
       }
       if (uri.startsWith("ui://openpencil/")) {

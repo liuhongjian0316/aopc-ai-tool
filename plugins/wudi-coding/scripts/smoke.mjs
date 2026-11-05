@@ -394,6 +394,9 @@ async function protocolTests() {
       JSON.stringify(cspMeta).slice(0, 180));
     check("op_embed: 面板资源项 _meta 声明 connectDomains",
       Array.isArray(cspMeta.connectDomains) && cspMeta.connectDomains.length > 0);
+    const relaxMeta = r?.result?.contents?.[0]?._meta?.["aopc/csp"] ?? {};
+    check("op_embed: 资源项声明 wasm/eval 放宽（CanvasKit/kiwi）",
+      relaxMeta.wasmUnsafeEval === true && relaxMeta.unsafeEval === true, JSON.stringify(relaxMeta));
     r = await s.call("resources/list", {});
     const listMeta = (r?.result?.resources ?? []).find((x) => x.uri === "ui://wudi-coding/panel.html")?._meta?.ui?.csp ?? {};
     check("op_embed: resources/list 兜底声明 frameDomains",

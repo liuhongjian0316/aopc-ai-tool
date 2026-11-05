@@ -36,7 +36,7 @@ const EmptyResultSchema = {
     <div class="c"><b>健康检查</b><div class="num">200</div><div class="muted">全部通过</div><span class="btn">体检报告</span></div>
   </div></body></html>`;
   const app = new App(
-    { name: "wudi-coding", version: "0.33.1" },
+    { name: "wudi-coding", version: "0.33.2" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -1522,7 +1522,14 @@ const EmptyResultSchema = {
     layer.querySelector("#op-layer-close").addEventListener("click", () => closeOpEmbed());
     layer.querySelector("#op-layer-reload").addEventListener("click", () => {
       const frame = layer.querySelector("#op-frame");
-      if (frame) frame.src = frame.src;
+      if (!frame) return;
+      if (frame.srcdoc) {
+        const html = frame.srcdoc; // srcdoc 重建：清空后下一帧重新注入
+        frame.srcdoc = "";
+        requestAnimationFrame(() => { frame.srcdoc = html; });
+      } else if (frame.src) {
+        frame.src = frame.src;
+      }
     });
     return layer;
   }
@@ -1545,9 +1552,12 @@ const EmptyResultSchema = {
             opReady = true;
             if (opReadyTimer) { clearTimeout(opReadyTimer); opReadyTimer = null; }
             opSetStatus("已连接", "ok");
+            // 结果 schema 四项必填（protocolVersion/hostInfo/hostCapabilities/hostContext），
+            // protocolVersion 回显 app 请求的版本 —— 漏掉会让 SDK 校验失败、编辑器启动即报错
             reply({
+              protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.33.1" },
+              hostInfo: { name: "wudi-workbench", version: "0.33.2" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -1586,13 +1596,15 @@ const EmptyResultSchema = {
       return;
     }
     setBusy(true);
-    let origin = "";
+    /* loader 走 MCP 资源管线取回（ui://openpencil/panel.html → wudi server → 子进程），
+     * 以 srcdoc 注入 iframe —— 子帧按宿主契约不受 frame-src 限制；资产仍由 loader 经 postMessage 桥读取 */
+    let loaderHtml = "";
     try {
-      const res = await callTool("wudi_canvas_bridge", {});
-      const url = struct(res)?.url ?? "";
-      origin = url ? new URL(url).origin : "";
+      const res = await app.readServerResource({ uri: "ui://openpencil/panel.html" });
+      loaderHtml = res?.contents?.[0]?.text ?? "";
+      if (!loaderHtml) throw new Error("loader 内容为空");
     } catch (err) {
-      state.notice = { kind: "err", text: `协同桥未就绪，无法内嵌编辑器：${String(err.message ?? err).slice(0, 200)}` };
+      state.notice = { kind: "err", text: `编辑器资源不可用：${String(err.message ?? err).slice(0, 300)}` };
       setBusy(false);
       return;
     }
@@ -1605,7 +1617,7 @@ const EmptyResultSchema = {
     }
     setBusy(false);
     state.opEmbed = { path: path ?? "" };
-    state.opFrameOrigin = origin;
+    state.opFrameOrigin = "";
     const layer = buildOpOverlay();
     layer.querySelector(".op-path").textContent = path ? shortPath(path, 60) : "未指定设计稿 —— 编辑器内点「OpenPencil」选择工作区设计稿";
     const holder = layer.querySelector(".op-frame-holder");
@@ -1613,19 +1625,19 @@ const EmptyResultSchema = {
     const frame = document.createElement("iframe");
     frame.id = "op-frame";
     frame.className = "op-frame";
-    frame.src = `${origin}/openpencil/frame`;
-    frame.title = `OpenPencil · ${origin}/openpencil/frame`;
+    frame.title = `OpenPencil · ${path || "workspace designs"}`;
     frame.setAttribute("allow", "clipboard-write");
     holder.appendChild(frame);
+    frame.srcdoc = loaderHtml;
     layer.classList.add("on");
     bindOpShim(frame);
-    /* 看门狗：编辑器 12s 内不握手，多半是宿主 CSP 拦了内嵌 frame（或本机桥不可达），给出可操作提示 */
+    /* 看门狗：编辑器 15s 内不握手，多半是 CSP（connect-src/wasm 放宽）或桥不可达，给出可操作提示 */
     opReady = false;
     if (opReadyTimer) clearTimeout(opReadyTimer);
     opSetStatus("正在加载编辑器…");
     opReadyTimer = setTimeout(() => {
-      if (!opReady) opSetStatus("加载超时：宿主可能拦截了内嵌 frame（CSP frameDomains 未生效）或本机桥不可达。先「重载」，仍失败请重启会话并查看 Console。", "err");
-    }, 12000);
+      if (!opReady) opSetStatus("加载超时：编辑器未握手。先「重载」，仍失败请重启会话；还有问题把开发者工具 Console 报错发我。", "err");
+    }, 15000);
   }
 
   function closeOpEmbed() {
