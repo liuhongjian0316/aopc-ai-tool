@@ -1395,6 +1395,28 @@ console.log("\n[T54] git 提交只含 agent 笔记,不裹挟用户未提交的�
   fs.rmSync(kb, { recursive: true, force: true });
 }
 
+// ---------- T55 版本自我感知 ----------
+
+console.log("\n[T55] 升级后首次唤醒宣布演化;同版本不宣布");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const manifestVer = JSON.parse(fs.readFileSync(path.join(ROOT, ".aopc-plugin", "plugin.json"), "utf8")).version;
+  // 第一次:无 lastSeenVersion → 静默记录,不宣布
+  const r1 = runObserver(dir, { session_id: "sess_t55a", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  check("首启不宣布升级", !(parseOut(r1.stdout)?.additionalContext || "").includes("观己已升级"));
+  check("版本已记录", readState(dir)?.lastSeenSelfawareVersion === manifestVer);
+  // 改 state 里的旧版本 → 第二次唤醒宣布升级
+  const st = readState(dir);
+  st.lastSeenSelfawareVersion = "0.0.1";
+  fs.writeFileSync(path.join(dir, "state.json"), JSON.stringify(st));
+  const r2 = runObserver(dir, { session_id: "sess_t55b", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  const b2 = parseOut(r2.stdout)?.additionalContext || "";
+  check(`宣布升级 0.0.1 → ${manifestVer}`, b2.includes("观己已升级") && b2.includes("0.0.1") && b2.includes(manifestVer), b2.slice(0, 250));
+  const r3 = runObserver(dir, { session_id: "sess_t55c", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  check("同版本不再宣布", !(parseOut(r3.stdout)?.additionalContext || "").includes("观己已升级"));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);

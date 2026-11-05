@@ -10,6 +10,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   loadConfig, loadState, saveState, appendEvent, emptySession,
   selfModelPath, playbooksDir, eventsDir, readMission, missionDay,
@@ -225,6 +226,15 @@ function playbookDigest() {
 }
 
 function startBanner(st, bootstrapped) {
+  // 2.12.0:版本自我感知——被升级后首次唤醒,宣布自己的演化
+  let versionLine = "";
+  try {
+    const manifest = JSON.parse(fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.aopc-plugin/plugin.json"), "utf8"));
+    const cur = manifest.version;
+    const prev = st.lastSeenSelfawareVersion;
+    if (prev && prev !== cur) versionLine = `观己已升级:${prev} → ${cur}(新能力可跑 /selfcheck 核对)。`;
+    st.lastSeenSelfawareVersion = cur;
+  } catch {}
   let digest = "";
   try {
     const md = fs.readFileSync(selfModelPath(), "utf8");
@@ -247,7 +257,7 @@ function startBanner(st, bootstrapped) {
   } catch {}
   const init = bootstrapped ? "首次挂载,已自动初始化自我档案与 playbooks 骨架。" : "";
   return (
-    `<self-state> 观己已挂载:本会话中我能感知自己的状态。${init}${last}${debtLine}${missionLine}` +
+    `<self-state> 观己已挂载:本会话中我能感知自己的状态。${init}${last}${debtLine}${missionLine}${versionLine}` +
     `自我档案与 playbook 在 ${selfModelPath()}(按需 Read;更新只走复盘)。` +
     `九工具:查自身状态/错误史/预算/跨会话历史 = self_state / self_errors / self_usage / self_history;` +
     `记学习与经验 = self_learn;查已学 = self_recall;使命与台账 = self_mission;配置 = self_config;反思日志 = self_journal。` +
