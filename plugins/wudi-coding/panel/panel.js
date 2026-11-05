@@ -36,7 +36,7 @@ const EmptyResultSchema = {
     <div class="c"><b>健康检查</b><div class="num">200</div><div class="muted">全部通过</div><span class="btn">体检报告</span></div>
   </div></body></html>`;
   const app = new App(
-    { name: "wudi-coding", version: "0.33.2" },
+    { name: "wudi-coding", version: "0.33.3" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -1514,12 +1514,20 @@ const EmptyResultSchema = {
         <span class="op-path mono"></span>
         <span id="op-status" class="muted"></span>
         <span style="flex:1"></span>
+        <button class="btn" id="op-layer-fit" title="等价于编辑器内 Shift+1：缩放到全部内容">适应视图</button>
         <button class="btn" id="op-layer-reload" title="重新加载编辑器">重载</button>
         <button class="btn danger" id="op-layer-close">关闭编辑器</button>
       </div>
       <div class="op-frame-holder"></div>`;
     document.body.appendChild(layer);
     layer.querySelector("#op-layer-close").addEventListener("click", () => closeOpEmbed());
+    layer.querySelector("#op-layer-fit").addEventListener("click", () => {
+      const frame = document.getElementById("op-frame");
+      try {
+        frame?.contentWindow?.dispatchEvent(new KeyboardEvent("keydown", { key: "1", code: "Digit1", shiftKey: true, bubbles: true }));
+        opSetStatus("已发送「适应视图」（Shift+1）");
+      } catch { /* ignore */ }
+    });
     layer.querySelector("#op-layer-reload").addEventListener("click", () => {
       const frame = layer.querySelector("#op-frame");
       if (!frame) return;
@@ -1557,7 +1565,7 @@ const EmptyResultSchema = {
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.33.2" },
+              hostInfo: { name: "wudi-workbench", version: "0.33.3" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -1628,7 +1636,7 @@ const EmptyResultSchema = {
     frame.title = `OpenPencil · ${path || "workspace designs"}`;
     frame.setAttribute("allow", "clipboard-write");
     holder.appendChild(frame);
-    frame.srcdoc = loaderHtml;
+    frame.srcdoc = `<script>window.__wudiErrs=[];addEventListener("error",function(e){window.__wudiErrs.push(String(e.message||e.error||"error"))});addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(e.reason||"rejection"))});<\/script>${loaderHtml}`;
     layer.classList.add("on");
     bindOpShim(frame);
     /* 看门狗：编辑器 15s 内不握手，多半是 CSP（connect-src/wasm 放宽）或桥不可达，给出可操作提示 */
@@ -1638,6 +1646,23 @@ const EmptyResultSchema = {
     opReadyTimer = setTimeout(() => {
       if (!opReady) opSetStatus("加载超时：编辑器未握手。先「重载」，仍失败请重启会话；还有问题把开发者工具 Console 报错发我。", "err");
     }, 15000);
+    /* 渲染自检：连接后 5s 检查画布渲染器状态（srcdoc 同源，可直接读 canvas/错误采集） */
+    setTimeout(() => {
+      const live = document.getElementById("op-frame");
+      if (!live || !opReady) return;
+      try {
+        const doc = live.contentDocument;
+        const errs = live.contentWindow?.__wudiErrs ?? [];
+        const canvases = [...(doc?.querySelectorAll("canvas") ?? [])];
+        const hasCtx = canvases.some((c) => {
+          try { return !!(c.getContext("webgl2") || c.getContext("webgl") || c.getContext("2d")); } catch { return false; }
+        });
+        if (errs.length) opSetStatus(`编辑器渲染异常：${String(errs[0]).slice(0, 160)}`, "err");
+        else if (!canvases.length) opSetStatus("画布元素未创建：渲染器未启动（wasm/CanvasKit 可能被拦截）", "err");
+        else if (!hasCtx) opSetStatus("画布未初始化渲染上下文（CanvasKit/wasm 可能被拦截）", "err");
+        else opSetStatus("已连接 · 看不到内容时按 Shift+1 适应视图", "ok");
+      } catch { /* 读不到 iframe 就跳过 */ }
+    }, 5000);
   }
 
   function closeOpEmbed() {

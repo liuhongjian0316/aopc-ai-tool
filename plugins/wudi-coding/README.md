@@ -228,6 +228,11 @@ aopc plugin install wudi-coding
 - 面板资源同时声明 openpencil WS 桥 origin 到 `connectDomains`（srcdoc 继承父文档 CSP，编辑器需直连随机端口的 WS 桥）与 `aopc/csp: {wasmUnsafeEval, unsafeEval}`（CanvasKit / kiwi schema）。
 - 已用浏览器探针实测：srcdoc 载入 loader → 握手通过 → 资源读取（assets.json / panel.css）全链路 OK。
 
+## 画布渲染自检与适应视图（v0.33.3）
+
+- **渲染自检**：编辑器握手后 5s，面板自动检查 iframe 内 canvas 是否创建、是否拿到 WebGL/2D 上下文，并把 iframe 内注入采集的运行时错误显示在 overlay 顶栏——「画布未初始化渲染上下文（CanvasKit/wasm 可能被拦截）」/「已连接 · 看不到内容时按 Shift+1 适应视图」，无需开 Console 即可判断空画布原因。
+- **适应视图**：overlay 顶栏新增按钮，向编辑器窗口派发 Shift+1（缩放到全部内容），用于视口漂移/内容在视野外的一键自救。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。
