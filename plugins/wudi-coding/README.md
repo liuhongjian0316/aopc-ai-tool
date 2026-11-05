@@ -207,6 +207,14 @@ aopc plugin install wudi-coding
 - **UI 对齐 AOPC**：整套设计系统按宿主 DESIGN.md 重做——Zai Light/Zai Dark 同款 tokens（背景 #f8f8f8/#161616、品牌黑/白、hairline 边框、可交互蓝 #0066dd、语义成功/警告/错误色），移除装饰性渐变与整面品牌色填充，横幅改 accent surface，按钮/焦点/徽章/chip 全部走宿主语义。
 - **OpenPencil 编辑器内嵌工作台**（不再依赖宿主 openpencil 环境）：官方插件程序已 vendor 进本插件——wudi server 内嵌子进程 + 本机协同桥新增 `/openpencil/frame` 端点，设计页「打开编辑器」/ 设计稿行「编辑」把**完整编辑器 iframe 直接开在工作台面板里**；面板按 MCP App 协议扮演宿主（ui/initialize 握手 + tools/call、resources/read 转发），文档操作由编辑器拿 token 直连 WS 桥，**与 Agent 的 117 个 openpencil 工具双向实时协同**。面板资源 CSP 声明 frameDomains（宿主 frame-src 白名单），overlay 挂 body 不参与 render 循环，编辑会话不被面板刷新打断。
 
+## 设计页 = 画布（v0.33）
+
+- **设计页只有一个主角：项目画布**。画布（designs/&lt;名称&gt;.fig）里放这个项目的全部 UI 设计——网站 1440 / 移动端 375 / 平板 768 各建画板，所有界面在同一个无限画布上设计。
+- **没有画布 → 创建画布**：设计页直接呈现创建空态（输入名称或留空自动为 `ui`），创建后自动进入内嵌编辑器，无需任何额外配置。
+- **只有一个画布 → 直接进入**：从项目导航点「设计」即落进画布编辑器（设计页就是画布）；多个画布时显示画布卡选择器，点卡进入。
+- **杂项全部收纳**：HTML 设计稿 / 渲染图墙 / tokens / 全部产物收进「设计资产」折叠区；线框转 .fig / HTML 稿生成 / DesignCraft / Figma 收进「更多工具」折叠区。主页面不再是一堆卡片。
+- 编辑器会话走 overlay 层（不参与 render 循环），关闭后回到画布页；Agent 的 openpencil 工具与画布实时双向协同。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。

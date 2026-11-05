@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.32.1",
+      "version": "0.33.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,15 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.33.0",
+          "date": "2026-11-05",
+          "changes": [
+            "设计页重构为「画布优先」：项目画布是唯一主角 —— 画布里放这个项目的全部 UI 设计（网站 1440 / 移动端 375 / 平板 768 各建画板）",
+            "没有画布时直接呈现「创建项目画布」空态（留空自动命名 ui），创建即进内嵌编辑器；只有一个画布时从项目导航进设计页直接落进画布；多画布显示卡片选择器",
+            "杂项收纳：HTML 设计稿/渲染图墙/tokens/全部产物进「设计资产」折叠区，线框转 .fig/HTML 稿生成/DesignCraft/Figma 进「更多工具」折叠区"
+          ]
+        },
         {
           "version": "0.32.1",
           "date": "2026-11-05",

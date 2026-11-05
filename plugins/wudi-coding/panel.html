@@ -278,6 +278,22 @@ input::placeholder { color: var(--text-dim); }
 .op-bar .op-path { color: var(--text-dim); font-size: 12px; word-break: break-all; }
 .op-frame-holder { flex: 1; display: flex; min-height: 0; }
 .op-frame { flex: 1; width: 100%; border: 1px solid var(--border-strong); border-radius: var(--radius); background: #fff; }
+
+/* ---------- 设计页 = 画布（v0.33） ---------- */
+.cv-empty { padding: 46px 20px 40px; }
+.cv-empty-title { font-size: 15px; font-weight: 750; color: var(--text); margin-bottom: 6px; }
+.cvcard .pname { text-transform: none; }
+.cvcard .cta-inline { color: var(--accent-strong); font-weight: 700; }
+.cvcard:hover .cta-inline { text-decoration: underline; }
+details.fold > summary {
+  cursor: pointer; list-style: none; font-size: 11.5px; font-weight: 700; color: var(--text-dim);
+  letter-spacing: .04em; display: flex; align-items: center; gap: 6px;
+}
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary::before { content: "▸"; font-size: 10px; }
+details.fold[open] > summary::before { content: "▾"; }
+details.fold[open] > summary { margin-bottom: 10px; color: var(--text-2); }
+details.fold[open] > summary:hover { color: var(--text); }
 </style>
 </head>
 <body>
@@ -467,7 +483,7 @@ const EmptyResultSchema = {
     <div class="c"><b>健康检查</b><div class="num">200</div><div class="muted">全部通过</div><span class="btn">体检报告</span></div>
   </div></body></html>`;
   const app = new App(
-    { name: "wudi-coding", version: "0.32.1" },
+    { name: "wudi-coding", version: "0.33.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -498,6 +514,7 @@ const EmptyResultSchema = {
     figmaUrl: "",
     opEmbed: null,     // 内嵌 OpenPencil 编辑器会话 {path}（overlay 层，不参与 render 循环）
     opFrameOrigin: "", // 内嵌编辑器 iframe 的 http origin（wudi 协同桥）
+    canvasCreateOpen: false, // 设计页「新建画布」表单展开态
     busy: false,
     connected: false,
     notice: null,
@@ -651,7 +668,7 @@ const EmptyResultSchema = {
         state.view = b.dataset.tab === "projects" ? "projects" : "detail";
         state.tab = b.dataset.tab === "projects" ? state.tab : b.dataset.tab;
         state.notice = null;
-        if (state.tab === "design" && state.view === "detail") loadDesign();
+        if (state.tab === "design" && state.view === "detail") loadDesign({ autoEnter: true });
         if (state.tab === "canvas" && state.view === "detail") loadCanvas();
         if (state.view === "projects") loadProjects();
         render();
@@ -872,15 +889,42 @@ const EmptyResultSchema = {
     const files = design.files ?? [];
     const mockups = files.filter((f) => String(f.path).endsWith(".html") && String(f.path).includes("mockups"));
     const pngs = files.filter((f) => String(f.path).endsWith(".png"));
-    const assetStats = `
-      <div class="stats-row" style="grid-template-columns:repeat(4,1fr)">
-        <div class="stat"><div class="num">${mockups.length}</div><div class="lbl">设计稿 HTML</div></div>
-        <div class="stat"><div class="num">${pngs.length}</div><div class="lbl">渲染 PNG</div></div>
-        <div class="stat"><div class="num">${Object.keys(design.tokens?.color ?? {}).length}</div><div class="lbl">tokens 色值</div></div>
-        <div class="stat"><div class="num">${design.tokens ? "✓" : "—"}</div><div class="lbl">tokens 基准</div></div>
-      </div>`;
+    const tokens = design.tokens;
+    const canvases = state.designs?.designs ?? [];
 
-    /* 设计稿 HTML 卡片（点击 iframe 预览） */
+    /* ---------- 主区：项目画布（设计页 = 画布；所有 UI 设计都在画布里） ---------- */
+    const canvasCards = canvases.map((d) => `
+      <div class="pcard cvcard" data-cv-open="${esc(d.path)}" title="进入画布编辑">
+        <div class="pname">${esc(String(d.name).replace(/\.(fig|pen)$/i, ""))}</div>
+        <div class="ppath">${esc(d.path)} · ${esc(String(d.sizeKB))} KB</div>
+        <div class="stats"><span class="chip accent">${esc(d.format)}</span>${state.opEmbed?.path === d.path ? '<span class="chip">编辑中</span>' : ""}</div>
+        <div class="foot">${esc(fmtTime(d.updatedAt))}<span style="flex:1"></span><b class="cta-inline">进入画布 →</b></div>
+      </div>`).join("");
+    const createRow = `
+      <div class="card" style="margin-top:12px">
+        <h3>新建画布<span class="line"></span></h3>
+        <div class="btnrow">
+          <input id="op-name" placeholder="画布名称，如 UI / 官网 / App（可留空）" style="width:260px;flex:none">
+          <button class="btn primary" id="btn-op-new" ${state.busy ? "disabled" : ""}>创建画布</button>
+          <span class="muted">一个画布容纳这个项目的全部 UI 设计：网站 1440 / 移动端 375 / 平板 768 各建画板</span>
+        </div>
+      </div>`;
+    const canvasSection = canvases.length
+      ? `<div class="card"><h3 style="color:var(--accent-strong)">项目画布<span class="line"></span><span class="muted" style="text-transform:none;letter-spacing:0">点画布进入编辑器 · Agent 实时协同</span></h3>
+          <div class="grid">${canvasCards}</div>
+          ${state.canvasCreateOpen ? createRow : `<div class="btnrow" style="margin-top:10px"><button class="btn" id="btn-cv-create-toggle">＋ 新建画布</button><span class="muted">画布即 designs/&lt;名称&gt;.fig；没有画布时进入设计页会直接引导创建</span></div>`}
+        </div>`
+      : `<div class="empty cv-empty">
+          <div class="cv-empty-title">创建项目画布</div>
+          <div class="muted" style="margin-bottom:14px">画布里放这个项目的所有 UI 设计：移动端、网站、后台……<br>每个界面一个画板，Agent 可以和你一起在画布上实时设计。</div>
+          <div class="btnrow" style="justify-content:center">
+            <input id="op-name" placeholder="画布名称（可留空）" style="width:220px">
+            <button class="btn primary" id="btn-op-new" ${state.busy ? "disabled" : ""}>创建画布</button>
+          </div>
+          <div class="muted" style="margin-top:10px">创建后自动进入编辑器，无需任何额外配置</div>
+        </div>`;
+
+    /* ---------- 折叠区一：设计资产（HTML 设计稿 / 图墙 / tokens / 全部产物） ---------- */
     const mockupCards = mockups.length
       ? `<div class="mockups">${mockups.map((f) => {
           const name = String(f.path).split("/").pop();
@@ -909,8 +953,6 @@ const EmptyResultSchema = {
           return `<div class="png-card" data-png="${esc(name)}"><img data-uri="ui://wudi-coding/image/${esc(name)}" alt="${esc(name)}"><div class="meta">${esc(name)}</div></div>`;
         }).join("")}</div>`).join("")}</div>`
       : "";
-
-    const tokens = design.tokens;
     const colorEntries = Object.entries(tokens?.color ?? {});
     const palette = colorEntries.length
       ? `<div class="card"><h3>色板<span class="line"></span><button class="btn" id="btn-tokens-edit" style="margin-left:auto">编辑 JSON</button></h3><div class="swatches">${colorEntries.map(([k, v]) =>
@@ -923,68 +965,65 @@ const EmptyResultSchema = {
             `<span class="k">${esc(k)}</span><span class="v">${esc(String(v))}</span>`).join("")}</div></div>`
         ).join("")
       : "";
-    return `
-      ${assetStats}
-      <div class="card"><h3 style="color:var(--accent-strong)">OpenPencil · 设计稿编辑器（内嵌工作台）<span class="line"></span></h3>
-        <div class="muted" style="margin-bottom:10px">完整设计编辑器<b>直接在工作台面板内运行</b>（不需要宿主另装 openpencil 环境）：编辑工作区 <b>.fig 设计稿</b>（Figma 同款格式），<b>Agent 117 个工具实时协同</b>（auto-layout、组件/实例、设计变量、design_to_tokens、导出 SVG/PDF/PNG）。文档操作经本机 WS 桥直连，编辑器与 Agent 双向实时同步。</div>
-        <div class="btnrow">
-          <input id="op-name" placeholder="设计稿名称，如 login-page" style="width:190px;flex:none">
-          <button class="btn primary" id="btn-op-new" ${state.busy ? "disabled" : ""}>新建并编辑</button>
-          <button class="btn" id="btn-op-editor" ${state.busy ? "disabled" : ""} title="不指定设计稿打开编辑器，在编辑器内点「OpenPencil」选择工作区设计稿">打开编辑器</button>
-          <button class="btn" id="btn-op-wire" ${state.busy ? "disabled" : ""} title="把无敌画布的线框按坐标重建为 .fig 设计稿（Agent 双工具集转换）">把无敌线框转入 .fig</button>
-          <span class="muted">文件落 designs/&lt;名称&gt;.fig，建稿后自动进编辑器</span>
-        </div>
-        ${(state.designs?.designs ?? []).length ? `<div style="margin-top:10px">${(state.designs?.designs ?? []).map((d) => `
-          <div class="row"><span class="chip">${esc(d.format)}</span><span class="path">${esc(d.path)}</span><span class="muted">${esc(String(d.sizeKB))} KB</span>
-            <button class="btn primary" data-op-embed="${esc(d.path)}" ${state.busy ? "disabled" : ""}>编辑</button>
-            <button class="btn" data-op-open="${esc(d.path)}" ${state.busy ? "disabled" : ""} title="登记为活动设计稿（Agent 侧）">打开</button>
-            <button class="btn" data-op-render="${esc(d.path)}" ${state.busy ? "disabled" : ""} title="渲染 PNG 到 .wudi/design/renders/ 进图墙">渲染到图墙</button>
-          </div>`).join("")}</div>` : '<div class="muted" style="margin-top:8px">还没有 .fig 设计稿 —— 用上方按钮新建第一个。</div>'}
-      </div>
-      <div class="card"><h3 style="color:var(--accent-strong)">DesignCraft · 完整设计编辑器<span class="line"></span></h3>
-        <div class="muted" style="margin-bottom:10px">官方插件：面板内完整设计编辑器（工具/图层/菜单），<b>Agent 25 个工具直接读写</b> —— 建文档、放图、改文字、驱动画布，渲染 PNG 自动进下方设计图墙。需在 AOPC 插件市场安装 designcraft。</div>
-        <div class="btnrow">
-          <button class="btn primary" id="btn-dc-new" ${state.busy ? "disabled" : ""}>新建设计文档</button>
-          <button class="btn" id="btn-dc-render" ${state.busy ? "disabled" : ""} title="让 Agent 渲染当前页 PNG 到 .wudi/design/renders/">渲染当前页到图库</button>
-          <span class="muted">渲染后本页「设计图」区自动出现</span>
-        </div>
-      </div>
-      <div class="card"><h3>Figma · 完整编辑器<span class="line"></span></h3>
-        <div class="kv">
-          <span class="k">文件链接</span><span class="v"><input id="fig-url" placeholder="https://www.figma.com/design/..." value="${esc(state.figmaUrl)}"></span>
-        </div>
-        <div class="btnrow" style="margin-top:10px">
-          <button class="btn primary" id="btn-fig-open" ${state.figmaUrl ? "" : "disabled"}>在浏览器打开 Figma 编辑器 ↗</button>
-          <button class="btn" id="btn-fig-save" ${state.busy ? "disabled" : ""}>保存链接</button>
-          <span class="muted">完整画布/图层/属性面板在浏览器编辑；Figma API 只读 —— Agent 能读设计，改不了 Figma 文件，需 Agent 写的设计走 Excalidraw 画布</span>
-        </div>
-      </div>
-      <div class="card"><h3>生成设计稿<span class="line"></span></h3>
-        <div class="kv">
-          <span class="k">页面名称</span><span class="v"><input id="gen-name" placeholder="如 workbench-v4 / settings-page"></span>
-          <span class="k">模板类型</span><span class="v"><select id="gen-template" style="font-family:inherit">
-            <option value="dashboard">dashboard · 管理后台/工作台</option>
-            <option value="landing">landing · 产品落地页</option>
-            <option value="mobile">mobile · 移动端 App（375 画布）</option>
-          </select></span>
-        </div>
-        <div class="btnrow" style="margin-top:10px">
-          <button class="btn primary" id="btn-gen" ${state.busy ? "disabled" : ""}>唤起 Agent 生成</button>
-          <button class="btn" id="btn-export" ${state.busy || !tokens ? "disabled" : ""}>导出 tokens.css</button>
-          <span class="muted">Agent 按 wudi-ui 流程生成设计稿，完成后自动进图库</span>
-        </div>
-      </div>
-      ${mockups.length ? `<div class="card"><h3>UI 设计稿<span class="line"></span></h3>${mockupCards}<div class="muted" style="margin-top:8px">点击卡片预览完整设计稿</div></div>` : ""}
-      ${pngs.length ? `<div class="card"><h3>设计图<span class="line"></span></h3>${pngWall}<div class="muted" style="margin-top:8px">来自 wudi_figma_images 渲染，点击放大</div></div>` : ""}
-      ${palette}
-      ${otherTokens}
-      ${!mockups.length && !pngs.length ? `<div class="card"><h3>UI 设计稿<span class="line"></span></h3><div class="empty" style="padding:22px">还没有设计稿。上面选模板类型点「唤起 Agent 生成」，或执行 <span class="mono">/wudi-ui</span>。</div></div>` : ""}
-      ${!tokens ? `<div class="card"><h3>Design Tokens<span class="line"></span></h3><div class="empty" style="padding:22px">还没有 design tokens。执行 <span class="mono">/wudi-ui</span> 设计定稿后自动沉淀。</div></div>` : ""}
-      <div class="card"><h3>全部产物（新→旧）<span class="line"></span></h3>
+    const assetsDetails = `
+      <details class="card fold">
+        <summary>设计资产 · HTML 设计稿 ${mockups.length} · 渲染图 ${pngs.length} · tokens ${colorEntries.length} 色</summary>
+        ${mockups.length ? `<h3>HTML 设计稿<span class="line"></span></h3>${mockupCards}<div class="muted" style="margin-top:8px">点击卡片预览完整设计稿</div>` : ""}
+        ${pngs.length ? `<h3>设计图<span class="line"></span></h3>${pngWall}<div class="muted" style="margin-top:8px">来自设计稿渲染，点击放大</div>` : ""}
+        ${palette}${otherTokens}
+        ${!tokens ? '<div class="muted" style="margin:8px 0">还没有 design tokens —— 设计定稿后执行 /wudi-ui 自动沉淀。</div>' : ""}
+        <h3>全部产物（新→旧）<span class="line"></span></h3>
         ${files.length ? files.map((f) =>
           `<div class="row"><span class="chip">${String(f.path).endsWith(".html") ? "设计稿" : String(f.path).endsWith(".png") ? "设计图" : "tokens"}</span><span class="path">${esc(f.path)}</span><span class="muted">${esc(String(f.sizeKB))} KB</span><span class="time">${esc(fmtTime(f.updatedAt))}</span></div>`
-        ).join("") : '<div class="empty" style="padding:22px">（空）</div>'}
-      </div>`;
+        ).join("") : '<div class="muted">（空）</div>'}
+      </details>`;
+
+    /* ---------- 折叠区二：更多工具（线框转换 / HTML 稿生成 / DesignCraft / Figma） ---------- */
+    const toolsDetails = `
+      <details class="card fold">
+        <summary>更多工具 · 线框转画布 / HTML 设计稿生成 / DesignCraft / Figma</summary>
+        <div class="card" style="box-shadow:none"><h3>把无敌线框转入画布<span class="line"></span></h3>
+          <div class="btnrow">
+            <input id="op-name-wire" placeholder="目标画布名称（可留空）" style="width:200px;flex:none">
+            <button class="btn" id="btn-op-wire" ${state.busy ? "disabled" : ""} title="把无敌画布的线框按坐标重建为 .fig 画布（Agent 双工具集转换）">把线框转入 .fig</button>
+            <span class="muted">「画布」页的快速线框 → .fig 设计稿</span>
+          </div>
+        </div>
+        <div class="card" style="box-shadow:none"><h3>生成 HTML 设计稿<span class="line"></span></h3>
+          <div class="kv">
+            <span class="k">页面名称</span><span class="v"><input id="gen-name" placeholder="如 workbench-v4 / settings-page"></span>
+            <span class="k">模板类型</span><span class="v"><select id="gen-template" style="font-family:inherit">
+              <option value="dashboard">dashboard · 管理后台/工作台</option>
+              <option value="landing">landing · 产品落地页</option>
+              <option value="mobile">mobile · 移动端 App（375 画布）</option>
+            </select></span>
+          </div>
+          <div class="btnrow" style="margin-top:10px">
+            <button class="btn" id="btn-gen" ${state.busy ? "disabled" : ""}>唤起 Agent 生成 HTML 稿</button>
+            <button class="btn" id="btn-export" ${state.busy || !tokens ? "disabled" : ""}>导出 tokens.css</button>
+            <span class="muted">生成单文件 HTML 设计稿进「设计资产」</span>
+          </div>
+        </div>
+        <div class="card" style="box-shadow:none"><h3>DesignCraft · 完整设计编辑器<span class="line"></span></h3>
+          <div class="muted" style="margin-bottom:10px">官方插件：面板内完整设计编辑器，<b>Agent 25 个工具直接读写</b>，渲染 PNG 自动进「设计资产」。需在 AOPC 插件市场安装 designcraft。</div>
+          <div class="btnrow">
+            <button class="btn" id="btn-dc-new" ${state.busy ? "disabled" : ""}>新建设计文档</button>
+            <button class="btn" id="btn-dc-render" ${state.busy ? "disabled" : ""} title="让 Agent 渲染当前页 PNG 到 .wudi/design/renders/">渲染当前页到图库</button>
+          </div>
+        </div>
+        <div class="card" style="box-shadow:none"><h3>Figma · 只读设计源<span class="line"></span></h3>
+          <div class="kv">
+            <span class="k">文件链接</span><span class="v"><input id="fig-url" placeholder="https://www.figma.com/design/..." value="${esc(state.figmaUrl)}"></span>
+          </div>
+          <div class="btnrow" style="margin-top:10px">
+            <button class="btn" id="btn-fig-open" ${state.figmaUrl ? "" : "disabled"}>在浏览器打开 Figma ↗</button>
+            <button class="btn" id="btn-fig-save" ${state.busy ? "disabled" : ""}>保存链接</button>
+            <span class="muted">Figma API 只读：Agent 能读设计、改不了文件；要 Agent 参与设计请用项目画布</span>
+          </div>
+        </div>
+      </details>`;
+
+    return `${canvasSection}${assetsDetails}${toolsDetails}`;
   }
 
   /* ---------- 设计图/设计稿资源加载与预览 ---------- */
@@ -1942,7 +1981,7 @@ const EmptyResultSchema = {
           case "ui/initialize":
             reply({
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.32.1" },
+              hostInfo: { name: "wudi-workbench", version: "0.33.0" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -2169,47 +2208,17 @@ const EmptyResultSchema = {
         setBusy(false);
       }
     });
-    document.getElementById("btn-op-editor")?.addEventListener("click", () => openOpEmbed(""));
-    $root().querySelectorAll("[data-op-embed]").forEach((b) =>
-      b.addEventListener("click", () => openOpEmbed(b.dataset.opEmbed))
+    /* 项目画布卡：进入该画布 */
+    $root().querySelectorAll("[data-cv-open]").forEach((card) =>
+      card.addEventListener("click", () => openOpEmbed(card.dataset.cvOpen))
     );
-    $root().querySelectorAll("[data-op-open]").forEach((b) =>
-      b.addEventListener("click", async () => {
-        const path = b.dataset.opOpen;
-        try {
-          if (!app.getHostCapabilities()?.message) {
-            state.notice = { kind: "err", text: `请在会话里说「用 openpencil 打开 ${path}」。` };
-            render();
-            return;
-          }
-          await callTool("open_design", { path });
-        } catch (err) {
-          state.notice = { kind: "err", text: `唤起失败：${String(err.message ?? err).slice(0, 300)}` };
-          render();
-        }
-      })
-    );
-    $root().querySelectorAll("[data-op-render]").forEach((b) =>
-      b.addEventListener("click", async () => {
-        const path = b.dataset.opRender;
-        try {
-          if (!app.getHostCapabilities()?.message) {
-            state.notice = { kind: "err", text: `请在会话里说「渲染 ${path} 到 .wudi/design/renders/」。` };
-            render();
-            return;
-          }
-          state.notice = { kind: "ok", text: `已唤起 Agent 渲染 ${path}，完成后点「刷新」即可在下方设计图墙看到。` };
-          render();
-          const pngName = `${path.split("/").pop().replace(".fig", "")}-${Date.now().toString(36)}.png`;
-          await callTool("export_image", { design: path, format: "PNG", path: `.wudi/design/renders/${pngName}` });
-        } catch (err) {
-          state.notice = { kind: "err", text: `唤起失败：${String(err.message ?? err).slice(0, 300)}` };
-          render();
-        }
-      })
-    );
+    document.getElementById("btn-cv-create-toggle")?.addEventListener("click", () => {
+      state.canvasCreateOpen = true;
+      render();
+      document.getElementById("op-name")?.focus();
+    });
     document.getElementById("btn-op-wire")?.addEventListener("click", async () => {
-      const name = String(document.getElementById("op-name")?.value ?? "").trim() || `wireframe-${Date.now().toString(36)}`;
+      const name = String(document.getElementById("op-name-wire")?.value ?? "").trim() || `wireframe-${Date.now().toString(36)}`;
       try {
         if (!app.getHostCapabilities()?.message) {
           state.notice = { kind: "err", text: "宿主不支持从面板发消息；请在会话里说「把无敌画布线框转入 OpenPencil 设计稿」。" };
@@ -2224,26 +2233,27 @@ const EmptyResultSchema = {
     });
     document.getElementById("btn-tokens-edit")?.addEventListener("click", tokensEditDialog);
     document.getElementById("btn-op-new")?.addEventListener("click", async () => {
-      // 一步创建：new_design 建稿（经 wudi 代理直连 openpencil 子进程）→ 自动进内嵌编辑器
-      const name = String(document.getElementById("op-name")?.value ?? "").trim() || `design-${Date.now().toString(36)}`;
+      // 创建项目画布：new_design 建稿（经 wudi 代理直连 openpencil 子进程）→ 自动进内嵌编辑器
+      const name = String(document.getElementById("op-name")?.value ?? "").trim() || "ui";
       if (DEMO) { await openOpEmbed(`designs/${name}.fig`); return; }
       setBusy(true);
       try {
         const res = await callTool("new_design", { path: `designs/${name}.fig` });
-        state.notice = { kind: "ok", text: res.content?.map((c) => c.text).join("\n") ?? `已创建 designs/${name}.fig` };
+        state.notice = { kind: "ok", text: res.content?.map((c) => c.text).join("\n") ?? `已创建画布 designs/${name}.fig` };
+        state.canvasCreateOpen = false;
         setBusy(false);
         await loadDesign();
         await openOpEmbed(`designs/${name}.fig`);
         return;
       } catch (err) {
-        state.notice = { kind: "err", text: `建稿失败：${String(err.message ?? err).slice(0, 400)}` };
+        state.notice = { kind: "err", text: `创建画布失败：${String(err.message ?? err).slice(0, 400)}` };
       }
       setBusy(false);
     });$root().querySelectorAll("[data-act]").forEach((b) =>
       b.addEventListener("click", () => {
         const act = b.dataset.act;
         if (act === "goto-deploys") { state.view = "detail"; state.tab = "deploys"; }
-        else if (act === "goto-design") { state.view = "detail"; state.tab = "design"; loadDesign(); }
+        else if (act === "goto-design") { state.view = "detail"; state.tab = "design"; loadDesign({ autoEnter: true }); }
         else if (act === "goto-docs") { state.view = "detail"; state.tab = "docs"; }
         else return; // hint 类仅提示
         state.notice = null;
@@ -2445,7 +2455,7 @@ const EmptyResultSchema = {
     if (state.view === "projects" && !state.drill) render();
   }
 
-  async function loadDesign() {
+  async function loadDesign(opts = {}) {
     if (DEMO) return;
     state.design = null;
     try {
@@ -2467,6 +2477,11 @@ const EmptyResultSchema = {
       } catch { state.designs = null; }
     } catch {
       state.design = { tokens: null, files: [] };
+    }
+    /* 设计页 = 画布：从项目导航进入设计页且只有一个画布时，直接进入编辑器 */
+    if (opts?.autoEnter && state.view === "detail" && state.tab === "design" && !state.opEmbed) {
+      const list = state.designs?.designs ?? [];
+      if (list.length === 1) { await openOpEmbed(list[0].path); return; }
     }
     if (state.tab === "design" && state.view === "detail") render();
   }
@@ -2517,6 +2532,12 @@ const EmptyResultSchema = {
       ],
     };
     state.history = { deploys: state.data.deploys };
+    state.designs = {
+      designs: [
+        { name: "ui.fig", path: "designs/ui.fig", format: "fig（可编辑）", sizeKB: 128.4, updatedAt: iso(30) },
+        { name: "landing.fig", path: "designs/landing.fig", format: "fig（可编辑）", sizeKB: 42.1, updatedAt: iso(1800) },
+      ],
+    };
     state.design = {
       tokens: {
         color: { primary: "#0066dd", accent: "#7c5cf0", text: "#171a21", bg: "#ffffff", ok: "#0e8a4f", err: "#c73a33" },
