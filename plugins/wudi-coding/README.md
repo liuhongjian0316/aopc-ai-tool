@@ -321,6 +321,11 @@ plugins/wudi-coding/
   - 面板 prelude 的资产正则同步支持 `.otf`。
 - 实测（真实子进程 + 真编辑器链路）：中英混排文本 `nodeFontReadiness → ready`、`buildTextPicture` 成功、OTF 经资源管线加载；纯英文与中文均可渲染。离线可用，无 CDN 依赖。
 
+## 中文字体子集化（v0.34.5）
+
+- 宿主对页面发起的 `resources/read` 有 **8 MiB 解码上限**（超出直接报 `resource_too_large`，面板实例可能被关掉 → 「MCP App connection is no longer available」）；完整 Noto Sans SC（7.94MiB）贴着红线。
+- 用 fontTools 按 **GB2312 全字符集**（6763 汉字 + 拉丁 + 常用标点，共 7904 字符）子集化为 **1.92MiB**，字形覆盖验证通过（测试用字全部命中）；离线可用、远离大小上限。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。

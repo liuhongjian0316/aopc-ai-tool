@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.34.4",
+      "version": "0.34.5",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,13 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.34.5",
+          "date": "2026-11-05",
+          "changes": [
+            "中文字体子集化：宿主 resources/read 有 8 MiB 上限（超出报 resource_too_large，面板实例可能被关闭 → MCP App connection is no longer available）；完整 Noto Sans SC 7.94MiB 贴线，按 GB2312 全字符集子集化为 1.92MiB，字形覆盖验证通过，离线可用"
+          ]
+        },
         {
           "version": "0.34.4",
           "date": "2026-11-05",
