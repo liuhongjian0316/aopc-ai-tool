@@ -3,8 +3,9 @@
   "private": true,
   "description": "liuhongjian's AOPC plugin marketplace",
   "scripts": {
-    "build:panel": "cd plugins/wudi-coding && node scripts/build-panel.mjs",
-    "smoke": "cd plugins/wudi-coding && node scripts/smoke.mjs",
+    "build": "npm --prefix plugins/wudi-coding run build",
+    "build:panel": "npm --prefix plugins/wudi-coding run build",
+    "smoke": "npm --prefix plugins/wudi-coding run smoke",
     "validate": "for d in plugins/*/; do aopc plugins validate \"$d\" || exit 1; done"
   }
 }

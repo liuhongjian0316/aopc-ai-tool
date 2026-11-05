@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.33.6",
+      "version": "0.33.7",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,14 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.33.7",
+          "date": "2026-11-05",
+          "changes": [
+            "wudi-coding 改为标准 npm 项目结构：新增 package.json（build/start/smoke/test/vendor:install/vendor:build 脚本，engines node>=18）；仓库根脚本改为 npm --prefix 委托",
+            "版本一致性守卫升级：aopc/zcode 清单 + package.json + panel.js + server.mjs 五处强制一致；README 增加项目结构说明；插件清单校验通过"
+          ]
+        },
         {
           "version": "0.33.6",
           "date": "2026-11-05",

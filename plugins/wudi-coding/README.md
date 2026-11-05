@@ -251,6 +251,31 @@ aopc plugin install wudi-coding
 - **构建环境已实测可用**：`cd vendor/openpencil/ui-plugins/openpencil && npm install && npm run build` 完整产出 `dist/server.mjs`（9.5MB）与编辑器资产（7.09MB JS + 154KB CSS + 字体/worker），与入库 dist 字节一致。
 - 详见 `vendor/openpencil/VENDOR.md`（上游 commit `0cc58d6`、版本 0.3.2、MIT）。
 
+## 项目结构（标准 npm 项目）
+
+```
+plugins/wudi-coding/
+├── package.json            # 标准 npm 项目：build / start / smoke / test / vendor:* 脚本
+├── mcp-server/server.mjs   # MCP stdio server 入口（initialize / tools / resources）
+├── lib/                    # 工具实现：store / tools / ssh / notify / figma / openpencil-runtime
+├── panel/                  # 工作台面板源码（panel.js + panel.css + ext-apps SDK vendor）
+├── panel.html              # 构建产物：npm run build 组装（源码拼接，勿手改）
+├── commands/ skills/ agents/
+├── scripts/                # build-panel.mjs（面板组装+自检）/ smoke.mjs（回归）
+├── vendor/openpencil/      # 官方 openPencil：源码 + 构建环境 + 预构建 dist（见 VENDOR.md）
+├── .aopc-plugin/plugin.json
+└── .zcode-plugin/plugin.json
+```
+
+| 命令 | 作用 |
+| --- | --- |
+| `npm run build` | 组装 `panel.html`（SDK + panel.js + panel.css 单文件，含语法自检） |
+| `npm test` / `npm run smoke` | 103 项回归（协议层 + 工具面 + 内嵌编辑器链路 + 版本一致性） |
+| `npm start` | 本地启动 MCP server（stdio，调试用） |
+| `npm run vendor:install` / `npm run vendor:build` | 重建 vendor 内 openPencil（官方源码构建，产物落 vendor/openpencil/ui-plugins/openpencil/dist） |
+
+版本号由 smoke 守卫强制 **五处一致**：`.aopc-plugin/plugin.json`、`.zcode-plugin/plugin.json`、`package.json`、`panel/panel.js`、`mcp-server/server.mjs`。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。

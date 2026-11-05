@@ -81,12 +81,15 @@ async function unitTests() {
   console.log("◆ 版本一致性");
   try {
     const pluginJson = JSON.parse(await readFile(join(root, ".aopc-plugin", "plugin.json"), "utf8"));
+    const zcodeJson = JSON.parse(await readFile(join(root, ".zcode-plugin", "plugin.json"), "utf8"));
+    const pkgJson = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
     const panelSrc = await readFile(join(root, "panel", "panel.js"), "utf8");
     const serverSrc = await readFile(join(root, "mcp-server", "server.mjs"), "utf8");
     const v = pluginJson.version;
-    check(`版本三处一致（${v}）`,
+    check(`版本五处一致（${v}）`,
+      zcodeJson.version === v && pkgJson.version === v &&
       panelSrc.includes(`version: "${v}" }`) && serverSrc.includes(`version: "${v}" }`),
-      `plugin.json=${v} panel 含 ${panelSrc.match(/version: "([0-9.]+)" \}/)?.[1]} server 含 ${serverSrc.match(/version: "([0-9.]+)" \}/)?.[1]}`);
+      `aopc=${v} zcode=${zcodeJson.version} package=${pkgJson.version} panel=${panelSrc.match(/version: "([0-9.]+)" \}/)?.[1]} server=${serverSrc.match(/version: "([0-9.]+)" \}/)?.[1]}`);
   } catch (err) {
     check("版本一致性文件可读", false, String(err));
   }
