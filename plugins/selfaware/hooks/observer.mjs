@@ -249,7 +249,8 @@ function startBanner(st, bootstrapped) {
   return (
     `<self-state> 观己已挂载:本会话中我能感知自己的状态。${init}${last}${debtLine}${missionLine}` +
     `自我档案与 playbook 在 ${selfModelPath()}(按需 Read;更新只走复盘)。` +
-    `查自身状态/错误史/上下文/跨会话历史:调 self_state / self_errors / self_usage / self_history。` +
+    `九工具:查自身状态/错误史/预算/跨会话历史 = self_state / self_errors / self_usage / self_history;` +
+    `记学习与经验 = self_learn;查已学 = self_recall;使命与台账 = self_mission;配置 = self_config;反思日志 = self_journal。` +
     `${digest}${playbookDigest()}</self-state>`
   );
 }

@@ -611,7 +611,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "2.9.0",
+      "version": "2.10.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -626,6 +626,15 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "2.10.0",
+          "date": "2026-11-04",
+          "changes": [
+            "开场横幅工具列表升级到九工具时代(此前漏列 self_learn/self_recall/self_mission/self_config/self_journal 五个——agent 不知道自己会写知识库/召回/立项);修复编辑事故导致的 missionLine 丢失(T26/T29 回归抓出)",
+            "周报条目自动附本周学习档案 MOC 链接(Obsidian 双链,7 天窗口,远古笔记排除)",
+            "冒烟测试 213 → 222 项全绿"
+          ]
+        },
         {
           "version": "2.9.0",
           "date": "2026-11-05",

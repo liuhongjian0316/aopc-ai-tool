@@ -31,7 +31,7 @@ import {
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "2.9.0";
+const VERSION = "2.10.0";
 
 const TOOLS = [
   {
@@ -1240,6 +1240,18 @@ function kbRecord(cfg, { title, body, tags, type }) {
         git.reason = `push 失败:${String(e?.message || e).slice(0, 120)}`;
       }
     }
+  }
+  // 2.10.0:周报条目自动附本周学习档案链接(MOC——周报成为知识网络入口)
+  if (tagArr.includes("weekly-report")) {
+    try {
+      const week = Date.now() - 7 * 86400000;
+      const others = fs
+        .readdirSync(dir)
+        .filter((f) => f.endsWith(".md") && f !== path.basename(file))
+        .filter((f) => fs.statSync(path.join(dir, f)).mtimeMs >= week)
+        .slice(-12);
+      if (others.length) fs.appendFileSync(file, `\n本周学习档案: ${others.map((f) => `[[${f.replace(/\.md$/, "")}]]`).join(" · ")}\n`);
+    } catch {}
   }
   return { file: path.basename(file), mode, git };
 }

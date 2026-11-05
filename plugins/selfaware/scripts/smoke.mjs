@@ -1334,6 +1334,40 @@ console.log("\n[T52] measure 从 stats 文本自动提取结构化数字(真实�
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// ---------- T53 周报 MOC 与横幅九工具 ----------
+
+console.log("\n[T53] 周报条目自动附本周学习档案链接;横幅列全九工具");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const kb = fs.mkdtempSync(path.join(os.tmpdir(), "sa-kb-"));
+  fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify({ knowledgeBase: { path: kb } }));
+  fs.mkdirSync(path.join(kb, "观己学习"), { recursive: true });
+  const recent = new Date(Date.now() - 2 * 86400000);
+  const old = new Date(Date.now() - 30 * 86400000);
+  fs.writeFileSync(path.join(kb, "观己学习", "近期-笔记甲.md"), "# 甲\n");
+  fs.utimesSync(path.join(kb, "观己学习", "近期-笔记甲.md"), recent, recent);
+  fs.writeFileSync(path.join(kb, "观己学习", "远古-笔记乙.md"), "# 乙\n");
+  fs.utimesSync(path.join(kb, "观己学习", "远古-笔记乙.md"), old, old);
+  const rpc = [
+    { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "self_learn", arguments: { action: "record", type: "experience", title: "本周运营周报", body: "五段内容", tags: "weekly-report" } } },
+  ].map((m) => JSON.stringify(m)).join("\n") + "\n";
+  const r = spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000 });
+  const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+  const wrFile = (m?.result?.content?.[0]?.text || "").match(/\d{4}-\d{2}-\d{2}-[^\s]+\.md/)?.[0];
+  check("周报条目写入", !!wrFile, m?.result?.content?.[0]?.text || "");
+  const md = wrFile ? fs.readFileSync(path.join(kb, "观己学习", wrFile), "utf8") : "";
+  check("本周档案链接含近期笔记", md.includes("本周学习档案") && md.includes("[[近期-笔记甲]]"), md.slice(-200));
+  check("30 天前的远古笔记被排除", !md.includes("远古-笔记乙"));
+  // 横幅九工具
+  const rb = runObserver(dir, { session_id: "sess_t53", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" });
+  const banner = parseOut(rb.stdout)?.additionalContext || "";
+  for (const t of ["self_state", "self_learn", "self_recall", "self_mission", "self_config", "self_journal"]) {
+    check(`横幅含 ${t}`, banner.includes(t));
+  }
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(kb, { recursive: true, force: true });
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);
