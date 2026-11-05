@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.33.5",
+      "version": "0.33.6",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,14 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.33.6",
+          "date": "2026-11-05",
+          "changes": [
+            "vendor openPencil 改为官方源码 + 完整构建环境：vendor/openpencil 按官方 monorepo 1:1 布局（ui-plugins/openpencil 源码与构建脚本 + external_plugins/openpencil 许可证/清单/技能 + 预构建 dist 运行时）",
+            "构建环境实测通过：npm install + npm run build 完整产出 dist/server.mjs（9.5MB）与编辑器资产，与入库 dist 字节一致；重建方法见 vendor/openpencil/VENDOR.md"
+          ]
+        },
         {
           "version": "0.33.5",
           "date": "2026-11-05",

@@ -245,6 +245,12 @@ aopc plugin install wudi-coding
 - **最终形态**：srcdoc 加载（不受 frame-src 限制）+ **prelude 补丁**——在 loader 之前接管 `fetch`，把 `canvaskit.wasm`、`*.ttf` 经 postMessage 转回 MCP 资源管线；错误采集 `__wudiErrs` 一并注入。
 - 探针实测（srcdoc + prelude）：握手 ✔、`canvaskit.wasm`/字体读取 ✔、canvas WebGL 上下文 ✔（819×860）、零错误。
 
+## vendor 官方源码与构建环境（v0.33.6）
+
+- `vendor/openpencil/` 现为**官方 monorepo 1:1 布局**：`ui-plugins/openpencil`（源码：`src/` MCP server、`ui/` Vue 编辑器、`scripts/` 构建脚本、package.json/tsconfig/vitest）+ `external_plugins/openpencil`（LICENSE/licenses/官方清单/design 技能）+ 预构建 `dist/`（运行时）。
+- **构建环境已实测可用**：`cd vendor/openpencil/ui-plugins/openpencil && npm install && npm run build` 完整产出 `dist/server.mjs`（9.5MB）与编辑器资产（7.09MB JS + 154KB CSS + 字体/worker），与入库 dist 字节一致。
+- 详见 `vendor/openpencil/VENDOR.md`（上游 commit `0cc58d6`、版本 0.3.2、MIT）。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。
