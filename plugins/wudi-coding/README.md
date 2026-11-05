@@ -299,6 +299,13 @@ plugins/wudi-coding/
 - 顶栏「适应视图」按钮（同源 srcdoc 直接调用编辑器 zoomToFit）；渲染器未就绪时状态栏直接报「CanvasKit/wasm 可能被限制」。
 - 自检逻辑读编辑器全局接口而非 canvas 探测，状态判断更精确：已连接 · 已自动适应视图 / 画布渲染器未就绪 / 渲染异常：<错误>。
 
+## prelude 语法缺陷修复（v0.34.2）
+
+- **根因**：srcdoc prelude（资产 fetch 补丁）模板字符串里的 `\/` 被运行时吞成 `/`，正则 `/^https?:\/\/…/` 退化为非法的 `//` → **整段 prelude 语法错误、从未执行** → `canvaskit.wasm`/字体补丁未安装 → CanvasKit 起不来 → 「画布渲染器未就绪」。
+- 修复：模板串内改用 `\\/`（运行时输出 `\/`）；**构建期新增 OP_PRELUDE 语法门禁**（提取模板、运行时求值、node --check，杜绝回归）。
+- prelude 增加 `console.error` 采集（`__wudiLogs`），自检状态栏可直接显示编辑器内部报错。
+- 已用宿主同款 CSP（含/不含 wasm 放宽）探针复测：`wasm: ok`、8 个资产（含 canvaskit.wasm/字体）全部经资源管线取回。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。

@@ -110,6 +110,18 @@ try {
   const checkPanel = spawnSync(process.execPath, ["--check", moduleFile], { encoding: "utf-8" });
   if (checkPanel.status !== 0) throw new Error(`面板拼接产物语法检查失败：\n${checkPanel.stderr}`);
 
+  /* prelude 语法门禁：OP_PRELUDE 模板字符串运行时的输出必须是合法 JS（曾因 \/ 被吞成 / 导致整段不执行） */
+  const preludeSrc = panelJs.match(/const OP_PRELUDE = `([\s\S]*?)`;/);
+  if (preludeSrc) {
+    if (preludeSrc[1].includes("${")) throw new Error("OP_PRELUDE 含模板插值，构建脚本无法静态内联检查");
+    const preludeHtml = Function("return `" + preludeSrc[1] + "`")();
+    const preludeJs = preludeHtml.replace(/^<script>/, "").replace(/<\/script>$/, "");
+    const preludeFile = join(tmp, "prelude.js");
+    await writeFile(preludeFile, preludeJs, "utf-8");
+    const checkPrelude = spawnSync(process.execPath, ["--check", preludeFile], { encoding: "utf-8" });
+    if (checkPrelude.status !== 0) throw new Error(`OP_PRELUDE 语法检查失败（srcdoc 注入脚本）：\n${checkPrelude.stderr}`);
+  }
+
   const probeFile = join(tmp, "probe.mjs");
   await writeFile(probeFile, `${transformed}\nconsole.log(JSON.stringify({ hasApp: typeof WUDI_SDK.App === "function", sdkKeys: Object.keys(WUDI_SDK).length }));`, "utf-8");
   const probe = spawnSync(process.execPath, [probeFile], { encoding: "utf-8", timeout: 15000 });

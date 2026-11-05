@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.34.1",
+      "version": "0.34.2",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,14 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.34.2",
+          "date": "2026-11-05",
+          "changes": [
+            "修复「画布渲染器未就绪」根因：srcdoc prelude 模板串里 \\/ 被吞成 /，正则语法错误导致整段资产 fetch 补丁从未执行，canvaskit.wasm/字体加载失败；模板内改 \\\\/ 并新增构建期 OP_PRELUDE 语法门禁防回归",
+            "prelude 增加 console.error 采集，自检状态栏可直接显示编辑器内部报错；宿主同款 CSP 探针复测 wasm ok + 8 资产全取回"
+          ]
+        },
         {
           "version": "0.34.1",
           "date": "2026-11-05",
