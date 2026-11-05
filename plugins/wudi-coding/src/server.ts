@@ -1,17 +1,17 @@
 /**
  * wudi-coding —— AOPC 插件 MCP stdio server（最小实现：initialize / tools/list / tools/call / resources）。
- * 零依赖。工具逻辑在 lib/tools.mjs，项目状态在 lib/store.mjs（项目根 .wudi/），SSH 执行在 lib/ssh.mjs；
- * 工作台面板 panel.html 以 ui:// 资源分发（text/html;profile=mcp-app，MCP App 规范）。
+ * 零依赖。工具逻辑在 src/tools.ts，项目状态在 src/store.ts（项目根 .wudi/），SSH 执行在 src/ssh.ts；
+ * 工作台面板（构建产物 dist/ui/panel.html）以 ui:// 资源分发（text/html;profile=mcp-app，MCP App 规范）。
  */
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { TOOLS, callTool, bridgeConnectDomains, frameDomains } from "../lib/tools.mjs";
+import { TOOLS, callTool, bridgeConnectDomains, frameDomains } from "./tools";
 
 // 进程级兜底：任何未捕获错误都不能杀掉 server（宿主连接断开的根因）
 process.on("uncaughtException", (err) => console.error("[wudi] uncaught:", err.message));
 process.on("unhandledRejection", (err) => console.error("[wudi] unhandled:", String(err).slice(0, 300)));
-import { openpencilTools, openpencilCall, openpencilReadResource, openpencilResourcesList, openpencilBridgeEndpointCached } from "../lib/openpencil-runtime.mjs";
+import { openpencilTools, openpencilCall, openpencilReadResource, openpencilResourcesList, openpencilBridgeEndpointCached } from "./openpencil";
 import { readFileSync as _rf } from "node:fs";
 import { join as _join, dirname as _dn } from "node:path";
 import { fileURLToPath as _fURL } from "node:url";
@@ -21,10 +21,10 @@ let opToolsCache = (() => {
   catch { return []; }
 })(); // 静态工具定义（117 个），后台动态刷新
 
-const SERVER_INFO = { name: "wudi-coding", version: "0.33.7" };
+const SERVER_INFO = { name: "wudi-coding", version: "0.34.0" };
 const PANEL_URI = "ui://wudi-coding/panel.html";
 const PANEL_MIME = "text/html;profile=mcp-app";
-const panelPath = resolve(join(dirname(fileURLToPath(import.meta.url)), "..", "panel.html"));
+const panelPath = resolve(join(dirname(fileURLToPath(import.meta.url)), "ui", "panel.html"));
 
 function readPanel() {
   if (!existsSync(panelPath)) {

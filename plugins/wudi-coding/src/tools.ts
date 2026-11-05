@@ -1,17 +1,18 @@
+// @ts-nocheck —— 由 JS 迁移（tools/store/ssh/figma/notify/openpencil 为动态工具实现，类型逐步收紧；入口 src/server.ts 全量检查）
 /**
  * wudi-coding MCP 工具定义与分发（M2：项目档案 + 部署流水线 + 回滚 + 健康检查 + 受控远程执行）。
  * 约定（与 douyin-pilot 一致）：所有工具返回中文文本，直接面向 Agent 阅读；
  * 需要用户介入的步骤在返回里明确写出下一步；需要确认的高危操作以 confirm 参数把关。
- * 状态存储：项目根 .wudi/（见 lib/store.mjs）；SSH 执行：lib/ssh.mjs（系统命令，仅密钥认证）。
+ * 状态存储：项目根 .wudi/（见 src/store.ts）；SSH 执行：src/ssh.ts（系统命令，仅密钥认证）。
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import * as store from "./store.mjs";
-import { sshRun, localRun, uploadFile, sshPing, sshConfig } from "./ssh.mjs";
-import { figmaToken, parseFigmaRef, fetchFigmaStructure, fetchFigmaImages, extractStyles } from "./figma.mjs";
-import { getFigmaUrl, setFigmaUrl } from "./store.mjs";
-import { openpencilTools, openpencilCall, openpencilReadResource, openpencilResourcesList, openpencilBridgeEndpoint } from "./openpencil-runtime.mjs";
-import { resolveNotify, sendNotify } from "./notify.mjs";
+import * as store from "./store";
+import { sshRun, localRun, uploadFile, sshPing, sshConfig } from "./ssh";
+import { figmaToken, parseFigmaRef, fetchFigmaStructure, fetchFigmaImages, extractStyles } from "./figma";
+import { getFigmaUrl, setFigmaUrl } from "./store";
+import { openpencilTools, openpencilCall, openpencilReadResource, openpencilResourcesList, openpencilBridgeEndpoint } from "./openpencil";
+import { resolveNotify, sendNotify } from "./notify";
 
 const ok = (text, structuredContent) => ({
   content: [{ type: "text", text }],
@@ -669,7 +670,7 @@ function toolProjectInit(args) {
 
 /* ================= 状态汇总 ================= */
 
-async function toolStatus(args = {}) {
+async function toolStatus(args: any = {}) {
   const project = store.loadProject();
   const envName = args.env ? String(args.env) : undefined;
   let resolved = null;
@@ -732,7 +733,7 @@ function toolDocsRegister(args) {
   return ok(`文档已登记：[${doc.type}] ${doc.path}（.wudi/docs.json）`, { doc });
 }
 
-async function toolSshPing(args = {}) {
+async function toolSshPing(args: any = {}) {
   try {
     const project = store.loadProject();
     const overrides = project ? store.resolveEnv(project, args.env ? String(args.env) : undefined).ssh : {};
@@ -818,7 +819,7 @@ function planText(lines, confirmHint) {
   return [...lines, "", confirmHint].join("\n");
 }
 
-async function toolDeploy(args = {}) {
+async function toolDeploy(args: any = {}) {
   const project = store.loadProject();
   if (!project) return fail("项目未建档，先 wudi_project_init。");
   let envObj;
@@ -1009,7 +1010,7 @@ async function toolDeploy(args = {}) {
   }
 }
 
-function toolDeployHistory(args = {}) {
+function toolDeployHistory(args: any = {}) {
   const limit = Math.min(Math.max(Number(args.limit) || 10, 1), 50);
   const envFilter = args.env ? String(args.env) : null;
   const deploys = store
@@ -1044,7 +1045,7 @@ async function readCurrentRelease(envObj) {
   return m ? m[1] : "";
 }
 
-async function toolRollback(args = {}) {
+async function toolRollback(args: any = {}) {
   const project = store.loadProject();
   if (!project) return fail("项目未建档。");
   let envObj;
@@ -1175,7 +1176,7 @@ async function toolRollback(args = {}) {
 
 /* ================= 健康检查 / 远程执行 / 日志 / 清理 ================= */
 
-async function toolHealthCheck(args = {}) {
+async function toolHealthCheck(args: any = {}) {
   const project = store.loadProject();
   if (!project) return fail("项目未建档。");
   let envObj;
@@ -1201,7 +1202,7 @@ async function toolHealthCheck(args = {}) {
   return last.ok ? ok(lines.join("\n"), { health: results }) : fail(lines.join("\n"));
 }
 
-async function toolRemoteExec(args = {}) {
+async function toolRemoteExec(args: any = {}) {
   const project = store.loadProject();
   if (!project) return fail("项目未建档。");
   let envObj;
@@ -1235,7 +1236,7 @@ async function toolRemoteExec(args = {}) {
   );
 }
 
-async function toolDoctor(args = {}) {
+async function toolDoctor(args: any = {}) {
   const project = store.loadProject();
   const checks = [];
   const add = (name, status, detail) => checks.push({ name, status, detail: String(detail).slice(0, 400) });
@@ -1334,7 +1335,7 @@ function failReport(checks) {
   return fail(lines.join("\n"));
 }
 
-async function toolDeployLogs(args = {}) {
+async function toolDeployLogs(args: any = {}) {
   const project = store.loadProject();
   if (!project) return fail("项目未建档。");
   let envObj;
@@ -1366,7 +1367,7 @@ async function toolDeployLogs(args = {}) {
 
 /* ================= Figma（可选能力） ================= */
 
-async function toolFigmaFetch(args = {}) {
+async function toolFigmaFetch(args: any = {}) {
   if (!figmaToken()) {
     return ok(
       [
@@ -1533,7 +1534,7 @@ function toolCanvasGet() {
   return ok(`设计画布（${canvas.shapes.length} 个形状）：\n${j(canvas)}`, { canvas });
 }
 
-function toolCanvasEdit(args = {}) {
+function toolCanvasEdit(args: any = {}) {
   const ops = args.ops;
   if (!Array.isArray(ops) || !ops.length) return fail("缺少 ops 数组（add/update/delete/add_frame/update_frame/delete_frame 批量操作）。");
   const canvas = store.loadCanvas();
@@ -1597,7 +1598,7 @@ function toolCanvasEdit(args = {}) {
   return ok(`画布已更新（${canvas.frames.length} 画板 / ${canvas.shapes.length} 形状）：\n${summary.map((s) => `- ${s}`).join("\n")}`, { canvas });
 }
 
-function toolCanvasClear(args = {}) {
+function toolCanvasClear(args: any = {}) {
   if (args.confirm !== true) return fail("清空画布需 confirm=true。建议先 wudi_canvas_get 展示现状征得用户同意。");
   const canvas = store.loadCanvas();
   const n = canvas.shapes.length;
@@ -1607,7 +1608,7 @@ function toolCanvasClear(args = {}) {
   return ok(`画布已清空（移除 ${fn} 画板 / ${n} 形状）。`, { canvas: { frames: [], shapes: [] } });
 }
 
-function toolCanvasExport(args = {}) {
+function toolCanvasExport(args: any = {}) {
   const name = String(args.name ?? "").trim();
   if (!name) return fail("缺少 name（设计稿文件名，如 app-wireframe-v1）。");
   const canvas = store.loadCanvas();
@@ -1646,7 +1647,7 @@ function isoWeek(d = new Date()) {
   return { year: date.getUTCFullYear(), week };
 }
 
-async function toolDocsWeekly(args = {}) {
+async function toolDocsWeekly(args: any = {}) {
   const days = Math.min(Math.max(Number(args.days) || 7, 1), 90);
   const author = String(args.author ?? "").trim();
   let out;
@@ -1720,7 +1721,7 @@ async function toolDocsWeekly(args = {}) {
   );
 }
 
-async function toolFigmaImages(args = {}) {
+async function toolFigmaImages(args: any = {}) {
   if (!figmaToken()) {
     return ok(
       [
@@ -1774,7 +1775,7 @@ async function toolFigmaImages(args = {}) {
   }
 }
 
-function toolDesignTokensExport(args = {}) {
+function toolDesignTokensExport(args: any = {}) {
   const tokens = store.loadTokens();
   if (!tokens) return fail("还没有 design tokens。先 /wudi-ui 沉淀或 wudi_design_tokens_set 写入，再导出。");
   const format = ["css", "tailwind", "json"].includes(String(args.format)) ? String(args.format) : "css";
@@ -1834,7 +1835,7 @@ function toolDesignTokensExport(args = {}) {
   );
 }
 
-async function toolNotifyTest(args = {}) {
+async function toolNotifyTest(args: any = {}) {
   const project = store.loadProject();
   if (!project) return fail("项目未建档，先 wudi_project_init。");
   let envObj;
@@ -1872,7 +1873,7 @@ function flattenTokens(obj, prefix = "", out = {}) {
   return out;
 }
 
-function toolTokensCompare(args = {}) {
+function toolTokensCompare(args: any = {}) {
   let incoming = args.tokens;
   if (!incoming && args.json !== undefined) {
     try {
@@ -1934,7 +1935,7 @@ function toolDesignsList() {
   return ok(`设计稿（${designs.length}）：\n${lines}\n\n交互：open_design 打开协同编辑 → create_shape/render 改内容 → export_image 渲染 PNG 到 .wudi/design/renders/ 进面板图墙。`, { designs });
 }
 
-function toolFigmaLink(args = {}) {
+function toolFigmaLink(args: any = {}) {
   if (args.url === undefined) {
     const url = getFigmaUrl();
     return url
@@ -1949,7 +1950,7 @@ function toolFigmaLink(args = {}) {
   }
 }
 
-async function toolFigmaTokensDiff(args = {}) {
+async function toolFigmaTokensDiff(args: any = {}) {
   if (!figmaToken()) {
     return ok(
       "Figma 接入未启用：插件设置里还没有配置 figmaToken（同 wudi_figma_fetch 的启用步骤）。配置后本工具把画板样式与本地 design tokens 自动比对。"

@@ -1,3 +1,4 @@
+// @ts-nocheck —— 由 JS 迁移（tools/store/ssh/figma/notify/openpencil 为动态工具实现，类型逐步收紧；入口 src/server.ts 全量检查）
 /**
  * 部署通知（v0.6）：deploy/rollback 终态推送 webhook。支持飞书、企业微信、通用 JSON 三种格式。
  * 配置来自项目档案（顶层或环境级覆盖）：notifyWebhook（URL）+ notifyFormat（feishu/wecom/generic，缺省 generic）。

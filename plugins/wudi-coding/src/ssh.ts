@@ -1,3 +1,4 @@
+// @ts-nocheck —— 由 JS 迁移（tools/store/ssh/figma/notify/openpencil 为动态工具实现，类型逐步收紧；入口 src/server.ts 全量检查）
 /**
  * SSH/SCP/Rsync 封装：只依赖系统 ssh/scp/rsync 命令（macOS/Linux 自带），零 npm 依赖。
  * 安全约定：

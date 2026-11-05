@@ -1,3 +1,4 @@
+// @ts-nocheck —— 由 JS 迁移（tools/store/ssh/figma/notify/openpencil 为动态工具实现，类型逐步收紧；入口 src/server.ts 全量检查）
 /**
  * OpenPencil 子进程代理：spawn vendor server（stdio JSON-RPC），把它的 117 工具/资源
  * 暴露给 wudi server（进而暴露给 Agent 与工作台内嵌编辑器）。

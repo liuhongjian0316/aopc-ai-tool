@@ -1,3 +1,4 @@
+// @ts-nocheck —— 由 JS 迁移（tools/store/ssh/figma/notify/openpencil 为动态工具实现，类型逐步收紧；入口 src/server.ts 全量检查）
 /**
  * wudi-coding 项目状态存储：项目根 .wudi/ 目录下的 JSON 文件。
  * 与 douyin-pilot 的插件数据目录不同：无敌编程的档案/部署历史属于具体项目，

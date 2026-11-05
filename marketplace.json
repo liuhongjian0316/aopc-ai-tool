@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.33.7",
+      "version": "0.34.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,15 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.34.0",
+          "date": "2026-11-05",
+          "changes": [
+            "工程结构对齐官方 openpencil 插件：src/（TypeScript 服务端，entry src/server.ts）+ ui/（面板源码 panel.js/css/vendor SDK）+ scripts/build.mjs（esbuild）+ dist/ 构建产物（server.mjs / lib / ui/panel.html）",
+            "package.json 增加 build/start/typecheck/test 脚本与 esbuild/typescript 开发依赖、tsconfig.json；构建产物 dist/ 入库，marketplace 安装即用",
+            "宿主清单 mcpServers.wudi 指向 ${AOPC_PLUGIN_ROOT}/dist/server.mjs；smoke 对 dist/server.mjs 跑 103 项回归，版本五处一致"
+          ]
+        },
         {
           "version": "0.33.7",
           "date": "2026-11-05",

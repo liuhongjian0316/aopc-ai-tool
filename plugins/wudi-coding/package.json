@@ -1,6 +1,6 @@
 {
   "name": "wudi-coding",
-  "version": "0.33.7",
+  "version": "0.34.0",
   "private": true,
   "type": "module",
   "description": "无敌编程：程序员全生命周期 AOPC 插件（开发 / UI 设计 / 部署 / 文档）。工作台面板 = 项目选择 + 项目画布，设计页内嵌 OpenPencil 编辑器（官方源码 vendor，含构建环境）",
@@ -8,12 +8,23 @@
   "engines": {
     "node": ">=18"
   },
+  "imports": {
+    "#src/*": "./src/*",
+    "#ui/*": "./ui/*",
+    "#build/*": "./scripts/*"
+  },
   "scripts": {
-    "build": "node scripts/build-panel.mjs",
-    "start": "node mcp-server/server.mjs",
-    "smoke": "node scripts/smoke.mjs",
+    "build": "node scripts/build.mjs",
+    "start": "node dist/server.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node scripts/smoke.mjs",
+    "smoke": "node scripts/smoke.mjs",
     "vendor:install": "npm --prefix vendor/openpencil/ui-plugins/openpencil install",
     "vendor:build": "npm --prefix vendor/openpencil/ui-plugins/openpencil run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
   }
 }

@@ -22,7 +22,7 @@
 - **部署**：部署历史时间线（每阶段状态与耗时）、健康检查、回滚上一版（面板内先出预检计划，确认后经宿主审批执行）；
 - **文档**：`.wudi/docs.json` 登记的文档库。
 
-面板基于官方 `@modelcontextprotocol/ext-apps` SDK（vendor 内联，零构建：`node scripts/build-panel.mjs` 组装），主题跟随宿主亮暗色，视图状态经 widgetState 会话内保持。
+面板基于官方 `@modelcontextprotocol/ext-apps` SDK（vendor 内联，零构建：`node scripts/build.mjs` 组装），主题跟随宿主亮暗色，视图状态经 widgetState 会话内保持。
 
 ## Figma 接入（可选）
 
@@ -251,30 +251,47 @@ aopc plugin install wudi-coding
 - **构建环境已实测可用**：`cd vendor/openpencil/ui-plugins/openpencil && npm install && npm run build` 完整产出 `dist/server.mjs`（9.5MB）与编辑器资产（7.09MB JS + 154KB CSS + 字体/worker），与入库 dist 字节一致。
 - 详见 `vendor/openpencil/VENDOR.md`（上游 commit `0cc58d6`、版本 0.3.2、MIT）。
 
-## 项目结构（标准 npm 项目）
+## 项目结构（对齐官方 openpencil 工程形态）
 
 ```
 plugins/wudi-coding/
-├── package.json            # 标准 npm 项目：build / start / smoke / test / vendor:* 脚本
-├── mcp-server/server.mjs   # MCP stdio server 入口（initialize / tools / resources）
-├── lib/                    # 工具实现：store / tools / ssh / notify / figma / openpencil-runtime
-├── panel/                  # 工作台面板源码（panel.js + panel.css + ext-apps SDK vendor）
-├── panel.html              # 构建产物：npm run build 组装（源码拼接，勿手改）
+├── package.json            # 标准 npm 项目：build / start / typecheck / test 脚本
+├── tsconfig.json           # TS 工程（src/ 类型检查）
+├── scripts/
+│   ├── build.mjs           # esbuild：src/server.ts → dist/server.mjs；面板内联 → dist/ui/panel.html
+│   └── smoke.mjs           # 103 项回归（协议 + 工具面 + 内嵌编辑器 + 版本一致性）
+├── src/                    # MCP server 源码（TypeScript）
+│   ├── server.ts           # 入口：initialize / tools / resources（唯一全量类型检查文件）
+│   ├── tools.ts            # 工具定义与分发（含协同桥 HTTP / openpencil 代理）
+│   ├── store.ts            # .wudi/ 状态中心（档案/部署/文档/画布/注册表）
+│   ├── ssh.ts              # 系统 ssh/scp（仅密钥认证）
+│   ├── figma.ts            # Figma API（只读）
+│   ├── notify.ts           # 部署通知（飞书/企微/generic）
+│   └── openpencil.ts       # openpencil 子进程代理（117 工具/资源）
+├── ui/                     # 工作台面板源码
+│   ├── panel.js            # 面板逻辑（vanilla JS，MCP App SDK）
+│   ├── panel.css           # 设计系统（AOPC Zai Light/Dark）
+│   └── vendor/             # ext-apps 官方 SDK 自包含产物
+├── dist/                   # 构建产物（入库，marketplace 安装即用）
+│   ├── server.mjs          # esbuild 打包的单文件 server（158KB）
+│   ├── lib/                # 纯函数模块（notify/figma/store，供 smoke 单测）
+│   └── ui/panel.html       # 单文件面板（SDK + panel.js + panel.css 内联，530KB）
 ├── commands/ skills/ agents/
-├── scripts/                # build-panel.mjs（面板组装+自检）/ smoke.mjs（回归）
-├── vendor/openpencil/      # 官方 openPencil：源码 + 构建环境 + 预构建 dist（见 VENDOR.md）
-├── .aopc-plugin/plugin.json
+├── vendor/openpencil/      # 官方 openPencil：源码 + 构建环境 + 预构建 dist
+├── .aopc-plugin/plugin.json   # mcpServers.wudi → ${AOPC_PLUGIN_ROOT}/dist/server.mjs
 └── .zcode-plugin/plugin.json
 ```
 
 | 命令 | 作用 |
 | --- | --- |
-| `npm run build` | 组装 `panel.html`（SDK + panel.js + panel.css 单文件，含语法自检） |
-| `npm test` / `npm run smoke` | 103 项回归（协议层 + 工具面 + 内嵌编辑器链路 + 版本一致性） |
-| `npm start` | 本地启动 MCP server（stdio，调试用） |
-| `npm run vendor:install` / `npm run vendor:build` | 重建 vendor 内 openPencil（官方源码构建，产物落 vendor/openpencil/ui-plugins/openpencil/dist） |
+| `npm install` | 安装构建依赖（esbuild / typescript，仅开发期） |
+| `npm run build` | `src/` → `dist/server.mjs`；`ui/` → `dist/ui/panel.html`（含产物自检） |
+| `npm run typecheck` | tsc 检查 `src/`（迁移中的工具实现暂标 `@ts-nocheck`，入口全量检查） |
+| `npm test` / `npm run smoke` | 103 项回归（起真实 `dist/server.mjs`） |
+| `npm start` | 本地起 MCP server（stdio，调试用） |
+| `npm run vendor:install` / `npm run vendor:build` | 重建 vendor 内 openPencil（官方源码构建） |
 
-版本号由 smoke 守卫强制 **五处一致**：`.aopc-plugin/plugin.json`、`.zcode-plugin/plugin.json`、`package.json`、`panel/panel.js`、`mcp-server/server.mjs`。
+版本号由 smoke 守卫强制 **五处一致**：`.aopc-plugin/plugin.json`、`.zcode-plugin/plugin.json`、`package.json`、`ui/panel.js`、`src/server.ts`。
 
 ## 版本
 

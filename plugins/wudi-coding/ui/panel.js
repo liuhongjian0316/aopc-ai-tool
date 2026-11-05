@@ -1,4 +1,4 @@
-/* 无敌编程工作台面板逻辑 v0.31（vanilla JS，与 vendor SDK 拼接进同一 module，经 build-panel.mjs 组装）。
+/* 无敌编程工作台面板逻辑 v0.34（vanilla JS，与 vendor SDK 拼接进同一 module，经 scripts/build.mjs 组装进 dist/ui/panel.html）。
  * 通信走官方 @modelcontextprotocol/ext-apps SDK；遵循 obsidian-kb 踩坑结论：tools/list 全量声明、
  * 主题跟随 hostContext、widgetState 存视图状态、connect 前不发通知。
  * IA：打开即项目选择/创建页（项目网格 + 登记入口）→ 选中项目后才进入项目内容
@@ -36,7 +36,7 @@ const EmptyResultSchema = {
     <div class="c"><b>健康检查</b><div class="num">200</div><div class="muted">全部通过</div><span class="btn">体检报告</span></div>
   </div></body></html>`;
   const app = new App(
-    { name: "wudi-coding", version: "0.33.7" },
+    { name: "wudi-coding", version: "0.34.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -1599,7 +1599,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.33.7" },
+              hostInfo: { name: "wudi-workbench", version: "0.34.0" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",

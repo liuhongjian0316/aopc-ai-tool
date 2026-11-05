@@ -12,7 +12,7 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const serverPath = join(root, "mcp-server", "server.mjs");
+const serverPath = join(root, "dist", "server.mjs"); // 构建产物（npm run build）
 
 let passed = 0;
 let failed = 0;
@@ -32,7 +32,7 @@ function check(name, cond, detail = "") {
 
 async function unitTests() {
   console.log("◆ 纯函数单测");
-  const notify = await import(join(root, "lib", "notify.mjs").replace("file://", ""));
+  const notify = await import(join(root, "dist", "lib", "notify.js").replace("file://", ""));
   const info = { project: "p", env: "prod", type: "deploy", status: "ok", release: "r1", durationMs: 100, detail: "" };
   const feishu = notify.buildPayload("feishu", info);
   check("notify: 飞书包格式", feishu.msg_type === "text" && typeof feishu.content?.text === "string");
@@ -44,7 +44,7 @@ async function unitTests() {
   check("notify: 未配置返回 null", notify.resolveNotify({ notifyWebhook: "" }, { raw: null }) === null);
   check("notify: 环境覆盖顶层", notify.resolveNotify({ notifyWebhook: "http://top" }, { raw: { notifyWebhook: "http://env", notifyFormat: "feishu" } }).webhook === "http://env");
 
-  const figma = await import(join(root, "lib", "figma.mjs").replace("file://", ""));
+  const figma = await import(join(root, "dist", "lib", "figma.js").replace("file://", ""));
   /* 设计模板库完整性 */
   for (const t of ["dashboard.html", "landing.html", "mobile.html"]) {
     const tpl = await readFile(join(root, "skills", "wudi-ui", "templates", t), "utf-8").catch(() => "");
@@ -69,7 +69,7 @@ async function unitTests() {
   try { figma.parseFigmaRef("!!!"); } catch { threw = true; }
   check("figma: 坏引用报错", threw);
 
-  const store = await import(join(root, "lib", "store.mjs").replace("file://", ""));
+  const store = await import(join(root, "dist", "lib", "store.js").replace("file://", ""));
   const proj = { name: "t", build: "x", package: { type: "dir", path: "dist" }, deployRoot: "/top", healthCheck: { url: "http://top", expect: 200, checkFrom: "remote" }, envs: [{ name: "staging", deployRoot: "/staging", healthCheck: { url: "http://staging" } }] };
   const dflt = store.resolveEnv(proj);
   check("store: 默认环境回落顶层", dflt.name === "staging" && dflt.deployRoot === "/staging" && dflt.healthCheck.url === "http://staging");
@@ -83,8 +83,8 @@ async function unitTests() {
     const pluginJson = JSON.parse(await readFile(join(root, ".aopc-plugin", "plugin.json"), "utf8"));
     const zcodeJson = JSON.parse(await readFile(join(root, ".zcode-plugin", "plugin.json"), "utf8"));
     const pkgJson = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
-    const panelSrc = await readFile(join(root, "panel", "panel.js"), "utf8");
-    const serverSrc = await readFile(join(root, "mcp-server", "server.mjs"), "utf8");
+    const panelSrc = await readFile(join(root, "ui", "panel.js"), "utf8");
+    const serverSrc = await readFile(join(root, "src", "server.ts"), "utf8");
     const v = pluginJson.version;
     check(`版本五处一致（${v}）`,
       zcodeJson.version === v && pkgJson.version === v &&

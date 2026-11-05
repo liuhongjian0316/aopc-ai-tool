@@ -1,71 +1,56 @@
-/**
- * Figma REST 只读接入（M4，可选能力）：拉取文件/节点，提炼布局、颜色、字号、文本为 Agent 可用的结构。
- * 需要 WUDI_FIGMA_TOKEN（插件 userConfig figmaToken → env 注入）；未配置时由工具层返回启用指引。
- * 零依赖，Node 24 全局 fetch。只读 API，不做任何写操作。
- */
-
-const API = "https://api.figma.com/v1";
-
-export function figmaToken() {
+// src/figma.ts
+var API = "https://api.figma.com/v1";
+function figmaToken() {
   return (process.env.WUDI_FIGMA_TOKEN || "").trim();
 }
-
-/** 从 Figma URL 或裸 key 提取 { fileKey, nodeId }。支持 /file/:key、/design/:key/、node-id=123-456 形式。 */
-export function parseFigmaRef(input) {
+function parseFigmaRef(input) {
   const s = String(input ?? "").trim();
-  if (!s) throw new Error("缺少 fileKey 或 Figma 链接。");
+  if (!s) throw new Error("\u7F3A\u5C11 fileKey \u6216 Figma \u94FE\u63A5\u3002");
   const urlMatch = s.match(/figma\.com\/(?:file|design)\/([A-Za-z0-9]+)/);
   if (urlMatch) {
-    // node-id 单独匹配（避免被查询串的其他参数/贪婪匹配吞掉）
     const nodeMatch = s.match(/node-id=([\d-]+)/);
     return {
       fileKey: urlMatch[1],
-      nodeId: nodeMatch ? nodeMatch[1].replace("-", ":") : "",
+      nodeId: nodeMatch ? nodeMatch[1].replace("-", ":") : ""
     };
   }
-  // 裸 fileKey（也容忍 fileKey:nodeId 空格分隔）
   const bare = s.match(/^([A-Za-z0-9]+)(?:[\s:]+([\d]+:[\d]+))?$/);
   if (bare) return { fileKey: bare[1], nodeId: bare[2] ?? "" };
-  throw new Error(`无法识别的 Figma 引用：${s.slice(0, 100)}（支持 https://www.figma.com/(file|design)/<key>?node-id=<id> 链接或裸 fileKey）`);
+  throw new Error(`\u65E0\u6CD5\u8BC6\u522B\u7684 Figma \u5F15\u7528\uFF1A${s.slice(0, 100)}\uFF08\u652F\u6301 https://www.figma.com/(file|design)/<key>?node-id=<id> \u94FE\u63A5\u6216\u88F8 fileKey\uFF09`);
 }
-
 async function figmaGet(path) {
   const token = figmaToken();
   if (!token) throw new Error("FIGMA_TOKEN_MISSING");
   const res = await fetch(`${API}${path}`, {
     headers: { "X-Figma-Token": token },
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(3e4)
   });
-  if (res.status === 403) throw new Error("Figma 拒绝访问（403）：token 无效或无该文件权限。");
-  if (res.status === 404) throw new Error("Figma 文件/节点不存在（404）：检查 fileKey 与 nodeId。");
-  if (res.status === 429) throw new Error("Figma 限流（429）：稍后再试。");
-  if (!res.ok) throw new Error(`Figma API ${res.status}：${(await res.text()).slice(0, 300)}`);
+  if (res.status === 403) throw new Error("Figma \u62D2\u7EDD\u8BBF\u95EE\uFF08403\uFF09\uFF1Atoken \u65E0\u6548\u6216\u65E0\u8BE5\u6587\u4EF6\u6743\u9650\u3002");
+  if (res.status === 404) throw new Error("Figma \u6587\u4EF6/\u8282\u70B9\u4E0D\u5B58\u5728\uFF08404\uFF09\uFF1A\u68C0\u67E5 fileKey \u4E0E nodeId\u3002");
+  if (res.status === 429) throw new Error("Figma \u9650\u6D41\uFF08429\uFF09\uFF1A\u7A0D\u540E\u518D\u8BD5\u3002");
+  if (!res.ok) throw new Error(`Figma API ${res.status}\uFF1A${(await res.text()).slice(0, 300)}`);
   return res.json();
 }
-
-/** 把节点渲染为 PNG：POST /v1/images/:key，返回 {nodeId: url|null} 映射（URL 30 天有效）。 */
-export async function fetchFigmaImages({ fileKey, nodeIds, scale = 2 }) {
+async function fetchFigmaImages({ fileKey, nodeIds, scale = 2 }) {
   const token = figmaToken();
   if (!token) throw new Error("FIGMA_TOKEN_MISSING");
   const res = await fetch(`${API}/images/${encodeURIComponent(fileKey)}`, {
     method: "POST",
     headers: { "X-Figma-Token": token, "Content-Type": "application/json" },
     body: JSON.stringify({ ids: nodeIds.join(","), format: "png", scale }),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(3e4)
   });
-  if (res.status === 403) throw new Error("Figma 拒绝访问（403）：token 无效或无该文件权限。");
-  if (res.status === 404) throw new Error("Figma 文件不存在（404）：检查 fileKey。");
-  if (res.status === 429) throw new Error("Figma 限流（429）：稍后再试。");
-  if (!res.ok) throw new Error(`Figma API ${res.status}：${(await res.text()).slice(0, 300)}`);
+  if (res.status === 403) throw new Error("Figma \u62D2\u7EDD\u8BBF\u95EE\uFF08403\uFF09\uFF1Atoken \u65E0\u6548\u6216\u65E0\u8BE5\u6587\u4EF6\u6743\u9650\u3002");
+  if (res.status === 404) throw new Error("Figma \u6587\u4EF6\u4E0D\u5B58\u5728\uFF08404\uFF09\uFF1A\u68C0\u67E5 fileKey\u3002");
+  if (res.status === 429) throw new Error("Figma \u9650\u6D41\uFF08429\uFF09\uFF1A\u7A0D\u540E\u518D\u8BD5\u3002");
+  if (!res.ok) throw new Error(`Figma API ${res.status}\uFF1A${(await res.text()).slice(0, 300)}`);
   const data = await res.json();
-  if (data.err) throw new Error(`Figma 渲染失败：${data.err}`);
+  if (data.err) throw new Error(`Figma \u6E32\u67D3\u5931\u8D25\uFF1A${data.err}`);
   return data.images ?? {};
 }
-
-/** 从提炼树/原始树递归收集样式：颜色 hex 集合与字号集合（tokens 比对用）。 */
-export function extractStyles(tree, { maxNodes = 2000 } = {}) {
-  const colors = new Map(); // hex → 出现次数
-  const fontSizes = new Map();
+function extractStyles(tree, { maxNodes = 2e3 } = {}) {
+  const colors = /* @__PURE__ */ new Map();
+  const fontSizes = /* @__PURE__ */ new Map();
   let visited = 0;
   const walk = (node) => {
     if (!node || visited >= maxNodes) return;
@@ -90,13 +75,9 @@ export function extractStyles(tree, { maxNodes = 2000 } = {}) {
   return {
     colors: [...colors.entries()].sort((a, b) => b[1] - a[1]).map(([hex, count]) => ({ hex, count })),
     fontSizes: [...fontSizes.entries()].sort((a, b) => Number(a[0]) - Number(b[0])).map(([size, count]) => ({ size: Number(size), count })),
-    visited,
+    visited
   };
 }
-
-/* ---- 提炼：把 Figma 节点树压缩为转码友好的摘要 ---- */
-
-/** RGBA(0-1) → #rrggbb(+aa)。 */
 function toHex(c) {
   if (!c) return null;
   const r = Math.round((c.r ?? 0) * 255);
@@ -106,10 +87,6 @@ function toHex(c) {
   const hex = `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
   return a < 1 ? `${hex}${Math.round(a * 255).toString(16).padStart(2, "0")}` : hex;
 }
-
-const LAYOUT_TYPES = new Set(["FRAME", "GROUP", "COMPONENT", "INSTANCE", "SECTION"]);
-
-/** 递归提炼节点树（限深限宽）。 */
 function distill(node, depth, maxDepth, budget) {
   if (!node || budget.count <= 0 || depth > maxDepth) return null;
   budget.count--;
@@ -117,8 +94,8 @@ function distill(node, depth, maxDepth, budget) {
   const out = {
     name: node.name,
     type: node.type,
-    w: box.width != null ? Math.round(box.width) : undefined,
-    h: box.height != null ? Math.round(box.height) : undefined,
+    w: box.width != null ? Math.round(box.width) : void 0,
+    h: box.height != null ? Math.round(box.height) : void 0
   };
   if (node.fills?.length) {
     const paints = node.fills.filter((f) => f.visible !== false && f.type === "SOLID").slice(0, 3);
@@ -143,31 +120,26 @@ function distill(node, depth, maxDepth, budget) {
   }
   const kids = node.children ?? [];
   if (kids.length && depth < maxDepth) {
-    const children = kids
-      .slice(0, 40)
-      .map((k) => distill(k, depth + 1, maxDepth, budget))
-      .filter(Boolean);
+    const children = kids.slice(0, 40).map((k) => distill(k, depth + 1, maxDepth, budget)).filter(Boolean);
     if (children.length) out.children = children;
   } else if (kids.length) {
     out.childrenTruncated = kids.length;
   }
   return out;
 }
-
-/** 拉取文件或指定节点并提炼。maxDepth 控制树深，budget 控制总节点数（防超大文件撑爆回复）。 */
-export async function fetchFigmaStructure({ fileKey, nodeId, maxDepth = 6, budgetMax = 400 }) {
+async function fetchFigmaStructure({ fileKey, nodeId, maxDepth = 6, budgetMax = 400 }) {
   const budget = { count: budgetMax };
   if (nodeId) {
-    const data = await figmaGet(`/files/${encodeURIComponent(fileKey)}/nodes?ids=${encodeURIComponent(nodeId)}&depth=${Math.min(maxDepth + 1, 8)}`);
-    const nodes = data.nodes ?? {};
+    const data2 = await figmaGet(`/files/${encodeURIComponent(fileKey)}/nodes?ids=${encodeURIComponent(nodeId)}&depth=${Math.min(maxDepth + 1, 8)}`);
+    const nodes = data2.nodes ?? {};
     const entry = Object.values(nodes)[0];
-    if (!entry) throw new Error(`未找到节点 ${nodeId}。`);
+    if (!entry) throw new Error(`\u672A\u627E\u5230\u8282\u70B9 ${nodeId}\u3002`);
     return {
       fileKey,
       nodeId,
-      name: data.name,
-      lastModified: data.lastModified,
-      tree: distill(entry.document, 0, maxDepth, budget),
+      name: data2.name,
+      lastModified: data2.lastModified,
+      tree: distill(entry.document, 0, maxDepth, budget)
     };
   }
   const data = await figmaGet(`/files/${encodeURIComponent(fileKey)}?depth=${Math.min(maxDepth + 1, 8)}`);
@@ -180,7 +152,14 @@ export async function fetchFigmaStructure({ fileKey, nodeId, maxDepth = 6, budge
     pages: pages.map((p) => ({
       name: p.name,
       id: p.id,
-      tree: distill(p, 0, maxDepth, budget),
-    })),
+      tree: distill(p, 0, maxDepth, budget)
+    }))
   };
 }
+export {
+  extractStyles,
+  fetchFigmaImages,
+  fetchFigmaStructure,
+  figmaToken,
+  parseFigmaRef
+};
