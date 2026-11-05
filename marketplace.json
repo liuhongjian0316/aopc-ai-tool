@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.33.4",
+      "version": "0.33.5",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,14 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.33.5",
+          "date": "2026-11-05",
+          "changes": [
+            "画布最终打通：srcdoc 加载 + prelude 资产补丁 —— 宿主内 http src iframe 会被拦，srcdoc 不透明源又让编辑器同源资产拦截器失效；现在在 loader 前接管 fetch，把 canvaskit.wasm/字体经 MCP 资源管线供给 CanvasKit",
+            "探针实测：握手通过、canvaskit.wasm 与字体读取成功、canvas 拿到 WebGL 上下文（819×860）、零运行时错误"
+          ]
+        },
         {
           "version": "0.33.4",
           "date": "2026-11-05",

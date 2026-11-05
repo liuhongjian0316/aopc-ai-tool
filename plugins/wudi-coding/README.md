@@ -239,6 +239,12 @@ aopc plugin install wudi-coding
 - **修复**：改回经协同桥 **`/openpencil/frame` 以真实 http origin** 加载（0.33.1 的白屏其实是 `protocolVersion` 握手缺陷，已修；frame-src 放行由资源 `_meta` 声明且实测生效）。
 - 真实 origin 探针实测：`canvaskit.wasm`/字体全部经资源管线读取、canvas 拿到 WebGL 上下文（819×860）、零错误；srcdoc 模式同指标为 300×150 + 无上下文 + Failed to fetch。
 
+## srcdoc + 资产 fetch 补丁：画布最终通（v0.33.5）
+
+- **确证**：宿主里 http src 的 iframe 会被拦（无握手、白屏）；srcdoc 能握手但 uration 为不透明源，编辑器 bundle 的同源资产拦截器失效（`/canvaskit.wasm`/字体 `Failed to fetch`，CanvasKit 起不来）。
+- **最终形态**：srcdoc 加载（不受 frame-src 限制）+ **prelude 补丁**——在 loader 之前接管 `fetch`，把 `canvaskit.wasm`、`*.ttf` 经 postMessage 转回 MCP 资源管线；错误采集 `__wudiErrs` 一并注入。
+- 探针实测（srcdoc + prelude）：握手 ✔、`canvaskit.wasm`/字体读取 ✔、canvas WebGL 上下文 ✔（819×860）、零错误。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。

@@ -483,7 +483,7 @@ const EmptyResultSchema = {
     <div class="c"><b>健康检查</b><div class="num">200</div><div class="muted">全部通过</div><span class="btn">体检报告</span></div>
   </div></body></html>`;
   const app = new App(
-    { name: "wudi-coding", version: "0.33.4" },
+    { name: "wudi-coding", version: "0.33.5" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -1942,6 +1942,48 @@ const EmptyResultSchema = {
   let opReady = false;        // 编辑器握手（ui/initialize）是否完成
   let opReadyTimer = null;    // 加载看门狗：超时给出白屏原因提示
 
+  /* srcdoc prelude：错误采集 + 资产 fetch 补丁。
+   * srcdoc 为不透明源，编辑器 bundle 用 location.origin 做同源判断会跳过资产拦截，
+   * /canvaskit.wasm 与字体将回落原生 fetch 并失败（CanvasKit 起不来）。这里在 loader
+   * 之前接管 fetch，经 postMessage 走面板宿主 shim → MCP 资源管线取回资产。 */
+  const OP_PRELUDE = `<script>
+window.__wudiErrs=[];
+addEventListener("error",function(e){window.__wudiErrs.push(String(e.message||e.error||"error"))});
+addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(e.reason||"rejection"))});
+(function(){
+  var seq=0,pending=new Map();
+  addEventListener("message",function(ev){
+    var m=ev.data;
+    if(!m||m.jsonrpc!=="2.0"||!m.id||!pending.has(m.id))return;
+    var p=pending.get(m.id);pending.delete(m.id);
+    if(m.error){p.reject(new Error(m.error.message||"resource error"))}else{p.resolve(m.result)}
+  });
+  function readAsset(name){
+    return new Promise(function(resolve,reject){
+      var id="wudi-asset-"+(++seq);
+      pending.set(id,{resolve:resolve,reject:reject});
+      window.parent.postMessage({jsonrpc:"2.0",id:id,method:"resources/read",params:{uri:"ui://openpencil/assets/"+name}},"*");
+      setTimeout(function(){if(pending.has(id)){pending.delete(id);reject(new Error("asset timeout: "+name))}},15000);
+    });
+  }
+  function b64(b){var s=atob(b),u=new Uint8Array(s.length);for(var i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u}
+  var origFetch=window.fetch.bind(window);
+  window.fetch=async function(input,init){
+    var raw=(typeof input==="string")?input:(input&&input.url)||"";
+    var m=raw.replace(/^https?:\/\/[^/]+/,"").replace(/^\/+/,"");
+    var hit=m.match(/^(canvaskit\.wasm|[A-Za-z0-9-]+\.ttf)$/);
+    if(!hit)return origFetch(input,init);
+    var name=hit[1];
+    var res=await readAsset(name);
+    var c=res&&res.contents&&res.contents[0],bytes;
+    if(c&&typeof c.blob==="string"){bytes=b64(c.blob)}
+    else if(c&&typeof c.text==="string"){bytes=new TextEncoder().encode(c.text)}
+    else{throw new Error("asset empty: "+name)}
+    return new Response(bytes,{headers:{"content-type":name.slice(-5)===".wasm"?"application/wasm":"font/ttf"}});
+  };
+})();
+<\/script>`;
+
   function opSetStatus(text, kind = "") {
     const el = document.getElementById("op-status");
     if (!el) return;
@@ -2004,7 +2046,7 @@ const EmptyResultSchema = {
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.33.4" },
+              hostInfo: { name: "wudi-workbench", version: "0.33.5" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -2043,18 +2085,17 @@ const EmptyResultSchema = {
       return;
     }
     setBusy(true);
-    /* 编辑器以真实 origin 加载（协同桥 /openpencil/frame）：
-     * 编辑器内部资产拦截器用 location.origin 做同源判断（/canvaskit.wasm、字体），
-     * srcdoc 的不透明源会让这些 fetch 变成 Failed to fetch（画布渲染器起不来）。
-     * 宿主侧 frame-src 放行已由面板资源 _meta.ui.csp.frameDomains 声明。 */
-    let origin = "";
+    /* srcdoc 加载（宿主契约允许子帧 srcdoc，不受 frame-src 限制 —— 实测 http src 会被拦）。
+     * 但 srcdoc 是不透明源，编辑器 bundle 的资产拦截器（location.origin 同源判断）会失效，
+     * 导致 /canvaskit.wasm、字体 fetch 报 Failed to fetch → CanvasKit 起不来。
+     * 解法：在 loader 之前注入 prelude —— 接管 fetch，把这两个资产转回 MCP 资源管线。 */
+    let loaderHtml = "";
     try {
-      const res = await callTool("wudi_canvas_bridge", {});
-      const url = struct(res)?.url ?? "";
-      origin = url ? new URL(url).origin : "";
-      if (!origin) throw new Error("桥端点为空");
+      const res = await app.readServerResource({ uri: "ui://openpencil/panel.html" });
+      loaderHtml = res?.contents?.[0]?.text ?? "";
+      if (!loaderHtml) throw new Error("loader 内容为空");
     } catch (err) {
-      state.notice = { kind: "err", text: `协同桥未就绪，无法内嵌编辑器：${String(err.message ?? err).slice(0, 200)}` };
+      state.notice = { kind: "err", text: `编辑器资源不可用：${String(err.message ?? err).slice(0, 300)}` };
       setBusy(false);
       return;
     }
@@ -2075,10 +2116,10 @@ const EmptyResultSchema = {
     const frame = document.createElement("iframe");
     frame.id = "op-frame";
     frame.className = "op-frame";
-    frame.title = `OpenPencil · ${origin}/openpencil/frame`;
+    frame.title = `OpenPencil · ${path || "workspace designs"}`;
     frame.setAttribute("allow", "clipboard-write");
-    frame.src = `${origin}/openpencil/frame`;
     holder.appendChild(frame);
+    frame.srcdoc = OP_PRELUDE + loaderHtml;
     layer.classList.add("on");
     bindOpShim(frame);
     /* 看门狗：编辑器 15s 内不握手，多半是 CSP（connect-src/wasm 放宽）或桥不可达，给出可操作提示 */
