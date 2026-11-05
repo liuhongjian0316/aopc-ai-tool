@@ -148,9 +148,9 @@ aopc plugin install wudi-coding
 - **线框 → .fig**：设计页「把无敌线框转入 .fig」——唤起 Agent 双工具集转换（`wudi_canvas_get` 读线框 → OpenPencil `new_design` + `create_shape` 按坐标重建 → `export_image` 渲染进图墙）。
 - **版本守卫**：smoke 断言 plugin.json / panel.js / server.mjs 三处版本一致。
 
-## 打开即工作台（v0.29）
+## 打开即工作台（v0.29，已被 v0.31 调整）
 
-- 面板默认直接进入当前项目的 总览（对齐 OpenPencil 模式：面板即编辑器，无落地选择页）；多项目 hub 在「项目」页。
+- ~~面板默认直接进入当前项目的 总览~~ → v0.31 起打开先见项目选择页，选中项目后才进入内容（见下）。
 
 ## 工作台操作中枢（v0.22）
 
@@ -195,7 +195,13 @@ aopc plugin install wudi-coding
 
 - **实时协同桥**：wudi server 内置 SSE 端点（127.0.0.1 随机端口），画布变更实时广播；面板 EventSource 订阅 —— Agent 的 `wudi_canvas_edit`/`clear` 操作**实时出现在用户眼前的画布上**（拖拽中自动避让），OpenPencil 同款活协同。
 
-## OpenPencil 按钮直连修复（v0.30.1）\n\n- 「新建 Figma 设计稿」「打开」「渲染到图墙」从 sendMessage（宿主 message 能力，连接不稳）改为 callTool 直连（经 wudi server 代理到 OpenPencil 子进程）\n\n## 版本
+## OpenPencil 按钮直连修复（v0.30.1）\n\n- 「新建 Figma 设计稿」「打开」「渲染到图墙」从 sendMessage（宿主 message 能力，连接不稳）改为 callTool 直连（经 wudi server 代理到 OpenPencil 子进程）\n\n## 项目选择优先（v0.31）
+
+- **打开即选项目**：面板打开先见「项目选择/创建页」——项目卡片网格（技术栈/环境 chip、健康状态点、文档与设计产物统计、当前工作区标记）+「＋ 登记项目」虚线卡；选中项目（点卡片）后才进入项目内容（总览/部署/设计/画布/文档），导航页签也只在选中后出现。
+- **创建入口前置**：没有项目时登记表单直接展开；有项目时收进网格尾部的「＋ 登记项目」卡，点开即填路径登记。当前工作区项目在打开面板时自动登记并置顶标记，一键进入。
+- 下钻只读总览不变；内容导航里的「项目」页签随时回到选择页。
+
+## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。
 

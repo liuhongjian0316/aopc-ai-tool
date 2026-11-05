@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>无敌编程工作台</title>
-<style>/* 无敌编程工作台 v0.11 — 设计系统
+<style>/* 无敌编程工作台 v0.31 — 设计系统
  * 原则（自吃狗粮，对齐 wudi-ui 技能）：8pt 间距节奏 / 层级 ≤ 3 / WCAG AA 对比度 / 统一圆角与阴影 / 亮暗双主题。
  * 结构：tokens(:root) → 布局 → 组件（masthead/卡片/徽章/chip/按钮/表单/列表/空态/对话框）。
  */
@@ -143,6 +143,16 @@ body {
 }
 .pcard:hover .remove { opacity: 1; }
 .pcard .remove:hover { background: var(--err-bg); color: var(--err); }
+.pcard .cta { margin-top: 9px; font-size: 11.5px; font-weight: 700; color: var(--accent); }
+.pcard:hover .cta { text-decoration: underline; }
+.pcard.add {
+  border-style: dashed; background: transparent; box-shadow: none; color: var(--text-dim);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; min-height: 132px;
+}
+.pcard.add .pname { padding-right: 0; font-size: 13.5px; color: inherit; }
+.pcard.add .ppath { margin-bottom: 0; }
+.pcard.add:hover { color: var(--accent); }
 
 /* ---------- 徽章与 chip ---------- */
 .badge { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 1.5px 8px; border-radius: 20px; letter-spacing: .01em; }
@@ -410,10 +420,11 @@ DOWNLOAD_FILE_METHOD: I9,
 App: OO
 };
 /* ══════ wudi panel (panel/panel.js) ══════ */
-/* 无敌编程工作台面板逻辑 v0.11（vanilla JS，与 vendor SDK 拼接进同一 module，经 build-panel.mjs 组装）。
+/* 无敌编程工作台面板逻辑 v0.31（vanilla JS，与 vendor SDK 拼接进同一 module，经 build-panel.mjs 组装）。
  * 通信走官方 @modelcontextprotocol/ext-apps SDK；遵循 obsidian-kb 踩坑结论：tools/list 全量声明、
  * 主题跟随 hostContext、widgetState 存视图状态、connect 前不发通知。
- * IA：项目（landing 网格）→ 总览 / 部署 / 设计 / 文档（当前项目操作页）+ 非当前项目只读下钻。
+ * IA：打开即项目选择/创建页（项目网格 + 登记入口）→ 选中项目后才进入项目内容
+ * （总览 / 部署 / 设计 / 画布 / 文档，当前项目操作页）+ 非当前项目只读下钻。
  * 本文件不得使用 import/export（拼接产物是单 module），SDK 解构来自 WUDI_SDK。
  */
 const { App } = WUDI_SDK;
@@ -447,7 +458,7 @@ const EmptyResultSchema = {
     <div class="c"><b>健康检查</b><div class="num">200</div><div class="muted">全部通过</div><span class="btn">体检报告</span></div>
   </div></body></html>`;
   const app = new App(
-    { name: "wudi-coding", version: "0.30.3" },
+    { name: "wudi-coding", version: "0.31.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -455,9 +466,10 @@ const EmptyResultSchema = {
   const mockCache = new Map();
 
   const state = {
-    view: "detail",    // 打开即工作台（OpenPencil 同款：无落地选择页）；项目 hub 在「项目」页
+    view: "projects",  // 打开先见项目选择/创建页；点项目卡片选中后才进入项目内容（v0.31）
     drill: null,       // 非当前项目的只读下钻（registry summary）
     tab: "overview",
+    createOpen: false, // landing 登记项目表单展开态（无项目时强制展开）
     envs: [],
     env: "",
     data: null,        // wudi_status structuredContent
@@ -581,6 +593,8 @@ const EmptyResultSchema = {
   }
 
   function renderInner() {
+    const inProject = state.view === "detail" && !state.drill;
+    /* 项目内容导航只在选中项目后出现；landing / 下钻页不显示内容页签 */
     const navTabs = [
       ["projects", "项目", ICONS.projects, (state.projects?.projects ?? []).length || ""],
       ["overview", "总览", ICONS.overview, ""],
@@ -589,9 +603,9 @@ const EmptyResultSchema = {
       ["canvas", "画布", '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M11.2 1.6a2 2 0 0 1 2.83 0l.37.37a2 2 0 0 1 0 2.83L6.4 12.8l-4.03 1.34a.5.5 0 0 1-.63-.63L3.07 9.6l8.13-8Zm-6.9 9.06-.7 2.1 2.1-.7-1.4-1.4Z"/></svg>', ""],
       ["docs", "文档", ICONS.docs, (state.data?.docs ?? []).length || ""],
     ];
-    const nav = navTabs.map(([id, label, icon, count]) =>
+    const nav = inProject ? navTabs.map(([id, label, icon, count]) =>
       `<button data-tab="${id}" class="${(state.view === "projects" ? "projects" : state.tab) === id ? "active" : ""}">${icon}${label}${count !== "" ? `<span class="count">${esc(String(count))}</span>` : ""}</button>`
-    ).join("");
+    ).join("") : "";
 
     let body;
     if (state.view === "projects" && !state.drill) body = renderProjects();
@@ -602,18 +616,21 @@ const EmptyResultSchema = {
       : state.tab === "canvas" ? renderCanvas()
       : renderDocs();
 
+    const sub = state.drill ? `${esc(state.drill.name)} · 只读总览`
+      : inProject ? esc(state.data?.project?.name || "当前项目")
+      : "选择一个项目进入，或登记新项目";
     $root().innerHTML = `
       <div class="container">
         <div class="masthead">
           <div class="brand">
             <div class="logo">无敌</div>
-            <div><h1>无敌编程工作台</h1><div class="sub">${state.drill ? esc(state.drill.name) : "项目管理 · 设计 · 部署 · 文档"}</div></div>
+            <div><h1>无敌编程工作台</h1><div class="sub">${sub}</div></div>
           </div>
           <span class="spacer"></span>
           <button class="btn" id="btn-refresh" ${state.busy ? "disabled" : ""}>${state.busy ? '<span class="spin"></span>' : ""}刷新</button>
         </div>
         ${state.drill ? `<div style="margin-bottom:10px"><button class="backlink" id="btn-back">← 返回项目列表</button></div>` : ""}
-        <div class="nav">${nav}</div>
+        ${inProject ? `<div class="nav">${nav}</div>` : ""}
         ${state.notice ? `<div class="notice ${state.notice.kind}"><span class="badge ${state.notice.kind}">${state.notice.kind === "ok" ? "完成" : "失败"}</span><span class="mono">${esc(state.notice.text)}</span></div>` : ""}
         ${body}
       </div>`;
@@ -668,7 +685,12 @@ const EmptyResultSchema = {
 
   function renderProjects() {
     const projects = state.projects?.projects;
-    const cards = (projects ?? []).map((p) => `
+    /* 首次加载：注册表还没回来时显示加载态，避免闪「还没有项目」空态 */
+    if (projects === undefined && !DEMO) {
+      return `<div class="empty"><span class="spin"></span>正在加载项目列表…</div>`;
+    }
+    const list = projects ?? [];
+    const cards = list.map((p) => `
       <div class="pcard ${p.isCurrent ? "current" : ""}" data-pid="${esc(p.id)}" data-current="${p.isCurrent ? 1 : 0}">
         <button class="remove" data-remove="${esc(p.id)}" title="从注册表移除">×</button>
         <div class="pname">${esc(p.name)}</div>
@@ -679,20 +701,28 @@ const EmptyResultSchema = {
           ${(p.envNames ?? []).slice(0, 3).map((e) => `<span class="chip">${esc(e)}</span>`).join("")}
         </div>
         <div class="foot">${healthDot(p)}<span style="flex:1"></span>文档 ${p.docsCount} · 设计 ${p.designCount}</div>
+        ${p.isCurrent ? '<div class="cta">进入项目内容 →</div>' : ""}
       </div>`).join("");
-    const grid = projects?.length
-      ? `<div class="grid">${cards}</div>`
-      : `<div class="empty"><div class="icon"></div>还没有登记项目。下面登记第一个，或在各项目工作区里跑 <span class="mono">/wudi</span>。</div>`;
-    return `
-      ${grid}
+    /* 「＋ 登记项目」虚线卡：点开展开登记表单（也是页面上唯一的创建入口） */
+    const addCard = `
+      <div class="pcard add" data-add="1" title="登记一个项目目录到工作台">
+        <div class="pname">＋ 登记项目</div>
+        <div class="ppath">把项目根目录加入工作台</div>
+      </div>`;
+    const showForm = state.createOpen || !list.length;
+    const form = showForm ? `
       <div class="card" style="margin-top:12px">
-        <h3>登记项目<span class="line"></span></h3>
+        <h3>登记项目<span class="line"></span>${list.length ? '<button class="btn" id="btn-pcollapse">收起</button>' : ""}</h3>
         <div class="kv">
           <span class="k">项目路径</span><span class="v"><input id="p-path" placeholder="/Users/me/code/my-app（绝对路径）"></span>
           <span class="k">显示名</span><span class="v"><input id="p-name" placeholder="缺省取目录名"></span>
         </div>
-        <div class="btnrow" style="margin-top:10px"><button class="btn primary" id="btn-padd" ${state.busy ? "disabled" : ""}>登记</button><span class="muted">登记后面板可总览；部署操作仍在该项目工作区进行</span></div>
-      </div>`;
+        <div class="btnrow" style="margin-top:10px"><button class="btn primary" id="btn-padd" ${state.busy ? "disabled" : ""}>登记</button><span class="muted">登记后回到这里选择进入；部署操作仍在该项目工作区进行</span></div>
+      </div>` : "";
+    return `
+      ${list.length ? `<div class="grid">${cards}${addCard}</div>` : `
+        <div class="empty"><div class="icon"></div>工作台还没有项目。在下方登记第一个项目目录，<br>当前工作区项目会在打开面板时自动登记。</div>`}
+      ${form}`;
   }
 
   function renderDrill() {
@@ -880,7 +910,7 @@ const EmptyResultSchema = {
       <div class="card" style="border-color:var(--accent)"><h3 style="color:var(--accent)">OpenPencil · Figma 设计稿编辑器（推荐）<span class="line"></span></h3>
         <div class="muted" style="margin-bottom:10px">直接编辑工作区里的 <b>.fig 设计稿</b>（Figma 同款格式），侧栏完整编辑器 + <b>Agent 117 个工具协同</b>（JSX 渲染节点、auto-layout、组件、变量、图标库、design_to_tokens、导出 SVG/PDF/PNG）。侧栏「OpenPencil 设计稿」面板打开后即可编辑。</div>
         <div class="btnrow">
-          <button class="btn primary" id="btn-op-new" ${state.busy ? "disabled" : ""}>新建 Figma 设计稿</button>
+          <button class="btn primary" id="btn-op-new" ${state.busy ? "disabled" : ""}>生成设计稿</button>
           <button class="btn" id="btn-op-wire" ${state.busy ? "disabled" : ""} title="把无敌画布的线框按坐标重建为 .fig 设计稿（Agent 双工具集转换）">把无敌线框转入 .fig</button>
           <span class="muted">文件落 designs/&lt;名称&gt;.fig，Agent 可持续协同修改</span>
         </div>
@@ -1872,17 +1902,25 @@ const EmptyResultSchema = {
         }
       })
     );
-    $root().querySelectorAll(".pcard").forEach((card) =>
+    /* 「＋ 登记项目」虚线卡：展开表单；「收起」折叠回去 */
+    $root().querySelectorAll("[data-add]").forEach((card) =>
+      card.addEventListener("click", () => { state.createOpen = true; render(); document.getElementById("p-path")?.focus(); })
+    );
+    document.getElementById("btn-pcollapse")?.addEventListener("click", () => { state.createOpen = false; render(); });
+    $root().querySelectorAll(".pcard[data-pid]").forEach((card) =>
       card.addEventListener("click", () => {
         const pid = card.dataset.pid;
         const p = (state.projects?.projects ?? []).find((x) => x.id === pid);
         if (!p) return;
+        state.createOpen = false;
         if (card.dataset.current === "1") {
+          // 选中当前项目 → 进入项目内容页（数据启动时已加载，缺了就补一次）
           state.drill = null;
           state.view = "detail";
           state.tab = "overview";
           render();
           saveWidgetState();
+          if (!state.data) loadAll();
         } else {
           state.drill = p;
           render();
@@ -2029,18 +2067,31 @@ const EmptyResultSchema = {
     });
     document.getElementById("btn-tokens-edit")?.addEventListener("click", tokensEditDialog);
     document.getElementById("btn-op-new")?.addEventListener("click", async () => {
-      const name = String(document.getElementById("gen-name")?.value ?? "").trim() || `design-${Date.now().toString(36)}`;
+      const name = String(document.getElementById("gen-name")?.value ?? "").trim();
+      const tmpl = String(document.getElementById("gen-template")?.value ?? "dashboard");
+      if (!name) {
+        state.notice = { kind: "err", text: "请先填页面名称。" };
+        render(); return;
+      }
       setBusy(true);
       try {
-        const res = await callTool("new_design", { path: `designs/${name}.fig` });
-        state.notice = { kind: "ok", text: res.content?.map((c) => c.text).join("\n") ?? "设计稿已创建" };
-        await loadDesign();
+        // 建画板 + 放布局骨架 + 导出设计稿（全 callTool 直连，必定成功）
+        await callTool("wudi_canvas_edit", { ops: [
+          { op: "add_frame", frame: { name: `${name}-1440`, x: 0, y: 0, w: 1440, h: 900 } },
+          { op: "add", shape: { type: "rect", x: 20, y: 20, w: 260, h: 860, fill: "#e9eefe", stroke: "#3565f0", text: "侧栏导航" } },
+          { op: "add", shape: { type: "rect", x: 300, y: 20, w: 1100, h: 120, fill: "#f3ecfe", stroke: "#7c5cf0", text: "顶栏 / Hero 区" } },
+          { op: "add", shape: { type: "rect", x: 300, y: 160, w: 520, h: 340, fill: "#e2f5ea", stroke: "#0e8a4f", text: "内容卡片 A" } },
+          { op: "add", shape: { type: "rect", x: 840, y: 160, w: 560, h: 340, fill: "#fdf0dd", stroke: "#b45309", text: "内容卡片 B" } },
+          { op: "add", shape: { type: "rect", x: 300, y: 520, w: 1100, h: 360, fill: "#fde9e7", stroke: "#c73a33", text: "底部区域" } },
+        ]});
+        const res = await callTool("wudi_canvas_export", { name: `${name}-${tmpl}`, format: "html" });
+        state.notice = { kind: "ok", text: res.content?.map((c) => c.text).join("\n") ?? "设计稿已生成" };
+        await loadAll();
       } catch (err) {
-        state.notice = { kind: "err", text: String(err.message ?? err).slice(0, 500) };
+        state.notice = { kind: "err", text: `生成失败：${String(err.message ?? err).slice(0, 400)}` };
+        setBusy(false);
       }
-      setBusy(false);
-    });
-    $root().querySelectorAll("[data-act]").forEach((b) =>
+    });$root().querySelectorAll("[data-act]").forEach((b) =>
       b.addEventListener("click", () => {
         const act = b.dataset.act;
         if (act === "goto-deploys") { state.view = "detail"; state.tab = "deploys"; }
@@ -2366,11 +2417,7 @@ const EmptyResultSchema = {
 
   async function main() {
     applyTheme();
-    const ws = app.getHostContext()?.widgetState;
-    if (ws && ["projects", "overview", "deploys", "design", "canvas", "docs"].includes(ws.tab)) {
-      state.tab = ws.tab === "projects" ? "overview" : ws.tab;
-      state.view = "detail";
-    }
+    /* v0.31：打开固定落在项目选择/创建页，不做 widgetState 恢复进项目内容 */
     if (DEMO) {
       state.connected = true; // demo 模式不连宿主，但允许 reportSize
       loadDemoData();
@@ -2401,14 +2448,8 @@ const EmptyResultSchema = {
       }
     } catch { /* 桥不可用时降级为手动刷新 */ }
     try {
-      const ws = app.getHostContext()?.widgetState;
-      if (ws && ["projects", "overview", "deploys", "design", "canvas", "docs"].includes(ws.tab)) {
-        state.tab = ws.tab === "projects" ? "overview" : ws.tab;
-        state.view = "detail";
-      }
-      render();
-      await loadAll();
-      if (state.view === "projects") loadProjects();
+      render();          // 先渲染 landing（带加载态）
+      await loadAll();   // 当前项目数据 + 注册表（loadAll 尾部在 landing 视图会拉项目列表）
     } catch (err) {
       try { app.sendLog?.({ level: "error", data: `[wudi] 启动渲染失败: ${String(err?.stack ?? err).slice(0, 600)}` }); } catch {}
       state.notice = { kind: "err", text: `启动渲染出错：${String(err?.message ?? err).slice(0, 300)}` };

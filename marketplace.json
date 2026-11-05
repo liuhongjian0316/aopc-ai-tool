@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.30.1",
+      "version": "0.31.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,14 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.31.0",
+          "date": "2026-11-05",
+          "changes": [
+            "项目选择优先：面板打开先见项目选择/创建页（卡片网格 + 「＋ 登记项目」虚线卡），选中项目后才进入项目内容（总览/部署/设计/画布/文档），导航页签仅在选中后出现",
+            "创建入口前置：无项目时登记表单直接展开；当前工作区项目自动登记并带「进入项目内容」一键入口；下钻只读总览与「项目」页签回列表不变"
+          ]
+        },
         {
           "version": "0.30.1",
           "date": "2026-11-05",
