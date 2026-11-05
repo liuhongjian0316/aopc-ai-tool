@@ -88,6 +88,11 @@ export function frameDomains() {
   return bridgePort ? [`http://127.0.0.1:${bridgePort}`] : [];
 }
 
+/** 内嵌编辑器字体兜底：unifont 从 fontsource（jsdelivr）按需下载 Noto 等字形包（中文等非内置字体）。 */
+export function fontCdnDomains() {
+  return ["https://cdn.jsdelivr.net"];
+}
+
 /** Gen UI：工具结果内联渲染工作台面板（MCP Apps _meta.ui 绑定）。 */
 const UI_META = { ui: { resourceUri: "ui://wudi-coding/panel.html", surface: "wudi", visibility: ["model", "app"] } };
 

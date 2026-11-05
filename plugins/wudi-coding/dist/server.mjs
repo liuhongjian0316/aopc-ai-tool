@@ -871,6 +871,9 @@ function bridgeConnectDomains() {
 function frameDomains() {
   return bridgePort ? [`http://127.0.0.1:${bridgePort}`] : [];
 }
+function fontCdnDomains() {
+  return ["https://cdn.jsdelivr.net"];
+}
 var UI_META = { ui: { resourceUri: "ui://wudi-coding/panel.html", surface: "wudi", visibility: ["model", "app"] } };
 var TOOLS = [
   {
@@ -2839,7 +2842,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.34.2" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.34.3" };
 var PANEL_URI = "ui://wudi-coding/panel.html";
 var PANEL_MIME = "text/html;profile=mcp-app";
 var panelPath = resolve4(join4(dirname2(fileURLToPath2(import.meta.url)), "ui", "panel.html"));
@@ -2935,7 +2938,15 @@ function handleMessage(line) {
           description: "\u9879\u76EE\u6863\u6848\u3001SSH \u72B6\u6001\u3001\u90E8\u7F72\u5386\u53F2\u4E0E\u5065\u5EB7\u68C0\u67E5\u3001\u6587\u6863\u5E93\u3001\u5185\u5D4C\u8BBE\u8BA1\u753B\u5E03",
           mimeType: PANEL_MIME,
           // 宿主对「内容项无 _meta」的兜底读取路径（resources/list 项级）
-          _meta: { ui: { csp: { connectDomains: bridgeConnectDomains(), frameDomains: frameDomains() } } }
+          _meta: {
+            ui: {
+              csp: {
+                connectDomains: [...bridgeConnectDomains(), ...fontCdnDomains()],
+                resourceDomains: fontCdnDomains(),
+                frameDomains: frameDomains()
+              }
+            }
+          }
         },
         ...listDesignResources()
       ]
@@ -2959,7 +2970,13 @@ function handleMessage(line) {
             }
           }
           const meta = {
-            ui: { csp: { connectDomains: [...new Set(connect)], frameDomains: frameDomains() } },
+            ui: {
+              csp: {
+                connectDomains: [.../* @__PURE__ */ new Set([...connect, ...fontCdnDomains()])],
+                resourceDomains: fontCdnDomains(),
+                frameDomains: frameDomains()
+              }
+            },
             "aopc/csp": { wasmUnsafeEval: true, unsafeEval: true }
           };
           send(id, {

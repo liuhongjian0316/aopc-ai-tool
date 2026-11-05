@@ -306,6 +306,12 @@ plugins/wudi-coding/
 - prelude 增加 `console.error` 采集（`__wudiLogs`），自检状态栏可直接显示编辑器内部报错。
 - 已用宿主同款 CSP（含/不含 wasm 放宽）探针复测：`wasm: ok`、8 个资产（含 canvaskit.wasm/字体）全部经资源管线取回。
 
+## 字体 fallback：文字渲染修复（v0.34.3）
+
+- **文字不正常根因**：编辑器只内置 Inter / NotoNaskhArabic；文档用到其他字体（尤其中文）时，unifont 会在运行时从 **fontsource（cdn.jsdelivr.net）** 按需下载字形包——宿主 CSP 的 `connect-src` 只放行回环地址，下载被拦 → 缺字形。
+- 修复：面板资源 CSP 增加 `https://cdn.jsdelivr.net` 到 `connectDomains` / `resourceDomains`，字体兜底包可正常下载；内置 Inter 路径不受影响。
+- 自检优先级调整：渲染器正常时忽略无害 console 日志（不再误报「渲染异常」），仅未就绪时展示首条内部错误。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。

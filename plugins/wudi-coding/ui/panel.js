@@ -36,7 +36,7 @@ const EmptyResultSchema = {
     <div class="c"><b>健康检查</b><div class="num">200</div><div class="muted">全部通过</div><span class="btn">体检报告</span></div>
   </div></body></html>`;
   const app = new App(
-    { name: "wudi-coding", version: "0.34.2" },
+    { name: "wudi-coding", version: "0.34.3" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -1605,7 +1605,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.34.2" },
+              hostInfo: { name: "wudi-workbench", version: "0.34.3" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -1697,21 +1697,22 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
       try {
         const win = live.contentWindow;
         const errs = [...(win?.__wudiErrs ?? []), ...(win?.__wudiLogs ?? [])];
-        if (errs.length) { opSetStatus(`编辑器渲染异常：${String(errs[0]).slice(0, 160)}`, "err"); return; }
         const api = win?.__openpencilPanel;
         if (!api) { opSetStatus("编辑器接口未就绪（仍可用；看不到内容请在编辑器内按 Shift+1）", "ok"); return; }
         let ready = false;
         try { ready = !!api.canvasReady; } catch { ready = false; }
         if (!ready) {
-          // 再给 4s 渲染器初始化（大文档 / 慢机器）
+          // 再给 4s 渲染器初始化（大文档 / 慢机器）；仍未就绪才报错并展示首条内部错误
           setTimeout(() => {
             try {
-              if (api.canvasReady) { opAutoFit(live); }
+              if (api.canvasReady) { opAutoFit(live); return; }
+              if (errs.length) opSetStatus(`编辑器渲染异常：${String(errs[0]).slice(0, 160)}`, "err");
               else opSetStatus("画布渲染器未就绪（CanvasKit/wasm 可能被限制）", "err");
             } catch { /* ignore */ }
           }, 4000);
           return;
         }
+        /* 渲染器正常：忽略无害 console 日志，直接适应视图 */
         opAutoFit(live);
       } catch { /* 读不到 iframe 就跳过 */ }
     }, 6000);

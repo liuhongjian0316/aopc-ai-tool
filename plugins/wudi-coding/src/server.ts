@@ -6,7 +6,7 @@
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { TOOLS, callTool, bridgeConnectDomains, frameDomains } from "./tools";
+import { TOOLS, callTool, bridgeConnectDomains, frameDomains, fontCdnDomains } from "./tools";
 
 // 进程级兜底：任何未捕获错误都不能杀掉 server（宿主连接断开的根因）
 process.on("uncaughtException", (err) => console.error("[wudi] uncaught:", err.message));
@@ -21,7 +21,7 @@ let opToolsCache = (() => {
   catch { return []; }
 })(); // 静态工具定义（117 个），后台动态刷新
 
-const SERVER_INFO = { name: "wudi-coding", version: "0.34.2" };
+const SERVER_INFO = { name: "wudi-coding", version: "0.34.3" };
 const PANEL_URI = "ui://wudi-coding/panel.html";
 const PANEL_MIME = "text/html;profile=mcp-app";
 const panelPath = resolve(join(dirname(fileURLToPath(import.meta.url)), "ui", "panel.html"));
@@ -126,7 +126,15 @@ function handleMessage(line) {
           description: "项目档案、SSH 状态、部署历史与健康检查、文档库、内嵌设计画布",
           mimeType: PANEL_MIME,
           // 宿主对「内容项无 _meta」的兜底读取路径（resources/list 项级）
-          _meta: { ui: { csp: { connectDomains: bridgeConnectDomains(), frameDomains: frameDomains() } } },
+          _meta: {
+            ui: {
+              csp: {
+                connectDomains: [...bridgeConnectDomains(), ...fontCdnDomains()],
+                resourceDomains: fontCdnDomains(),
+                frameDomains: frameDomains(),
+              },
+            },
+          },
         },
         ...listDesignResources(),
       ],
@@ -152,7 +160,13 @@ function handleMessage(line) {
             } catch { /* 端点格式异常则忽略 */ }
           }
           const meta = {
-            ui: { csp: { connectDomains: [...new Set(connect)], frameDomains: frameDomains() } },
+            ui: {
+              csp: {
+                connectDomains: [...new Set([...connect, ...fontCdnDomains()])],
+                resourceDomains: fontCdnDomains(),
+                frameDomains: frameDomains(),
+              },
+            },
             "aopc/csp": { wasmUnsafeEval: true, unsafeEval: true },
           };
           send(id, {
