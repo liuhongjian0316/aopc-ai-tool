@@ -1305,6 +1305,35 @@ console.log("\n[T51] self_state:journalDiet 偏食判定 + difficultyAgingDays")
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// ---------- T52 stats 文本自动提取数字 ----------
+
+console.log("\n[T52] measure 从 stats 文本自动提取结构化数字(真实回访话术)");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    return { text: m?.result?.content?.[0]?.text || "", sc: m?.result?.structuredContent, isError: !!m?.result?.isError };
+  };
+  call("self_mission", { action: "start", title: "测试使命", autonomy: "full" });
+  call("self_mission", { action: "publish", title: "黑洞视频" });
+  const r = call("self_mission", { action: "measure", id: "v001", stats: "325 播放 / 4 赞 / 0 评 / 完播 1.1% / 2s 跳出 55.4%" });
+  const m = r.sc?.mission?.ledger?.recent?.find((l) => l.id === "v001")?.m;
+  check("自动提取 views=325", m?.views === 325, JSON.stringify(m));
+  check("自动提取 likes=4", m?.likes === 4);
+  check("自动提取 comments=0", m?.comments === 0);
+  check("自动提取 completion=1.1", m?.completion === 1.1);
+  // 显式参数优先于提取
+  call("self_mission", { action: "publish", title: "第二条视频" });
+  const r2 = call("self_mission", { action: "measure", id: "v002", stats: "99 播放", views: 12345 });
+  const m2 = r2.sc?.mission?.ledger?.recent?.find((l) => l.id === "v002")?.m;
+  check("显式参数优先于文本提取", m2?.views === 12345, JSON.stringify(m2));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);

@@ -611,7 +611,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "2.7.0",
+      "version": "2.8.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -626,6 +626,15 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "2.8.0",
+          "date": "2026-11-04",
+          "changes": [
+            "度量数字自动提取(真实回访话术驱动:v002 度量走了纯文本路径,结构化 m 为 null):measure 从 stats 文本自动提取 播放/赞/评/完播%/涨粉 数字入结构化 m——agent 偷懒也不丢数据;显式参数优先",
+            "定时桥内层指令升级:dy_* 输出管道截断硬规则(2.1.0 事故处方固化)+ measure 结构化数字要求",
+            "冒烟测试 208 → 213 项全绿"
+          ]
+        },
         {
           "version": "2.7.0",
           "date": "2026-11-04",

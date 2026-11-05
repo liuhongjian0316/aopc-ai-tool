@@ -31,7 +31,7 @@ import {
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "2.7.0";
+const VERSION = "2.8.0";
 
 const TOOLS = [
   {
@@ -867,6 +867,28 @@ function selfMission(args) {
       const n = Number(args[k]);
       if (args[k] === "" || !Number.isFinite(n)) throw new Error(`${k} 需要数字,收到:${JSON.stringify(args[k])}`);
       mtr[k] = n;
+    }
+    // 2.8.0:从 stats 文本自动提取数字(325 播放 / 4 赞 / 0 评 / 完播 1.1% / 涨粉 5)——
+    // agent 写了文本没传结构化字段也不丢数据;显式参数优先,提取只补空位
+    const extractPatterns = {
+      views: [/(\d+)\s*播放/, /播放[:：]?\s*(\d+)/],
+      likes: [/(\d+)\s*赞/],
+      comments: [/(\d+)\s*评(?!估|价)/, /评论[:：]?\s*(\d+)/],
+      completion: [/完播[:：]?\s*([\d.]+)\s*%/],
+      follows: [/(?:涨粉|新增关注)\s*\+?(\d+)/],
+    };
+    for (const [k, pats] of Object.entries(extractPatterns)) {
+      if (mtr[k] !== undefined) continue;
+      for (const re of pats) {
+        const mm = stats.match(re);
+        if (mm) {
+          const n = Number(mm[1]);
+          if (Number.isFinite(n)) {
+            mtr[k] = n;
+            break;
+          }
+        }
+      }
     }
     if (!stats && !Object.keys(mtr).length) throw new Error("measure 需要 stats(自由文本)或结构化数字(views/likes/comments/completion/follows)");
     item.status = "measured";
