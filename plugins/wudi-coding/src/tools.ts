@@ -1583,9 +1583,11 @@ function toolProjectsList() {
   try {
     // 当前项目自动纳入注册表并确保有 .wudi 档案（取消「未建档」）
     store.ensureProfileAt(root);
-    // 仅全新条目用档案名初始化；已存在条目保留用户可能改过的显示名
-    const exists = store.loadRegistry().some((e) => resolve(e.path) === resolve(root));
-    if (!exists) store.registryAdd(root, store.loadProject()?.name || "");
+    // 用户显式移除过当前项目 → 尊重移除意图，不再自动加回（重新登记可恢复）
+    if (!store.isProjectRootHidden(root)) {
+      const exists = store.loadRegistry().some((e) => resolve(e.path) === resolve(root));
+      if (!exists) store.registryAdd(root, store.loadProject()?.name || "");
+    }
   } catch { /* 注册失败不阻塞列表 */ }
   const projects = store.registrySummaries(root);
   const lines = projects
@@ -1671,7 +1673,8 @@ function toolProjectsAdd(args) {
   } catch (err) {
     return fail(String(err?.message ?? err));
   }
-  /* 登记即为项目建档：在目标目录创建 .wudi/project.json（缺省名/目录名） */
+  /* 重新登记 → 取消此前的隐藏意图；登记即为项目建档 */
+  store.unhideProjectRoot(res.entry.path);
   try {
     store.ensureProfileAt(res.entry.path, res.entry.name);
   } catch (err: any) {
@@ -1685,8 +1688,17 @@ function toolProjectsAdd(args) {
 }
 
 function toolProjectsRemove(args) {
-  const removed = store.registryRemove(String(args.id ?? "").trim());
-  if (!removed) return fail(`注册表中找不到 ${args.id}（用 wudi_projects_list 查 id）。`);
+  const id = String(args.id ?? "").trim();
+  const removed = store.registryRemove(id);
+  if (!removed) return fail(`注册表中找不到 ${id}（用 wudi_projects_list 查 id）。`);
+  // 当前工作区项目：记住移除意图，避免 projects_list 每次自动加回
+  if (resolve(removed.path) === resolve(store.projectRoot())) {
+    store.hideProjectRoot(removed.path);
+    return ok(
+      `已从工作台移除当前项目：${removed.name}（${removed.path}）。项目文件与 .wudi 未删除；重新「登记项目」指向该目录即可恢复。`,
+      { removed, hiddenCurrent: true }
+    );
+  }
   return ok(`已从注册表移除：${removed.name}（${removed.path}）。项目文件本身未删除。`, { removed });
 }
 

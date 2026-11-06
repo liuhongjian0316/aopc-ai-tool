@@ -297,6 +297,15 @@ async function protocolTests() {
       check("projects_rename: 重命名成功", !errOf(r) && textOf(r).includes("smoke-renamed"));
       r = await s.call("tools/call", { name: "wudi_projects_list", arguments: {} });
       check("projects_rename: 列表生效", (r?.result?.structuredContent?.projects ?? []).some((x) => x.name === "smoke-renamed"));
+      /* 移除当前工作区项目：隐藏生效、不再自动加回；重新登记可恢复 */
+      const curNow = (r?.result?.structuredContent?.projects ?? []).find((x) => x.isCurrent);
+      r = await s.call("tools/call", { name: "wudi_projects_remove", arguments: { id: curNow?.id } });
+      check("projects_remove: 当前项目移除生效", !errOf(r) && textOf(r).includes("已从工作台移除当前项目"));
+      r = await s.call("tools/call", { name: "wudi_projects_list", arguments: {} });
+      check("projects_remove: 隐藏后不再自动加回", !(r?.result?.structuredContent?.projects ?? []).some((x) => x.isCurrent));
+      r = await s.call("tools/call", { name: "wudi_projects_add", arguments: { path: workdir, name: "smoke-restored" } });
+      r = await s.call("tools/call", { name: "wudi_projects_list", arguments: {} });
+      check("projects_remove: 重新登记可恢复", (r?.result?.structuredContent?.projects ?? []).some((x) => x.isCurrent && x.name === "smoke-restored"));
       /* 多项目内容：按 root 读取与写入（__root 路由 openpencil 子进程） */
       r = await s.call("tools/call", { name: "wudi_status", arguments: { root: sub } });
       check("multi_root: status 按根返回", !errOf(r) && r?.result?.structuredContent?.project?.name === "subproj", textOf(r).slice(0, 120));
@@ -310,10 +319,12 @@ async function protocolTests() {
     } finally {
       await rm(outside, { recursive: true, force: true });
     }
-    r = await s.call("tools/call", { name: "wudi_projects_remove", arguments: { id: curEntry.id } });
-    check("projects_remove: 移除成功", !errOf(r) && textOf(r).includes("已从注册表移除"));
     r = await s.call("tools/call", { name: "wudi_projects_list", arguments: {} });
-    check("projects_list: 移除后重新自动登记当前区", (r?.result?.structuredContent?.projects ?? []).some((p) => p.isCurrent));
+    const curNow2 = (r?.result?.structuredContent?.projects ?? []).find((p) => p.isCurrent);
+    r = await s.call("tools/call", { name: "wudi_projects_remove", arguments: { id: curNow2?.id } });
+    check("projects_remove: 当前项目移除成功（隐藏）", !errOf(r) && textOf(r).includes("已从工作台移除当前项目"));
+    r = await s.call("tools/call", { name: "wudi_projects_list", arguments: {} });
+    check("projects_list: 移除后不再自动登记", !(r?.result?.structuredContent?.projects ?? []).some((p) => p.isCurrent));
 
     /* ---- 设计画布 v2（Figma 式多画板，Agent 操作面）---- */
     r = await s.call("tools/call", { name: "wudi_canvas_get", arguments: {} });

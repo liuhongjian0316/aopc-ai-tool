@@ -479,7 +479,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.37.0" },
+    { name: "wudi-coding", version: "0.37.1" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -1151,7 +1151,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.37.0" },
+              hostInfo: { name: "wudi-workbench", version: "0.37.1" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",

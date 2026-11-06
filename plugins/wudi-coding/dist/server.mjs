@@ -503,6 +503,44 @@ function registryAdd(path2, name = "") {
   saveRegistry(list);
   return { entry, added: true };
 }
+function hiddenPath() {
+  return join(pluginDataDir(), "hidden_projects.json");
+}
+function loadHidden() {
+  try {
+    const list = JSON.parse(readFileSync(hiddenPath(), "utf-8"));
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+function saveHidden(list) {
+  mkdirSync(pluginDataDir(), { recursive: true });
+  const p = hiddenPath();
+  const tmp = `${p}.tmp-${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(list, null, 2));
+  renameSync(tmp, p);
+  return list;
+}
+function hideProjectRoot(root) {
+  const abs = resolve(String(root));
+  const list = loadHidden();
+  if (!list.includes(abs)) {
+    list.push(abs);
+    saveHidden(list);
+  }
+  return abs;
+}
+function unhideProjectRoot(root) {
+  const abs = resolve(String(root));
+  const list = loadHidden().filter((x) => resolve(x) !== abs);
+  saveHidden(list);
+  return abs;
+}
+function isProjectRootHidden(root) {
+  const abs = resolve(String(root));
+  return loadHidden().some((x) => resolve(x) === abs);
+}
 function registryRename(idOrPath, name) {
   const trimmed = String(name ?? "").trim();
   if (!trimmed) throw new Error("name \u4E0D\u80FD\u4E3A\u7A7A\u3002");
@@ -2341,8 +2379,10 @@ function toolProjectsList() {
   const root = projectRoot();
   try {
     ensureProfileAt(root);
-    const exists = loadRegistry().some((e) => resolve2(e.path) === resolve2(root));
-    if (!exists) registryAdd(root, loadProject()?.name || "");
+    if (!isProjectRootHidden(root)) {
+      const exists = loadRegistry().some((e) => resolve2(e.path) === resolve2(root));
+      if (!exists) registryAdd(root, loadProject()?.name || "");
+    }
   } catch {
   }
   const projects = registrySummaries(root);
@@ -2416,6 +2456,7 @@ function toolProjectsAdd(args) {
   } catch (err) {
     return fail(String(err?.message ?? err));
   }
+  unhideProjectRoot(res.entry.path);
   try {
     ensureProfileAt(res.entry.path, res.entry.name);
   } catch (err) {
@@ -2428,8 +2469,16 @@ function toolProjectsAdd(args) {
   );
 }
 function toolProjectsRemove(args) {
-  const removed = registryRemove(String(args.id ?? "").trim());
-  if (!removed) return fail(`\u6CE8\u518C\u8868\u4E2D\u627E\u4E0D\u5230 ${args.id}\uFF08\u7528 wudi_projects_list \u67E5 id\uFF09\u3002`);
+  const id = String(args.id ?? "").trim();
+  const removed = registryRemove(id);
+  if (!removed) return fail(`\u6CE8\u518C\u8868\u4E2D\u627E\u4E0D\u5230 ${id}\uFF08\u7528 wudi_projects_list \u67E5 id\uFF09\u3002`);
+  if (resolve2(removed.path) === resolve2(projectRoot())) {
+    hideProjectRoot(removed.path);
+    return ok(
+      `\u5DF2\u4ECE\u5DE5\u4F5C\u53F0\u79FB\u9664\u5F53\u524D\u9879\u76EE\uFF1A${removed.name}\uFF08${removed.path}\uFF09\u3002\u9879\u76EE\u6587\u4EF6\u4E0E .wudi \u672A\u5220\u9664\uFF1B\u91CD\u65B0\u300C\u767B\u8BB0\u9879\u76EE\u300D\u6307\u5411\u8BE5\u76EE\u5F55\u5373\u53EF\u6062\u590D\u3002`,
+      { removed, hiddenCurrent: true }
+    );
+  }
   return ok(`\u5DF2\u4ECE\u6CE8\u518C\u8868\u79FB\u9664\uFF1A${removed.name}\uFF08${removed.path}\uFF09\u3002\u9879\u76EE\u6587\u4EF6\u672C\u8EAB\u672A\u5220\u9664\u3002`, { removed });
 }
 function toolCanvasBridge() {
@@ -3119,7 +3168,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.37.0" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.37.1" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());

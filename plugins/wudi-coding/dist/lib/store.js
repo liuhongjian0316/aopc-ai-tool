@@ -492,6 +492,44 @@ function registryAdd(path2, name = "") {
   saveRegistry(list);
   return { entry, added: true };
 }
+function hiddenPath() {
+  return join(pluginDataDir(), "hidden_projects.json");
+}
+function loadHidden() {
+  try {
+    const list = JSON.parse(readFileSync(hiddenPath(), "utf-8"));
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+function saveHidden(list) {
+  mkdirSync(pluginDataDir(), { recursive: true });
+  const p = hiddenPath();
+  const tmp = `${p}.tmp-${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(list, null, 2));
+  renameSync(tmp, p);
+  return list;
+}
+function hideProjectRoot(root) {
+  const abs = resolve(String(root));
+  const list = loadHidden();
+  if (!list.includes(abs)) {
+    list.push(abs);
+    saveHidden(list);
+  }
+  return abs;
+}
+function unhideProjectRoot(root) {
+  const abs = resolve(String(root));
+  const list = loadHidden().filter((x) => resolve(x) !== abs);
+  saveHidden(list);
+  return abs;
+}
+function isProjectRootHidden(root) {
+  const abs = resolve(String(root));
+  return loadHidden().some((x) => resolve(x) === abs);
+}
 function registryRename(idOrPath, name) {
   const trimmed = String(name ?? "").trim();
   if (!trimmed) throw new Error("name \u4E0D\u80FD\u4E3A\u7A7A\u3002");
@@ -553,6 +591,8 @@ export {
   exportCanvasToExcalidraw,
   exportCanvasToMockups,
   getFigmaUrl,
+  hideProjectRoot,
+  isProjectRootHidden,
   listEnvNames,
   loadCanvas,
   loadDeploys,
@@ -578,6 +618,7 @@ export {
   saveProject,
   saveTokens,
   setFigmaUrl,
+  unhideProjectRoot,
   updateDeploy,
   wudiDir
 };

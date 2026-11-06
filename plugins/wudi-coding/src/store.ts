@@ -584,6 +584,55 @@ export function registryAdd(path, name = "") {
   return { entry, added: true };
 }
 
+/* ---------------- 隐藏项目（用户显式移除当前工作区后不再自动登记） ---------------- */
+
+function hiddenPath() {
+  return join(pluginDataDir(), "hidden_projects.json");
+}
+
+function loadHidden() {
+  try {
+    const list = JSON.parse(readFileSync(hiddenPath(), "utf-8"));
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHidden(list) {
+  mkdirSync(pluginDataDir(), { recursive: true });
+  const p = hiddenPath();
+  const tmp = `${p}.tmp-${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(list, null, 2));
+  renameSync(tmp, p);
+  return list;
+}
+
+/** 把项目根加入隐藏集（显式移除当前工作区项目后调用）。 */
+export function hideProjectRoot(root) {
+  const abs = resolve(String(root));
+  const list = loadHidden();
+  if (!list.includes(abs)) {
+    list.push(abs);
+    saveHidden(list);
+  }
+  return abs;
+}
+
+/** 取消隐藏（重新登记时调用）。 */
+export function unhideProjectRoot(root) {
+  const abs = resolve(String(root));
+  const list = loadHidden().filter((x) => resolve(x) !== abs);
+  saveHidden(list);
+  return abs;
+}
+
+/** 该项目根是否被用户显式移除/隐藏。 */
+export function isProjectRootHidden(root) {
+  const abs = resolve(String(root));
+  return loadHidden().some((x) => resolve(x) === abs);
+}
+
 /** 重命名注册表条目（只改显示名，不动项目目录）。 */
 export function registryRename(idOrPath, name) {
   const trimmed = String(name ?? "").trim();
