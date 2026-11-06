@@ -636,6 +636,15 @@
           ]
         },
         {
+          "version": "3.2.0",
+          "date": "2026-11-04",
+          "changes": [
+            "能力自述(零幻觉):self_state 暴露 capabilities——tools/skills/agents/commands/scripts/playbooks/rulesTotal/knowledgeTotal 全枚举;「你都能干什么」从实际资产回答",
+            "self_recall 纳入自造脚本注册表(desc/usage 可检索)——组合兜底的最后一环:自造的能力可被发现",
+            "冒烟测试 229 → 236 项全绿(修复 rulesTotal TDZ/重复声明编辑事故)"
+          ]
+        },
+        {
           "version": "3.1.0",
           "date": "2026-11-04",
           "changes": [
