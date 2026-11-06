@@ -5,7 +5,7 @@
  * 需要用户介入的步骤在返回里明确写出下一步；需要确认的高危操作以 confirm 参数把关。
  * 状态存储：项目根 .wudi/（见 src/store.ts）；SSH 执行：src/ssh.ts（系统命令，仅密钥认证）。
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import * as store from "./store";
 import { sshRun, localRun, uploadFile, sshPing, sshConfig } from "./ssh";
@@ -447,6 +447,27 @@ export const TOOLS = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "wudi_design_delete",
+    description: "删除工作区 designs/ 目录下的设计稿文件（.fig/.pen）。仅允许 designs/ 目录内的文件；若编辑器正打开该设计稿，建议先关闭再删除。",
+    inputSchema: {
+      type: "object",
+      properties: { path: { type: "string", description: "设计稿路径，如 designs/old.fig" } },
+      required: ["path"],
+    },
+  },
+  {
+    name: "wudi_design_rename",
+    description: "重命名工作区 designs/ 目录下的设计稿文件（.fig/.pen）。仅允许 designs/ 目录内操作；目标名已存在时拒绝。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "现有设计稿路径，如 designs/old.fig" },
+        name: { type: "string", description: "新文件名，如 new.fig（不含目录）" },
+      },
+      required: ["path", "name"],
+    },
+  },
+  {
     name: "wudi_figma_link",
     description: "记住/查看项目的 Figma 文件链接（https://www.figma.com/ 开头）。设置后面板设计页可一键在浏览器打开 Figma 完整编辑器。注意：Figma API 只读，Agent 能读设计但改不了 Figma 文件；需要 Agent 写的设计走 Excalidraw。",
     _meta: UI_META,
@@ -527,6 +548,10 @@ export async function callTool(name, args = {}) {
         return toolFigmaLink(args);
       case "wudi_designs_list":
         return toolDesignsList();
+      case "wudi_design_delete":
+        return toolDesignDelete(args);
+      case "wudi_design_rename":
+        return toolDesignRename(args);
       case "wudi_tokens_compare":
         return toolTokensCompare(args);
       case "wudi_canvas_get":
@@ -1915,6 +1940,49 @@ function toolTokensCompare(args: any = {}) {
     "处置：确认后把合并结果用 wudi_design_tokens_set 整体写入（写前可让用户过目本报告）。",
   ].filter(Boolean);
   return ok(lines.join("\n").slice(0, 30_000), { added, changed, removed, same });
+}
+
+/** 校验并解析 designs/ 目录内的设计稿路径（防路径穿越，仅 .fig/.pen）。 */
+function resolveDesignFile(p: string) {
+  const dir = resolve(join(store.projectRoot(), "designs"));
+  const base = String(p ?? "").trim().replace(/^designs\//i, "");
+  if (!/^[\w.-]+\.(fig|pen)$/i.test(base)) throw new Error(`非法设计稿名：${p}（仅允许 designs/<名称>.fig/.pen）`);
+  const file = resolve(dir, base);
+  if (!file.startsWith(dir + "/")) throw new Error(`非法设计稿路径：${p}`);
+  return { dir, file, base };
+}
+
+function toolDesignDelete(args: any = {}) {
+  const path = String(args?.path ?? "").trim();
+  if (!path) return fail("缺少 path：要删除的设计稿路径，如 designs/old.fig。");
+  let file: string;
+  try {
+    file = resolveDesignFile(path).file;
+  } catch (err: any) {
+    return fail(String(err?.message ?? err));
+  }
+  if (!existsSync(file)) return fail(`设计稿不存在：${path}`);
+  rmSync(file);
+  return ok(`已删除设计稿：${path}`);
+}
+
+function toolDesignRename(args: any = {}) {
+  const path = String(args?.path ?? "").trim();
+  const name = String(args?.name ?? "").trim();
+  if (!path || !name) return fail("缺少参数：path（现有设计稿）与 name（新文件名，如 new.fig）。");
+  let dir: string, file: string, base: string;
+  try {
+    ({ dir, file, base } = resolveDesignFile(path));
+  } catch (err: any) {
+    return fail(String(err?.message ?? err));
+  }
+  if (!/^[\w.-]+\.(fig|pen)$/i.test(name)) return fail(`非法新文件名：${name}（仅允许 <名称>.fig/.pen）`);
+  if (!existsSync(file)) return fail(`设计稿不存在：${path}`);
+  const target = resolve(dir, name);
+  if (!target.startsWith(dir + "/")) return fail(`非法目标路径：${name}`);
+  if (existsSync(target)) return fail(`目标已存在：designs/${name}`);
+  renameSync(file, target);
+  return ok(`已重命名：${base} → designs/${name}`, { path: `designs/${name}` });
 }
 
 function toolDesignsList() {

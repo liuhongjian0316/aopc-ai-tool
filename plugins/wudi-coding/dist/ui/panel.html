@@ -137,9 +137,15 @@ body {
 .pcard .remove {
   position: absolute; top: 8px; left: 10px; width: 20px; height: 20px; border-radius: 6px;
   border: none; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 13px; line-height: 1;
-  opacity: 0; transition: opacity .12s;
+  opacity: .55; transition: opacity .12s, color .12s;
 }
-.pcard:hover .remove { opacity: 1; }
+.pcard .remove:hover { opacity: 1; color: var(--err); background: var(--err-bg); }
+.pcard .cv-del, .pcard .cv-ren {
+  position: absolute; top: 8px; width: 22px; height: 22px; border-radius: 6px;
+  border: none; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 13px; line-height: 1;
+}
+.pcard .cv-del { right: 8px; } .pcard .cv-del:hover { color: var(--err); background: var(--err-bg); }
+.pcard .cv-ren { right: 34px; } .pcard .cv-ren:hover { color: var(--accent-strong); background: var(--accent); }
 .pcard .remove:hover { background: var(--err-bg); color: var(--err); }
 .pcard .cta { margin-top: 9px; font-size: 11.5px; font-weight: 700; color: var(--accent-strong); }
 .pcard:hover .cta { text-decoration: underline; }
@@ -463,32 +469,13 @@ const EmptyResultSchema = {
 (() => {
   const DEMO = String(location.hash || "").includes("demo");
   /* demo 模式的内置设计稿样例与 PNG 渐变占位 */
-  const DEMO_PNG_GRADIENTS = {
-    "workbench-home.png": "#0066dd",
-    "deploy-flow.png": "linear-gradient(135deg,#0e8a4f,#0066dd)",
-  };
-  const DEMO_MOCKUP_HTML = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>__NAME__</title><style>
-  *{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,"PingFang SC",sans-serif}
-  body{background:#f4f6fa;padding:24px;color:#171a21}
-  .top{display:flex;align-items:center;gap:10px;margin-bottom:20px}.logo{width:34px;height:34px;border-radius:10px;background:#0066dd;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800}
-  h1{font-size:16px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-  .c{background:#fff;border:1px solid #e3e7ee;border-radius:12px;padding:14px;box-shadow:0 1px 3px rgba(16,24,40,.06)}
-  .c b{font-size:13px}.num{font-size:26px;font-weight:800;margin:8px 0 2px;background:#0066dd;-webkit-background-clip:text;background-clip:text;color:transparent}
-  .muted{color:#8a93a3;font-size:11px}.btn{display:inline-block;margin-top:10px;padding:7px 16px;border-radius:8px;background:#0066dd;color:#fff;font-size:12px;font-weight:600}
-  </style></head><body>
-  <div class="top"><div class="logo">无敌</div><div><h1>__NAME__ 设计稿预览</h1><div class="muted">工作台 · 项目管理 · 部署 · 1440 设计画布</div></div></div>
-  <div class="grid">
-    <div class="c"><b>项目总览</b><div class="num">3</div><div class="muted">进行中的项目</div><span class="btn">查看全部</span></div>
-    <div class="c"><b>本周部署</b><div class="num">5</div><div class="muted">成功率 96%</div><span class="btn">部署记录</span></div>
-    <div class="c"><b>健康检查</b><div class="num">200</div><div class="muted">全部通过</div><span class="btn">体检报告</span></div>
-  </div></body></html>`;
+
+
   const app = new App(
-    { name: "wudi-coding", version: "0.34.5" },
+    { name: "wudi-coding", version: "0.35.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
-  const imgCache = new Map();
-  const mockCache = new Map();
 
   const state = {
     view: "projects",  // 打开先见项目选择/创建页；点项目卡片选中后才进入项目内容（v0.31）
@@ -551,7 +538,6 @@ const EmptyResultSchema = {
       const last = deploys[0];
       if (last.status === "failed") acts.push(["排查上次失败", `版本 ${last.release ?? ""} 部署失败（${last.failedStage ?? "?"}）—— 去「部署」页健康检查或回滚`, "goto-deploys"]);
     }
-    if (!state.design?.tokens) acts.push(["沉淀 design tokens", "去「设计」页用 /wudi-ui 或 OpenPencil design_to_tokens 建立", "goto-design"]);
     if (!(state.data?.docs ?? []).length) acts.push(["生成首批文档", "README / API / 周报，去「文档」页一键生成", "goto-docs"]);
     if (!acts.length) return "";
     return `<div class="card"><h3>下一步<span class="line"></span></h3>
@@ -595,8 +581,6 @@ const EmptyResultSchema = {
     if (!sc || typeof sc !== "object") return;
     if (sc.project !== undefined || sc.resolved !== undefined) state.data = { ...(state.data ?? {}), ...sc };
     if (Array.isArray(sc.deploys)) state.history = { deploys: sc.deploys };
-    if (sc.tokens !== undefined) state.design = { ...(state.design ?? { files: [] }), tokens: sc.tokens };
-    if (Array.isArray(sc.files)) state.design = { ...(state.design ?? { tokens: null }), files: sc.files };
     if (Array.isArray(sc.projects)) state.projects = { projects: sc.projects };
     if (Array.isArray(sc.designs)) state.designs = { designs: sc.designs };
     render();
@@ -628,7 +612,6 @@ const EmptyResultSchema = {
       ["overview", "总览", ICONS.overview, ""],
       ["deploys", "部署", ICONS.deploys, ""],
       ["design", "设计", ICONS.design, ""],
-      ["canvas", "画布", '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M11.2 1.6a2 2 0 0 1 2.83 0l.37.37a2 2 0 0 1 0 2.83L6.4 12.8l-4.03 1.34a.5.5 0 0 1-.63-.63L3.07 9.6l8.13-8Zm-6.9 9.06-.7 2.1 2.1-.7-1.4-1.4Z"/></svg>', ""],
       ["docs", "文档", ICONS.docs, (state.data?.docs ?? []).length || ""],
     ];
     const nav = inProject ? navTabs.map(([id, label, icon, count]) =>
@@ -641,7 +624,6 @@ const EmptyResultSchema = {
     else body = state.tab === "overview" ? renderOverview(state.data?.project ?? null)
       : state.tab === "deploys" ? renderDeploys()
       : state.tab === "design" ? renderDesign()
-      : state.tab === "canvas" ? renderCanvas()
       : renderDocs();
 
     const sub = state.drill ? `${esc(state.drill.name)} · 只读总览`
@@ -669,7 +651,6 @@ const EmptyResultSchema = {
         state.tab = b.dataset.tab === "projects" ? state.tab : b.dataset.tab;
         state.notice = null;
         if (state.tab === "design" && state.view === "detail") loadDesign({ autoEnter: true });
-        if (state.tab === "canvas" && state.view === "detail") loadCanvas();
         if (state.view === "projects") loadProjects();
         render();
         saveWidgetState();
@@ -679,7 +660,6 @@ const EmptyResultSchema = {
       state.drill = null;
       loadAll();
       if (state.view === "detail" && state.tab === "design") loadDesign();
-      if (state.view === "detail" && state.tab === "canvas") loadCanvas();
     });
     document.getElementById("btn-back")?.addEventListener("click", () => { state.drill = null; render(); saveWidgetState(); });
     document.getElementById("btn-back-projects")?.addEventListener("click", () => {
@@ -690,21 +670,6 @@ const EmptyResultSchema = {
       saveWidgetState();
     });
     bindActions();
-    if (state.view === "detail" && state.tab === "design") {
-      fillDesignAssets();
-      $root().querySelectorAll(".mock-card").forEach((c) => c.addEventListener("click", () => previewMockup(c.dataset.mock)));
-      $root().querySelectorAll(".png-card[data-ok]").forEach((c) =>
-        c.addEventListener("click", () => {
-          if (DEMO) {
-            const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='800' height='500'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#0066dd'/><stop offset='1' stop-color='#0047a3'/></linearGradient></defs><rect width='800' height='500' fill='url(%23g)'/><text x='400' y='255' font-family='sans-serif' font-size='28' fill='white' text-anchor='middle'>${esc(c.dataset.png)}（demo 占位图）</text></svg>`;
-            previewImage(`data:image/svg+xml;charset=utf-8,${svg}`, c.dataset.png);
-            return;
-          }
-          previewImage(imgCache.get(c.dataset.png), c.dataset.png);
-        })
-      );
-    }
-    if (state.view === "detail" && state.tab === "canvas") bindCanvas();
     reportSize();
   }
 
@@ -814,7 +779,7 @@ const EmptyResultSchema = {
         <div class="stat"><div class="num">${deploys.length}</div><div class="lbl">部署（近 ${deploys.length} 次）</div></div>
         <div class="stat"><div class="num">${successRate === null ? "—" : successRate + "%"}</div><div class="lbl">成功率</div></div>
         <div class="stat"><div class="num">${state.data?.docs?.length ?? 0}</div><div class="lbl">文档</div></div>
-        <div class="stat"><div class="num">${(state.design?.files ?? []).length}</div><div class="lbl">设计产物</div></div>
+        <div class="stat"><div class="num">${(state.designs?.designs ?? []).length}</div><div class="lbl">设计画布</div></div>
       </div>`;
     const envBtns = (state.data?.envs ?? []).length > 1
       ? ["", ...state.data.envs].map((e) =>
@@ -884,21 +849,16 @@ const EmptyResultSchema = {
   }
 
   function renderDesign() {
-    const design = state.design;
-    if (!design) return `<div class="empty"><div class="icon"></div><span class="spin"></span> 加载设计产物…</div>`;
-    const files = design.files ?? [];
-    const mockups = files.filter((f) => String(f.path).endsWith(".html") && String(f.path).includes("mockups"));
-    const pngs = files.filter((f) => String(f.path).endsWith(".png"));
-    const tokens = design.tokens;
+    /* 设计页 = 项目画布：增（创建）删（删除）改（重命名）查（进入/列表），全部基于 openPencil */
     const canvases = state.designs?.designs ?? [];
-
-    /* ---------- 主区：项目画布（设计页 = 画布；所有 UI 设计都在画布里） ---------- */
     const canvasCards = canvases.map((d) => `
       <div class="pcard cvcard" data-cv-open="${esc(d.path)}" title="进入画布编辑">
         <div class="pname">${esc(String(d.name).replace(/\.(fig|pen)$/i, ""))}</div>
         <div class="ppath">${esc(d.path)} · ${esc(String(d.sizeKB))} KB</div>
         <div class="stats"><span class="chip accent">${esc(d.format)}</span>${state.opEmbed?.path === d.path ? '<span class="chip">编辑中</span>' : ""}</div>
         <div class="foot">${esc(fmtTime(d.updatedAt))}<span style="flex:1"></span><b class="cta-inline">进入画布 →</b></div>
+        <button class="cv-del" data-cv-delete="${esc(d.path)}" title="删除此画布">×</button>
+        <button class="cv-ren" data-cv-rename="${esc(d.path)}" title="重命名此画布">✎</button>
       </div>`).join("");
     const createRow = `
       <div class="card" style="margin-top:12px">
@@ -906,13 +866,13 @@ const EmptyResultSchema = {
         <div class="btnrow">
           <input id="op-name" placeholder="画布名称，如 UI / 官网 / App（可留空）" style="width:260px;flex:none">
           <button class="btn primary" id="btn-op-new" ${state.busy ? "disabled" : ""}>创建画布</button>
-          <span class="muted">一个画布容纳这个项目的全部 UI 设计：网站 1440 / 移动端 375 / 平板 768 各建画板</span>
+          <span class="muted">文件落 designs/&lt;名称&gt;.fig，创建后自动进编辑器</span>
         </div>
       </div>`;
     const canvasSection = canvases.length
-      ? `<div class="card"><h3 style="color:var(--accent-strong)">项目画布<span class="line"></span><span class="muted" style="text-transform:none;letter-spacing:0">点画布进入编辑器 · Agent 实时协同</span></h3>
+      ? `<div class="card"><h3 style="color:var(--accent-strong)">项目画布<span class="line"></span><span class="muted" style="text-transform:none;letter-spacing:0">点击进入编辑器 · Agent 实时协同 · 支持重命名/删除</span></h3>
           <div class="grid">${canvasCards}</div>
-          ${state.canvasCreateOpen ? createRow : `<div class="btnrow" style="margin-top:10px"><button class="btn" id="btn-cv-create-toggle">＋ 新建画布</button><span class="muted">画布即 designs/&lt;名称&gt;.fig；没有画布时进入设计页会直接引导创建</span></div>`}
+          ${state.canvasCreateOpen ? createRow : `<div class="btnrow" style="margin-top:10px"><button class="btn" id="btn-cv-create-toggle">＋ 新建画布</button><span class="muted">一个画布容纳项目的全部 UI 设计：网站 / 移动端 / 平板各建画板</span></div>`}
         </div>`
       : `<div class="empty cv-empty">
           <div class="cv-empty-title">创建项目画布</div>
@@ -923,206 +883,7 @@ const EmptyResultSchema = {
           </div>
           <div class="muted" style="margin-top:10px">创建后自动进入编辑器，无需任何额外配置</div>
         </div>`;
-
-    /* ---------- 折叠区一：设计资产（HTML 设计稿 / 图墙 / tokens / 全部产物） ---------- */
-    const mockupCards = mockups.length
-      ? `<div class="mockups">${mockups.map((f) => {
-          const name = String(f.path).split("/").pop();
-          return `<div class="mock-card" data-mock="${esc(name)}" title="点击预览设计稿">
-            <div class="mock-thumb"><div class="mock-wire"></div></div>
-            <div class="mock-meta"><div class="name">${esc(name)}</div><div class="muted">${esc(String(f.sizeKB))} KB · ${esc(fmtTime(f.updatedAt))}</div></div>
-          </div>`;
-        }).join("")}</div>`
-      : "";
-    /* PNG 设计图墙（resource 管线 → data URI；demo 用渐变占位） */
-    const pngGroups = [];
-    for (const f of pngs) {
-      const name = String(f.path).split("/").pop();
-      const group = name.replace(/-[0-9a-z]+\.png$/i, "");
-      const last = pngGroups.at(-1);
-      if (last && last.group === group) last.items.push({ f, name });
-      else pngGroups.push({ group, items: [{ f, name }] });
-    }
-    const pngWall = pngs.length
-      ? `<div>${pngGroups.map((g) => `
-        <div class="muted" style="margin:10px 0 6px;font-weight:650">▸ ${esc(g.group)}（${g.items.length}）</div>
-        <div class="pngs">${g.items.map(({ f, name }) => {
-          if (DEMO) {
-            return `<div class="png-card" data-png="${esc(name)}" data-ok="1"><div class="png-ph" style="background:${esc(DEMO_PNG_GRADIENTS[name] ?? "#0066dd")};height:110px"></div><div class="meta">${esc(name)}</div></div>`;
-          }
-          return `<div class="png-card" data-png="${esc(name)}"><img data-uri="ui://wudi-coding/image/${esc(name)}" alt="${esc(name)}"><div class="meta">${esc(name)}</div></div>`;
-        }).join("")}</div>`).join("")}</div>`
-      : "";
-    const colorEntries = Object.entries(tokens?.color ?? {});
-    const palette = colorEntries.length
-      ? `<div class="card"><h3>色板<span class="line"></span><button class="btn" id="btn-tokens-edit" style="margin-left:auto">编辑 JSON</button></h3><div class="swatches">${colorEntries.map(([k, v]) =>
-          `<div class="swatch"><div class="color" style="background:${esc(String(v))}"></div><div class="meta"><div class="name">${esc(k)}</div><div class="val">${esc(String(v))}</div></div></div>`
-        ).join("")}</div></div>`
-      : "";
-    const otherTokens = tokens
-      ? Object.entries(tokens).filter(([g]) => g !== "color").map(([group, entries]) =>
-          `<div class="card"><h3>${esc(group)}<span class="line"></span></h3><div class="kv">${Object.entries(entries ?? {}).map(([k, v]) =>
-            `<span class="k">${esc(k)}</span><span class="v">${esc(String(v))}</span>`).join("")}</div></div>`
-        ).join("")
-      : "";
-    const assetsDetails = `
-      <details class="card fold">
-        <summary>设计资产 · HTML 设计稿 ${mockups.length} · 渲染图 ${pngs.length} · tokens ${colorEntries.length} 色</summary>
-        ${mockups.length ? `<h3>HTML 设计稿<span class="line"></span></h3>${mockupCards}<div class="muted" style="margin-top:8px">点击卡片预览完整设计稿</div>` : ""}
-        ${pngs.length ? `<h3>设计图<span class="line"></span></h3>${pngWall}<div class="muted" style="margin-top:8px">来自设计稿渲染，点击放大</div>` : ""}
-        ${palette}${otherTokens}
-        ${!tokens ? '<div class="muted" style="margin:8px 0">还没有 design tokens —— 设计定稿后执行 /wudi-ui 自动沉淀。</div>' : ""}
-        <h3>全部产物（新→旧）<span class="line"></span></h3>
-        ${files.length ? files.map((f) =>
-          `<div class="row"><span class="chip">${String(f.path).endsWith(".html") ? "设计稿" : String(f.path).endsWith(".png") ? "设计图" : "tokens"}</span><span class="path">${esc(f.path)}</span><span class="muted">${esc(String(f.sizeKB))} KB</span><span class="time">${esc(fmtTime(f.updatedAt))}</span></div>`
-        ).join("") : '<div class="muted">（空）</div>'}
-      </details>`;
-
-    /* ---------- 折叠区二：更多工具（线框转换 / HTML 稿生成 / DesignCraft / Figma） ---------- */
-    const toolsDetails = `
-      <details class="card fold">
-        <summary>更多工具 · 线框转画布 / HTML 设计稿生成 / DesignCraft / Figma</summary>
-        <div class="card" style="box-shadow:none"><h3>把无敌线框转入画布<span class="line"></span></h3>
-          <div class="btnrow">
-            <input id="op-name-wire" placeholder="目标画布名称（可留空）" style="width:200px;flex:none">
-            <button class="btn" id="btn-op-wire" ${state.busy ? "disabled" : ""} title="把无敌画布的线框按坐标重建为 .fig 画布（Agent 双工具集转换）">把线框转入 .fig</button>
-            <span class="muted">「画布」页的快速线框 → .fig 设计稿</span>
-          </div>
-        </div>
-        <div class="card" style="box-shadow:none"><h3>生成 HTML 设计稿<span class="line"></span></h3>
-          <div class="kv">
-            <span class="k">页面名称</span><span class="v"><input id="gen-name" placeholder="如 workbench-v4 / settings-page"></span>
-            <span class="k">模板类型</span><span class="v"><select id="gen-template" style="font-family:inherit">
-              <option value="dashboard">dashboard · 管理后台/工作台</option>
-              <option value="landing">landing · 产品落地页</option>
-              <option value="mobile">mobile · 移动端 App（375 画布）</option>
-            </select></span>
-          </div>
-          <div class="btnrow" style="margin-top:10px">
-            <button class="btn" id="btn-gen" ${state.busy ? "disabled" : ""}>唤起 Agent 生成 HTML 稿</button>
-            <button class="btn" id="btn-export" ${state.busy || !tokens ? "disabled" : ""}>导出 tokens.css</button>
-            <span class="muted">生成单文件 HTML 设计稿进「设计资产」</span>
-          </div>
-        </div>
-        <div class="card" style="box-shadow:none"><h3>DesignCraft · 完整设计编辑器<span class="line"></span></h3>
-          <div class="muted" style="margin-bottom:10px">官方插件：面板内完整设计编辑器，<b>Agent 25 个工具直接读写</b>，渲染 PNG 自动进「设计资产」。需在 AOPC 插件市场安装 designcraft。</div>
-          <div class="btnrow">
-            <button class="btn" id="btn-dc-new" ${state.busy ? "disabled" : ""}>新建设计文档</button>
-            <button class="btn" id="btn-dc-render" ${state.busy ? "disabled" : ""} title="让 Agent 渲染当前页 PNG 到 .wudi/design/renders/">渲染当前页到图库</button>
-          </div>
-        </div>
-        <div class="card" style="box-shadow:none"><h3>Figma · 只读设计源<span class="line"></span></h3>
-          <div class="kv">
-            <span class="k">文件链接</span><span class="v"><input id="fig-url" placeholder="https://www.figma.com/design/..." value="${esc(state.figmaUrl)}"></span>
-          </div>
-          <div class="btnrow" style="margin-top:10px">
-            <button class="btn" id="btn-fig-open" ${state.figmaUrl ? "" : "disabled"}>在浏览器打开 Figma ↗</button>
-            <button class="btn" id="btn-fig-save" ${state.busy ? "disabled" : ""}>保存链接</button>
-            <span class="muted">Figma API 只读：Agent 能读设计、改不了文件；要 Agent 参与设计请用项目画布</span>
-          </div>
-        </div>
-      </details>`;
-
-    return `${canvasSection}${assetsDetails}${toolsDetails}`;
-  }
-
-  /* ---------- 设计图/设计稿资源加载与预览 ---------- */
-  async function fillDesignAssets() {
-    for (const img of $root().querySelectorAll("img[data-uri]")) {
-      const uri = img.dataset.uri;
-      try {
-        let dataUrl = imgCache.get(uri);
-        if (dataUrl === undefined) {
-          const res = await app.readServerResource({ uri });
-          const c = res?.contents?.[0];
-          dataUrl = c?.blob ? `data:${c.mimeType ?? "image/png"};base64,${c.blob}` : null;
-          imgCache.set(uri, dataUrl);
-        }
-        if (dataUrl) {
-          img.src = dataUrl;
-          img.closest(".png-card")?.setAttribute("data-ok", "1");
-        } else img.replaceWith(Object.assign(document.createElement("div"), { className: "muted", textContent: "图片加载失败" }));
-      } catch (err) {
-        img.replaceWith(Object.assign(document.createElement("div"), { className: "muted", textContent: `加载失败：${String(err.message ?? err).slice(0, 80)}` }));
-      }
-    }
-  }
-
-  async function previewMockup(name) {
-    let html;
-    try {
-      if (DEMO) {
-        html = DEMO_MOCKUP_HTML.replace(/__NAME__/g, name);
-      } else {
-        let text = mockCache.get(`mock:${name}`);
-        if (text === undefined) {
-          const res = await app.readServerResource({ uri: `ui://wudi-coding/mockup/${name}` });
-          text = res?.contents?.[0]?.text ?? null;
-          mockCache.set(`mock:${name}`, text);
-        }
-        if (!text) throw new Error("设计稿内容为空");
-        html = text;
-      }
-    } catch (err) {
-      state.notice = { kind: "err", text: `预览加载失败：${String(err.message ?? err).slice(0, 200)}` };
-      render();
-      return;
-    }
-    const overlay = document.createElement("div");
-    overlay.className = "overlay";
-    overlay.innerHTML = `<div class="dialog" style="width:min(860px, calc(100vw - 40px));height:82vh;display:flex;flex-direction:column">
-      <div class="btnrow" style="justify-content:space-between"><h3 style="margin:0">${esc(name)}</h3><button class="btn" id="mp-close">关闭</button></div>
-      <iframe id="mp-frame" style="flex:1;margin-top:10px;border:1px solid var(--border);border-radius:10px;background:#fff" sandbox="allow-same-origin"></iframe>
-    </div>`;
-    document.body.appendChild(overlay);
-    overlay.addEventListener("click", (ev) => { if (ev.target === overlay) overlay.remove(); });
-    overlay.querySelector("#mp-close").addEventListener("click", () => overlay.remove());
-    overlay.querySelector("#mp-frame").srcdoc = html;
-  }
-
-  function tokensEditDialog() {
-    const overlay = document.createElement("div");
-    overlay.className = "overlay";
-    overlay.innerHTML = `<div class="dialog" style="width:min(520px, calc(100vw - 40px))">
-      <h3>编辑 design tokens（JSON）</h3>
-      <textarea id="tok-editor" style="width:100%;height:300px;font-family:var(--mono);font-size:11.5px;padding:10px;border:1px solid var(--border-strong);border-radius:10px;background:var(--bg-inset);color:var(--text)">${esc(JSON.stringify(state.design?.tokens ?? {}, null, 2))}</textarea>
-      <div class="btnrow" style="margin-top:10px"><button class="btn" id="tok-cancel">取消</button><button class="btn primary" id="tok-save">保存并生成 tokens.css</button></div>
-    </div>`;
-    document.body.appendChild(overlay);
-    const ta = overlay.querySelector("#tok-editor");
-    ta.focus();
-    overlay.querySelector("#tok-cancel").addEventListener("click", () => overlay.remove());
-    overlay.querySelector("#tok-save").addEventListener("click", async () => {
-      let obj;
-      try {
-        obj = JSON.parse(ta.value);
-      } catch (err) {
-        ta.style.borderColor = "var(--err)";
-        return;
-      }
-      overlay.remove();
-      setBusy(true);
-      try {
-        const res = await callTool("wudi_design_tokens_set", { tokens: obj });
-        state.notice = { kind: "ok", text: res.content?.map((c) => c.text).join("\n") ?? "tokens 已更新" };
-      } catch (err) {
-        state.notice = { kind: "err", text: String(err.message ?? err).slice(0, 300) };
-      }
-      await loadDesign();
-      setBusy(false);
-    });
-  }
-
-  function previewImage(dataUrl, name) {
-    const overlay = document.createElement("div");
-    overlay.className = "overlay";
-    overlay.innerHTML = `<div style="max-width:92vw;max-height:90vh;display:flex;flex-direction:column;gap:8px">
-      <div class="btnrow" style="justify-content:space-between"><span class="mono" style="color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.6)">${esc(name)}</span><button class="btn" id="pv-close">关闭</button></div>
-      <img src="${esc(dataUrl)}" style="max-width:92vw;max-height:82vh;border-radius:12px;box-shadow:var(--shadow-2)">
-    </div>`;
-    document.body.appendChild(overlay);
-    overlay.addEventListener("click", (ev) => { if (ev.target === overlay) overlay.remove(); });
-    overlay.querySelector("#pv-close").addEventListener("click", () => overlay.remove());
+    return canvasSection;
   }
 
   function renderDocs() {
@@ -1138,777 +899,19 @@ const EmptyResultSchema = {
     </div>`;
   }
 
-  /* ---------- 设计画布 v2：Figma 式无限画布 + 多画板（Agent 与面板共享） ---------- */
-  const CANVAS_TOOLS = [
-    ["select", "⭥ 选择"], ["frame", "▣ 画板"], ["rect", "▭ 矩形"], ["ellipse", "◯ 圆"], ["diamond", "◇ 菱形"], ["arrow", "→ 箭头"], ["text", "T 文本"],
-  ];
-  const FRAME_PRESETS = [["桌面 1440×900", 1440, 900], ["桌面 1280×800", 1280, 800], ["移动 375×812", 375, 812], ["平板 768×1024", 768, 1024]];
-
-  let canvasUndo = [];
-  let canvasRedo = [];
-  let canvasClip = []; // ⌘C/⌘V 内部剪贴板
-
-  async function loadCanvas() {
-    canvasUndo = []; canvasRedo = []; canvasClip = [];
-    if (DEMO) { if (!state.canvas.frames?.length) loadDemoCanvas(); render(); return; }
-    try {
-      const res = await callTool("wudi_canvas_get", {});
-      state.canvas = struct(res)?.canvas ?? { frames: [], shapes: [] };
-    } catch { /* 保留旧数据 */ }
-    render();
-  }
-
-  async function canvasSave(ops, opts = {}) {
-    if (opts.history !== false) {
-      canvasUndo.push(structuredClone(state.canvas));
-      if (canvasUndo.length > 50) canvasUndo.shift();
-      canvasRedo = [];
-    }
-    if (DEMO) { applyOpsLocal(ops); render(); return; }
-    state.canvasBusy = true;
-    try {
-      const res = await callTool("wudi_canvas_edit", { ops });
-      state.canvas = struct(res)?.canvas ?? state.canvas;
-    } catch (err) {
-      state.notice = { kind: "err", text: `画布保存失败：${String(err.message ?? err).slice(0, 300)}` };
-    }
-    state.canvasBusy = false;
-    render();
-  }
-
-  /** 撤销：弹出上一快照全量替换（不记历史）。 */
-  function canvasUndoFn() {
-    if (!canvasUndo.length || state.canvasBusy) return;
-    canvasRedo.push(structuredClone(state.canvas));
-    const snap = canvasUndo.pop();
-    canvasSave([{ op: "replace", canvas: snap }], { history: false });
-  }
-
-  /** 重做：恢复被撤销的快照。 */
-  function canvasRedoFn() {
-    if (!canvasRedo.length || state.canvasBusy) return;
-    canvasUndo.push(structuredClone(state.canvas));
-    const snap = canvasRedo.pop();
-    canvasSave([{ op: "replace", canvas: snap }], { history: false });
-  }
-
-  function applyOpsLocal(ops) {
-    for (const op of ops) {
-      if (op.op === "add") state.canvas.shapes.push({ id: op.shape.id || `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, ...op.shape });
-      else if (op.op === "add_frame") state.canvas.frames.push({ ...op.frame });
-      else if (op.op === "update" || op.op === "update_frame") {
-        const arr = op.op === "update" ? state.canvas.shapes : state.canvas.frames;
-        const i = arr.findIndex((s) => s.id === op.id);
-        if (i >= 0) arr[i] = { ...arr[i], ...op.patch };
-      } else if (op.op === "delete" || op.op === "delete_frame") {
-        const ids = new Set(op.ids ?? [op.id].filter(Boolean));
-        if (op.op === "delete") state.canvas.shapes = state.canvas.shapes.filter((s) => !ids.has(s.id));
-        else {
-          state.canvas.frames = state.canvas.frames.filter((f) => !ids.has(f.id));
-          if (op.withShapes) state.canvas.shapes = state.canvas.shapes.filter((s) => !ids.has(s.frameId));
-          else for (const s of state.canvas.shapes) if (ids.has(s.frameId)) s.frameId = "";
-        }
-      }
-    }
-  }
-
-  function selIds() {
-    return [...new Set([state.canvasSel, ...state.canvasMulti])].filter(Boolean);
-  }
-
-  /* 组件形状库：每个 stamp 返回一组形状（x,y 为放置原点） */
-  function stampShapes(kind, x, y) {
-    const P = "#0066dd";
-    const DIM = "#8a93a3";
-    const BORDER = "#d4dae4";
-    const F = state.canvasFill || "#dbe4fd";
-    if (kind === "button") return [
-      { type: "rect", x, y, w: 120, h: 40, fill: P, stroke: P },
-      { type: "text", x: x + 34, y: y + 12, w: 60, h: 18, fill: "#ffffff", text: "按钮", fontSize: 14 },
-    ];
-    if (kind === "input") return [
-      { type: "rect", x, y, w: 200, h: 40, fill: "#ffffff", stroke: BORDER },
-      { type: "text", x: x + 10, y: y + 12, w: 160, h: 18, fill: DIM, text: "请输入内容", fontSize: 13 },
-    ];
-    if (kind === "card") return [
-      { type: "rect", x, y, w: 280, h: 180, fill: "#ffffff", stroke: BORDER },
-      { type: "text", x: x + 16, y: y + 14, w: 240, h: 22, fill: "#171a21", text: "卡片标题", fontSize: 16 },
-      { type: "text", x: x + 16, y: y + 48, w: 248, h: 18, fill: DIM, text: "正文内容，用贴近业务的真实文案", fontSize: 13 },
-      { type: "text", x: x + 16, y: y + 72, w: 248, h: 18, fill: DIM, text: "第二行正文，保持信息层级 ≤ 3", fontSize: 13 },
-    ];
-    if (kind === "heading") return [{ type: "text", x, y, w: 240, h: 34, fill: "#171a21", text: "标题文字", fontSize: 24 }];
-    if (kind === "body") return [{ type: "text", x, y, w: 300, h: 20, fill: "#4b5565", text: "正文文字，描述具体内容", fontSize: 14 }];
-    if (kind === "divider") return [{ type: "rect", x, y, w: 220, h: 2, fill: BORDER, stroke: BORDER }];
-    if (kind === "toggle") return [
-      { type: "rect", x, y, w: 44, h: 24, fill: P, stroke: P },
-      { type: "ellipse", x: x + 24, y: y + 4, w: 16, h: 16, fill: "#ffffff", stroke: "#ffffff" },
-    ];
-    if (kind === "checkbox") return [
-      { type: "rect", x, y: y + 2, w: 16, h: 16, fill: "#ffffff", stroke: P },
-      { type: "text", x: x + 24, y: y, w: 120, h: 18, fill: "#171a21", text: "复选项", fontSize: 13 },
-    ];
-    if (kind === "avatar") return [
-      { type: "ellipse", x, y, w: 48, h: 48, fill: F, stroke: P },
-      { type: "text", x: x + 15, y: y + 16, w: 20, h: 18, fill: "#ffffff", text: "人", fontSize: 14 },
-    ];
-    if (kind === "image") return [
-      { type: "rect", x, y, w: 200, h: 140, fill: "#eef1f7", stroke: BORDER },
-      { type: "arrow", x: x + 50, y: y + 40, x2: x + 150, y2: y + 100, stroke: BORDER },
-      { type: "arrow", x: x + 150, y: y + 40, x2: x + 50, y2: y + 100, stroke: BORDER },
-      { type: "text", x: x + 66, y: y + 62, w: 80, h: 16, fill: DIM, text: "图片占位", fontSize: 12 },
-    ];
-    if (kind === "chart") return [
-      { type: "rect", x, y, w: 280, h: 160, fill: "#ffffff", stroke: BORDER },
-      { type: "text", x: x + 14, y: y + 12, w: 160, h: 18, fill: DIM, text: "图表占位", fontSize: 13 },
-      { type: "rect", x: x + 40, y: y + 100, w: 28, h: 40, fill: P, stroke: P },
-      { type: "rect", x: x + 90, y: y + 80, w: 28, h: 60, fill: "#7c5cf0", stroke: "#7c5cf0" },
-      { type: "rect", x: x + 140, y: y + 60, w: 28, h: 80, fill: "#0e8a4f", stroke: "#0e8a4f" },
-      { type: "rect", x: x + 190, y: y + 90, w: 28, h: 50, fill: "#b45309", stroke: "#b45309" },
-    ];
-    if (kind === "progress") return [
-      { type: "rect", x, y, w: 200, h: 8, fill: "#eef1f7", stroke: "#eef1f7" },
-      { type: "rect", x, y, w: 120, h: 8, fill: P, stroke: P },
-    ];
-    return [];
-  }
-
-  function frameNode(f, framesSelected) {
-    const shapes = state.canvas.shapes.filter((s) => s.frameId === f.id).map((s) => shapeNode(s, s.id === state.canvasSel)).join("\n");
-    const labelSize = 14 / state.cv.scale;
-    return `
-      <g data-frame="${esc(f.id)}">
-        <text data-framelabel="${esc(f.id)}" x="${f.x}" y="${f.y - 6 / state.cv.scale}" font-size="${labelSize}" fill="${framesSelected ? "#0066dd" : "#8a93a3"}" font-family="sans-serif" font-weight="${framesSelected ? 700 : 600}" style="cursor:move">${esc(f.name)} · ${f.w}×${f.h}</text>
-        <rect data-framebg="${esc(f.id)}" x="${f.x}" y="${f.y}" width="${f.w}" height="${f.h}" fill="${f.background}" stroke="${framesSelected ? "#0066dd" : "#d4dae4"}" stroke-width="${(framesSelected ? 2 : 1) / state.cv.scale}" style="cursor:move"/>
-        <g clip-path="url(#cv-clip-${esc(f.id)})">${shapes}</g>
-      </g>`;
-  }
-
-  function shapeNode(s, selected) {
-    const common = `data-id="${esc(s.id)}" style="cursor:${state.canvasTool === "select" ? "move" : "crosshair"}"`;
-    const stroke = s.stroke || "#0066dd";
-    if (s.type === "rect") return `<rect ${common} x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" rx="8" fill="${s.fill || "none"}" stroke="${stroke}" stroke-width="${(selected ? 2.5 : 1.5) / state.cv.scale}"/>${shapeText(s)}`;
-    if (s.type === "ellipse") return `<ellipse ${common} cx="${s.x + s.w / 2}" cy="${s.y + s.h / 2}" rx="${s.w / 2}" ry="${s.h / 2}" fill="${s.fill || "none"}" stroke="${stroke}" stroke-width="${(selected ? 2.5 : 1.5) / state.cv.scale}"/>${shapeText(s)}`;
-    if (s.type === "diamond") { const cx = s.x + s.w / 2, cy = s.y + s.h / 2; return `<polygon ${common} points="${cx},${s.y} ${s.x + s.w},${cy} ${cx},${s.y + s.h} ${s.x},${cy}" fill="${s.fill || "none"}" stroke="${stroke}" stroke-width="${(selected ? 2.5 : 1.5) / state.cv.scale}"/>${shapeText(s)}`; }
-    if (s.type === "arrow") return `<line ${common} x1="${s.x}" y1="${s.y}" x2="${s.x2}" y2="${s.y2}" stroke="${stroke}" stroke-width="${2 / state.cv.scale}" marker-end="url(#cv-arrow)"/>`;
-    return `<text ${common} x="${s.x}" y="${s.y + s.fontSize}" font-size="${s.fontSize}" fill="${s.fill || "#171a21"}" font-family="sans-serif" font-weight="600">${esc(s.text)}</text>`;
-  }
-
-  function shapeText(s) {
-    if (!s.text) return "";
-    return `<text x="${s.x + s.w / 2}" y="${s.y + s.h / 2 + s.fontSize / 3}" text-anchor="middle" font-size="${s.fontSize}" fill="#171a21" font-family="sans-serif" pointer-events="none">${esc(s.text)}</text>`;
-  }
-
-  function renderCanvas() {
-    const cv = state.cv;
-    const toolBtns = CANVAS_TOOLS.map(([id, label]) =>
-      `<button class="btn ${state.canvasTool === id ? "primary" : ""}" data-ctool="${id}">${label}</button>`).join("");
-    const STAMPS = [["button", "🔘 按钮"], ["input", "▭ 输入框"], ["card", "▤ 卡片"], ["heading", "H 标题"], ["body", "¶ 正文"], ["divider", "— 分割线"], ["toggle", "⏻ 开关"], ["checkbox", "☑ 复选框"], ["avatar", "😊 头像"], ["image", "🖼 图片占位"], ["chart", "📊 图表占位"], ["progress", "▰ 进度条"]];
-    const stampSel = `<select id="cv-stamp" style="width:118px">${STAMPS.map(([v, label]) =>
-      `<option value="${v}" ${state.canvasStamp === v ? "selected" : ""}>${label}</option>`).join("")}</select>`;
-    const fills = ["", "#dbe4fd", "#0066dd", "#7c5cf0", "#e2f5ea", "#fde9e7", "#fdf0dd", "#171a21"].map((c) =>
-      `<button class="swatch-btn ${state.canvasFill === c ? "on" : ""}" data-cfill="${esc(c)}" title="${c || "透明"}"><span style="background:${c || "repeating-linear-gradient(45deg,#ccc,#ccc 2px,#fff 2px,#fff 4px)"}"></span></button>`).join("");
-    const frameOpts = FRAME_PRESETS.map(([label, w, h], i) => `<option value="${i}">${esc(label)}</option>`).join("");
-    const frames = state.canvas.frames ?? [];
-    const selFrame = frames.find((f) => f.id === state.canvasFrameSel);
-    const clipDefs = frames.map((f) => `<clipPath id="cv-clip-${esc(f.id)}"><rect x="${f.x}" y="${f.y}" width="${f.w}" height="${f.h}"/></clipPath>`).join("");
-    const frameNodes = frames.map((f) => frameNode(f, f.id === state.canvasFrameSel)).join("\n");
-    const sel = state.canvas.shapes.find((s) => s.id === state.canvasSel);
-    const selCount = selIds().length;
-    const alignBtns = selCount >= 2
-      ? `<span style="width:1px;height:22px;background:var(--border)"></span>` +
-        [["left", "⇤ 左"], ["hcenter", "↔ 中"], ["right", "⇥ 右"], ["top", "⇞ 上"], ["vcenter", "↕ 中"], ["bottom", "⇟ 下"]].map(([m, label]) =>
-          `<button class="btn" data-calign="${m}" title="${m}">${label}</button>`).join("") +
-        (selCount >= 3
-          ? `<span style="width:1px;height:22px;background:var(--border)"></span>` +
-            [["hdist", "⇹ 均分横"], ["vdist", "⇳ 均分纵"]].map(([m, label]) =>
-              `<button class="btn" data-cdist="${m}" title="${m}">${label}</button>`).join("")
-          : "")
-      : "";
-    const handle = sel && sel.type !== "arrow"
-      ? `<rect id="cv-handle" x="${sel.x + sel.w - 6 / cv.scale}" y="${sel.y + sel.h - 6 / cv.scale}" width="${12 / cv.scale}" height="${12 / cv.scale}" fill="#fff" stroke="#0066dd" stroke-width="${2 / cv.scale}" style="cursor:nwse-resize"/>`
-      : "";
-    const layers = frames.length
-      ? frames.map((f) => `
-          <div class="layer ${state.canvasFrameSel === f.id ? "on" : ""}" data-frame-item="${esc(f.id)}">
-            <span class="lname" title="双击重命名">${esc(f.name)}</span><span class="lcount">${state.canvas.shapes.filter((s) => s.frameId === f.id).length}</span>
-            <button class="lbtn" data-frename="${esc(f.id)}" title="重命名">✎</button>
-            <button class="lbtn" data-fdel="${esc(f.id)}" title="删除画板">🗑</button>
-          </div>`).join("")
-      : '<div class="muted" style="padding:6px">还没有画板</div>';
-    return `
-      <div class="card"><h3 style="color:var(--accent-strong)">Excalidraw · 完整设计画布（推荐）<span class="line"></span></h3>
-        <div class="muted" style="margin-bottom:10px">成熟的开源白板：自由绘制、连线、无限画布，<b>Agent 可直接读写</b>（create_diagram / apply_operations）。设计画布请在 Excalidraw 中完成。</div>
-        <div class="btnrow">
-          <button class="btn primary" id="btn-ex-new" ${state.busy ? "disabled" : ""}>新建 Excalidraw 画板</button>
-          <button class="btn" id="btn-ex-export" ${state.canvas.frames.length ? "" : "disabled"} title="把无敌画布上的线框导出为 .excalidraw 场景再打开">把线框转入 Excalidraw ↗</button>
-          <span class="muted">画板在侧栏打开后即可完整编辑；下面折叠的是快速线框实验画布</span>
-        </div>
-      </div>
-      <details class="card" ${state.canvas.frames.length || state.canvas.shapes.length ? "" : "open"}>
-        <summary style="cursor:pointer;font-weight:650;font-size:12.5px;margin-bottom:10px">快速线框（实验）—— 无敌画布</summary>
-        <div class="card" style="box-shadow:none;margin:0"><h3>无敌画布 · 无限画布<span class="line"></span>
-        <span class="muted" style="text-transform:none;letter-spacing:0">Figma 式多画板 —— 所有 UI 设计在同一块画布上（Agent 经 wudi_canvas_* 同享）</span></h3>
-        <div class="btnrow" style="margin-bottom:8px">
-          ${toolBtns}
-          ${stampSel}
-          <span style="width:1px;height:22px;background:var(--border)"></span>
-          ${fills}
-          <span style="width:1px;height:22px;background:var(--border)"></span>
-          <button class="btn" id="cv-undo" ${canvasUndo.length ? "" : "disabled"} title="撤销 ⌘Z">↶</button>
-          <button class="btn" id="cv-redo" ${canvasRedo.length ? "" : "disabled"} title="重做 ⌘⇧Z">↷</button>
-          <select id="cv-framepreset" style="width:150px">${frameOpts}</select>
-          <button class="btn" id="cv-addframe">＋ 画板</button>
-          ${alignBtns}
-          ${sel && !selCount ? `<button class="btn" data-cz="front" title="置于最上层">置顶</button><button class="btn" data-cz="back" title="置于最下层">置底</button>` : ""}
-          <button class="btn danger" id="cv-del" ${!selCount && !selFrame ? "disabled" : ""}>删除${selCount > 1 ? `（${selCount}）` : ""}</button>
-          <span style="flex:1"></span>
-          <button class="btn" id="cv-zout">−</button><span class="mono" style="min-width:44px;text-align:center">${Math.round(cv.scale * 100)}%</span><button class="btn" id="cv-zin">＋</button>
-          <button class="btn" id="cv-fit">适应</button>
-        </div>
-        <div style="display:flex;gap:10px;align-items:stretch">
-          <svg id="cv-svg" viewBox="0 0 1000 560" preserveAspectRatio="xMidYMid slice" style="flex:1;min-height:520px;background:var(--bg-soft);border:1px solid var(--border);border-radius:10px;touch-action:none;display:block;cursor:${state.canvasTool === "select" ? "default" : "crosshair"}">
-            <defs>
-              ${clipDefs}
-              <pattern id="cv-grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0v24" fill="none" stroke="#e6eaf2" stroke-width="1"/></pattern>
-              <marker id="cv-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#0066dd"/></marker>
-            </defs>
-            <rect x="-4000" y="-4000" width="12000" height="12000" fill="url(#cv-grid)"/>
-            <g id="cv-world" transform="translate(${cv.tx},${cv.ty}) scale(${cv.scale})">
-              ${frameNodes}
-              ${state.canvas.shapes.filter((s) => !s.frameId).map((s) => shapeNode(s, s.id === state.canvasSel)).join("\n")}
-              ${handle}
-              ${state.marquee ? `<rect x="${state.marquee.x}" y="${state.marquee.y}" width="${state.marquee.w}" height="${state.marquee.h}" fill="rgba(0,102,221,.08)" stroke="#0066dd" stroke-width="1" stroke-dasharray="4 3"/>` : ""}
-            </g>
-          </svg>
-          <div class="layers" style="width:190px">
-            <div class="lhead">图层 · 画板<span class="mono" style="margin-left:auto">${Math.round(cv.scale * 100)}%</span></div>
-            ${layers}
-            <div class="btnrow" style="margin-top:8px">
-              <button class="btn danger" id="cv-clear" style="flex:1">清空画布</button>
-            </div>
-          </div>
-        </div>
-        <div class="btnrow" style="margin-top:10px">
-          <input id="cv-name" placeholder="导出名，如 app-design" style="width:190px">
-          <button class="btn primary" id="cv-export" ${state.canvas.frames.length ? "" : "disabled"}>按画板导出设计稿</button>
-          <button class="btn" id="cv-ex" ${state.canvas.shapes.length ? "" : "disabled"} title="导出 .excalidraw 场景并唤起 Agent 用官方 Excalidraw 插件打开（完整级无限画布）">在 Excalidraw 打开 ↗</button>
-          <button class="btn" id="cv-png" ${state.canvas.shapes.length ? "" : "disabled"} title="把画布内容渲染为 PNG 下载">导出 PNG</button>
-          <span class="muted">滚轮平移 · ⌘/Ctrl+滚轮缩放 · 画板标签可拖动整帧 · 双击图层重命名</span>
-        </div>
-        </div>
-      </details>`;
-  }
-
-  function bindCanvas() {
-    const svg = document.getElementById("cv-svg");
-    if (!svg) return;
-    // 渲染会反复调 bindCanvas：先摘掉上一轮的全局监听，避免累积
-    if (window.__wudiCanvasUp) { window.removeEventListener("mouseup", window.__wudiCanvasUp); window.__wudiCanvasUp = null; }
-    $root().querySelectorAll("[data-ctool]").forEach((b) => b.addEventListener("click", () => { state.canvasTool = b.dataset.ctool; state.canvasStamp = ""; render(); }));
-    document.getElementById("cv-stamp")?.addEventListener("change", (ev) => {
-      state.canvasStamp = ev.target.value;
-      state.canvasTool = ev.target.value ? "stamp" : "select";
-      render();
+  /** 确认弹窗（AOPC 沙箱禁用原生 confirm/alert）：Promise<boolean>。 */
+  function confirmDialog(message) {
+    return new Promise((resolvePromise) => {
+      const overlay = document.createElement("div");
+      overlay.className = "overlay";
+      overlay.innerHTML = `<div class="dialog" style="width:min(420px, calc(100vw - 40px))">
+        <h3>${esc(message)}</h3>
+        <div class="btnrow"><button class="btn" id="dlg-cancel">取消</button><button class="btn danger" id="dlg-ok">删除</button></div>
+      </div>`;
+      document.body.appendChild(overlay);
+      overlay.querySelector("#dlg-cancel").addEventListener("click", () => { overlay.remove(); resolvePromise(false); });
+      overlay.querySelector("#dlg-ok").addEventListener("click", () => { overlay.remove(); resolvePromise(true); });
     });
-    $root().querySelectorAll("[data-cfill]").forEach((b) => b.addEventListener("click", () => {
-      state.canvasFill = b.dataset.cfill;
-      const ids = selIds();
-      if (ids.length) canvasSave(ids.map((id) => ({ op: "update", id, patch: { fill: state.canvasFill } })));
-      else render();
-    }));
-    document.getElementById("cv-undo")?.addEventListener("click", canvasUndoFn);
-    document.getElementById("cv-redo")?.addEventListener("click", canvasRedoFn);
-    document.getElementById("cv-del")?.addEventListener("click", async () => {
-      const ids = selIds();
-      if (ids.length) { state.canvasSel = ""; state.canvasMulti = []; await canvasSave([{ op: "delete", ids }]); return; }
-      if (state.canvasFrameSel) await delFrame(state.canvasFrameSel, false);
-    });
-    $root().querySelectorAll("[data-cz]").forEach((b) =>
-      b.addEventListener("click", () => {
-        if (!state.canvasSel) return;
-        canvasSave([{ op: "reorder", id: state.canvasSel, to: b.dataset.cz }]);
-      })
-    );
-    $root().querySelectorAll("[data-cdist]").forEach((b) =>
-      b.addEventListener("click", () => {
-        const ids = selIds();
-        const shapes = ids.map((id) => state.canvas.shapes.find((x) => x.id === id)).filter(Boolean);
-        if (shapes.length < 3) return;
-        const m = b.dataset.cdist;
-        const sorted = [...shapes].sort((a, b2) => (m === "hdist" ? a.x - b2.x : a.y - b2.y));
-        const first = sorted[0], last = sorted.at(-1);
-        const totalSize = sorted.reduce((acc, s) => acc + (m === "hdist" ? (s.w ?? 0) : (s.h ?? 0)), 0);
-        const span = (m === "hdist" ? (last.x + (last.w ?? 0)) - first.x : (last.y + (last.h ?? 0)) - first.y) - totalSize;
-        const gap = span / (sorted.length - 1);
-        let cursor = m === "hdist" ? first.x : first.y;
-        const ops = sorted.map((s) => {
-          const patch = m === "hdist" ? { x: Math.round(cursor) } : { y: Math.round(cursor) };
-          cursor += (m === "hdist" ? (s.w ?? 0) : (s.h ?? 0)) + gap;
-          return { op: "update", id: s.id, patch };
-        });
-        canvasSave(ops);
-      })
-    );
-    $root().querySelectorAll("[data-calign]").forEach((b) =>
-      b.addEventListener("click", () => {
-        const ids = selIds();
-        const shapes = ids.map((id) => state.canvas.shapes.find((x) => x.id === id)).filter(Boolean);
-        if (shapes.length < 2) return;
-        const minX = Math.min(...shapes.map((s) => s.x));
-        const maxX = Math.max(...shapes.map((s) => s.x + (s.w ?? 0)));
-        const minY = Math.min(...shapes.map((s) => s.y));
-        const maxY = Math.max(...shapes.map((s) => s.y + (s.h ?? 0)));
-        const m = b.dataset.calign;
-        const ops = shapes.map((s) => {
-          let patch = {};
-          if (m === "left") patch.x = minX;
-          else if (m === "right") patch.x = maxX - (s.w ?? 0);
-          else if (m === "hcenter") patch.x = Math.round((minX + maxX) / 2 - (s.w ?? 0) / 2);
-          else if (m === "top") patch.y = minY;
-          else if (m === "bottom") patch.y = maxY - (s.h ?? 0);
-          else if (m === "vcenter") patch.y = Math.round((minY + maxY) / 2 - (s.h ?? 0) / 2);
-          return { op: "update", id: s.id, patch };
-        });
-        canvasSave(ops);
-      })
-    );
-    document.getElementById("cv-clear")?.addEventListener("click", async () => {
-      if (!state.canvas.shapes.length && !state.canvas.frames.length) return;
-      if (!confirm("清空画布全部画板与形状？（Agent 侧同数据）")) return;
-      state.canvasSel = ""; state.canvasFrameSel = "";
-      if (DEMO) { state.canvas = { frames: [], shapes: [] }; render(); return; }
-      try { await callTool("wudi_canvas_clear", { confirm: true }); state.canvas = { frames: [], shapes: [] }; } catch (err) {
-        state.notice = { kind: "err", text: String(err.message ?? err).slice(0, 300) };
-      }
-      render();
-    });
-    document.getElementById("cv-addframe")?.addEventListener("click", async () => {
-      const preset = FRAME_PRESETS[Number(document.getElementById("cv-framepreset")?.value ?? 0)];
-      // 新画板放在现有画板右侧
-      const maxX = Math.max(0, ...state.canvas.frames.map((f) => f.x + f.w));
-      const cv = state.cv;
-      const op = { op: "add_frame", frame: { name: `画板 ${state.canvas.frames.length + 1}`, x: maxX + 80, y: Math.min(...(state.canvas.frames.length ? state.canvas.frames.map((f) => f.y) : [0])), w: preset[1], h: preset[2] } };
-      await canvasSave([op]);
-      state.canvasFrameSel = (DEMO ? state.canvas.frames[state.canvas.frames.length - 1]?.id : state.canvas.frames.find((f) => f.x === op.frame.x)?.id) ?? "";
-      render();
-    });
-    $root().querySelectorAll("[data-frame-item]").forEach((el) => el.addEventListener("click", () => {
-      state.canvasFrameSel = el.dataset.frameItem;
-      state.canvasSel = "";
-      render();
-    }));
-    $root().querySelectorAll("[data-frename]").forEach((b) => b.addEventListener("click", async (ev) => {
-      ev.stopPropagation();
-      const id = b.dataset.frename;
-      const f = state.canvas.frames.find((x) => x.id === id);
-      const name = await inputDialog(`画板「${f.name}」重命名：`, f.name);
-      if (name && name !== f.name) canvasSave([{ op: "update_frame", id, patch: { name } }]);
-    }));
-    $root().querySelectorAll("[data-fdel]").forEach((b) => b.addEventListener("click", async (ev) => {
-      ev.stopPropagation();
-      const id = b.dataset.fdel;
-      const f = state.canvas.frames.find((x) => x.id === id);
-      const count = state.canvas.shapes.filter((s) => s.frameId === id).length;
-      const withShapes = count ? confirm(`画板「${f.name}」内有 ${count} 个形状。\n确定=连形状一起删除，取消=形状转为游离。`) : true;
-      state.canvasFrameSel = ""; state.canvasSel = "";
-      await canvasSave([{ op: "delete_frame", id, withShapes }]);
-    }));
-    document.getElementById("cv-zin")?.addEventListener("click", () => { state.cv.scale = Math.min(4, state.cv.scale * 1.25); render(); });
-    document.getElementById("cv-zout")?.addEventListener("click", () => { state.cv.scale = Math.max(0.15, state.cv.scale / 1.25); render(); });
-    document.getElementById("cv-fit")?.addEventListener("click", () => fitView());
-    document.getElementById("cv-export")?.addEventListener("click", async () => {
-      const name = String(document.getElementById("cv-name")?.value ?? "").trim() || `canvas-${Date.now().toString(36)}`;
-      setBusy(true);
-      try {
-        const res = await callTool("wudi_canvas_export", { name });
-        state.notice = { kind: "ok", text: res.content?.map((c) => c.text).join("\n") ?? "已导出" };
-      } catch (err) {
-        state.notice = { kind: "err", text: String(err.message ?? err).slice(0, 400) };
-      }
-      setBusy(false);
-    });
-    document.getElementById("cv-ex")?.addEventListener("click", async () => {
-      const name = String(document.getElementById("cv-name")?.value ?? "").trim() || `canvas-${Date.now().toString(36)}`;
-      setBusy(true);
-      let path = "";
-      try {
-        const res = await callTool("wudi_canvas_export", { name, format: "excalidraw" });
-        path = res.structuredContent?.excalidraw ?? "";
-        state.notice = { kind: "ok", text: `场景已导出：${path}。正在唤起 Agent 用 Excalidraw 插件打开…` };
-      } catch (err) {
-        state.notice = { kind: "err", text: String(err.message ?? err).slice(0, 400) };
-        setBusy(false);
-        return;
-      }
-      setBusy(false);
-      try {
-        if (!app.getHostCapabilities()?.message) {
-          state.notice = { kind: "err", text: `场景已导出：${path}。请在会话里让 Agent「用 open_diagram 打开 ${path}」。` };
-          render();
-          return;
-        }
-        await app.sendMessage({ role: "user", content: { type: "text", text: `请用 Excalidraw 插件的 open_diagram 打开工作区文件 ${path}（导入并打开画板），然后告诉我画板 id。` } });
-      } catch (err) {
-        state.notice = { kind: "err", text: `唤起失败：${String(err.message ?? err).slice(0, 300)}` };
-        render();
-      }
-    });
-
-    if (!svg) return;
-    const pt = (ev) => {
-      const r = svg.getBoundingClientRect();
-      const sx = 1000 / r.width, sy = 560 / r.height;
-      const lx = (ev.clientX - r.left) * sx, ly = (ev.clientY - r.top) * sy;
-      return { x: Math.round((lx - state.cv.tx) / state.cv.scale), y: Math.round((ly - state.cv.ty) / state.cv.scale) };
-    };
-    svg.addEventListener("wheel", (ev) => {
-      ev.preventDefault();
-      const r = svg.getBoundingClientRect();
-      const sx = 1000 / r.width, sy = 560 / r.height;
-      const lx = (ev.clientX - r.left) * sx, ly = (ev.clientY - r.top) * sy;
-      if (ev.ctrlKey || ev.metaKey) {
-        const old = state.cv.scale;
-        const scale = Math.min(4, Math.max(0.15, old * (1 - ev.deltaY * 0.0015)));
-        state.cv.tx = lx - ((lx - state.cv.tx) / old) * scale;
-        state.cv.ty = ly - ((ly - state.cv.ty) / old) * scale;
-        state.cv.scale = scale;
-      } else {
-        state.cv.tx -= ev.deltaX;
-        state.cv.ty -= ev.deltaY;
-      }
-      render();
-    }, { passive: false });
-    let drag = null;
-    svg.addEventListener("mousedown", (ev) => {
-      state.canvasDragging = true;
-      const target = ev.target;
-      const p = pt(ev);
-      if (target.id === "cv-handle" && state.canvasSel) {
-        const s = state.canvas.shapes.find((x) => x.id === state.canvasSel);
-        drag = { mode: "resize", id: s.id, startX: p.x, startY: p.y, orig: { ...s } };
-        ev.preventDefault();
-        return;
-      }
-      const frameLabel = target?.dataset?.framelabel;
-      const frameBg = target?.dataset?.framebg;
-      if (frameLabel || frameBg) {
-        const fid = frameLabel || frameBg;
-        state.canvasFrameSel = fid;
-        state.canvasSel = "";
-        const f = state.canvas.frames.find((x) => x.id === fid);
-        drag = { mode: "frame", id: fid, startX: p.x, startY: p.y, orig: { ...f }, children: state.canvas.shapes.filter((s) => s.frameId === fid).map((s) => ({ id: s.id, x: s.x, y: s.y, x2: s.x2 })) };
-        render();
-        ev.preventDefault();
-        return;
-      }
-      const id = target?.dataset?.id;
-      if (id) {
-        const shift = ev.shiftKey;
-        if (shift) {
-          // Shift 加选/去选
-          if (state.canvasMulti.includes(id)) state.canvasMulti = state.canvasMulti.filter((x) => x !== id);
-          else state.canvasMulti.push(id);
-          state.canvasSel = state.canvasMulti.at(-1) ?? "";
-          render();
-          return;
-        }
-        if (state.canvasMulti.length && state.canvasMulti.includes(id) && state.canvasTool === "select") {
-          // 多选拖动：整体移动
-          state.canvasSel = id;
-          drag = { mode: "multimove", startX: p.x, startY: p.y, children: selIds().map((sid) => { const sh = state.canvas.shapes.find((x) => x.id === sid); return { id: sid, x: sh.x, y: sh.y, x2: sh.x2 }; }) };
-          render();
-          ev.preventDefault();
-          return;
-        }
-        state.canvasMulti = [];
-        state.canvasSel = id;
-        state.canvasFrameSel = "";
-        const s = state.canvas.shapes.find((x) => x.id === id);
-        if (state.canvasTool === "select") drag = { mode: "move", id, startX: p.x, startY: p.y, orig: { ...s } };
-        render();
-        return;
-      }
-      state.canvasSel = ""; state.canvasMulti = []; state.canvasFrameSel = "";
-      if (ev.button === 1) { drag = { mode: "pan", startX: ev.clientX, startY: ev.clientY, tx: state.cv.tx, ty: state.cv.ty }; ev.preventDefault(); render(); return; }
-      if (state.canvasTool === "stamp") {
-        const fid2 = frameIdAt(p.x, p.y);
-        const shapes = stampShapes(state.canvasStamp, p.x, p.y).map((sh) => ({ ...sh, frameId: fid2 }));
-        if (shapes.length) canvasSave(shapes.map((sh) => ({ op: "add", shape: sh })));
-        return;
-      }
-      if (state.canvasTool === "frame") {
-        drag = { mode: "createframe", startX: p.x, startY: p.y };
-        const id2 = `f-${Date.now().toString(36)}-tmp`;
-        drag.id = id2;
-        state.canvas.frames.push({ id: id2, name: "画板", x: p.x, y: p.y, w: 50, h: 50, background: "#ffffff" });
-        render();
-        return;
-      }
-      if (state.canvasTool !== "select" && !state.canvasBusy) {
-        if (state.canvasTool === "text") {
-          const fid = frameIdAt(p.x, p.y);
-          canvasSave([{ op: "add", shape: { type: "text", x: p.x, y: p.y, text: "双击编辑文字", fontSize: 16, frameId: fid } }]);
-          return;
-        }
-        drag = { mode: "create", tool: state.canvasTool, startX: p.x, startY: p.y };
-        const id2 = `s-${Date.now().toString(36)}-tmp`;
-        drag.id = id2;
-        const fid = frameIdAt(p.x, p.y);
-        state.canvas.shapes.push({ id: id2, type: state.canvasTool, frameId: fid, x: p.x, y: p.y, w: 2, h: 2, x2: p.x, y2: p.y, stroke: "#0066dd", fill: state.canvasFill, fontSize: 14, text: "" });
-      } else {
-        drag = { mode: "pan", startX: ev.clientX, startY: ev.clientY, tx: state.cv.tx, ty: state.cv.ty };
-      }
-      render();
-    });
-    svg.addEventListener("mousemove", (ev) => {
-      if (!drag) return;
-      const p = pt(ev);
-      const s = state.canvas.shapes.find((x) => x.id === drag.id);
-      const f = state.canvas.frames.find((x) => x.id === drag.id);
-      if (drag.mode === "pan") {
-        state.cv.tx = drag.tx + (ev.clientX - drag.startX) * (1000 / svg.getBoundingClientRect().width);
-        state.cv.ty = drag.ty + (ev.clientY - drag.startY) * (560 / svg.getBoundingClientRect().height);
-        render();
-      } else if (drag.mode === "create" && s) {
-        s.w = Math.max(2, Math.abs(p.x - drag.startX));
-        s.h = Math.max(2, Math.abs(p.y - drag.startY));
-        s.x = Math.min(p.x, drag.startX);
-        s.y = Math.min(p.y, drag.startY);
-        s.frameId = frameIdAt(s.x + s.w / 2, s.y + s.h / 2);
-        if (s.type === "arrow") { s.x2 = p.x; s.y2 = p.y; s.x = drag.startX; s.y = drag.startY; }
-        render();
-      } else if (drag.mode === "createframe" && f) {
-        f.x = Math.min(p.x, drag.startX);
-        f.y = Math.min(p.y, drag.startY);
-        f.w = Math.max(50, Math.abs(p.x - drag.startX));
-        f.h = Math.max(50, Math.abs(p.y - drag.startY));
-        render();
-      } else if (drag.mode === "move" && s) {
-        s.x = Math.max(-2000, Math.min(8000, drag.orig.x + (p.x - drag.startX)));
-        s.y = Math.max(-2000, Math.min(8000, drag.orig.y + (p.y - drag.startY)));
-        render();
-      } else if (drag.mode === "multimove") {
-        const dx = p.x - drag.startX, dy = p.y - drag.startY;
-        for (const c of drag.children) {
-          const cs = state.canvas.shapes.find((x) => x.id === c.id);
-          if (!cs) continue;
-          cs.x = c.x + dx; cs.y = c.y + dy;
-          if (cs.type === "arrow") { cs.x2 = c.x2 + dx; cs.y2 = c.y2 + dy; }
-        }
-        render();
-      } else if (drag.mode === "marquee") {
-        state.marquee = { x: Math.min(p.x, drag.startX), y: Math.min(p.y, drag.startY), w: Math.abs(p.x - drag.startX), h: Math.abs(p.y - drag.startY) };
-        render();
-      } else if (drag.mode === "resize" && s) {
-        s.w = Math.max(8, drag.orig.w + (p.x - drag.startX));
-        s.h = Math.max(8, drag.orig.h + (p.y - drag.startY));
-        render();
-      } else if (drag.mode === "frame" && f) {
-        const dx = p.x - drag.startX, dy = p.y - drag.startY;
-        f.x = drag.orig.x + dx; f.y = drag.orig.y + dy;
-        for (const c of drag.children) {
-          const cs = state.canvas.shapes.find((x) => x.id === c.id);
-          if (!cs) continue;
-          cs.x = c.x + dx; cs.y = c.y + dy;
-          if (cs.type === "arrow") { cs.x2 = c.x2 + dx; cs.y2 = c.y2 + dy; }
-        }
-        render();
-      }
-    });
-    const upHandler = () => {
-      state.canvasDragging = false;
-      if (!drag) return;
-      const d = drag; drag = null;
-      if (d.mode === "create") {
-        const s = state.canvas.shapes.find((x) => x.id === d.id);
-        if (s) {
-          state.canvas.shapes = state.canvas.shapes.filter((x) => x.id !== d.id);
-          canvasSave([{ op: "add", shape: { ...s, fill: state.canvasFill } }]).then(() => {
-            state.canvasSel = state.canvas.shapes.find((x) => x.type === s.type && x.x === s.x)?.id ?? "";
-          });
-        }
-      } else if (d.mode === "createframe") {
-        const f = state.canvas.frames.find((x) => x.id === d.id);
-        if (f) {
-          state.canvas.frames = state.canvas.frames.filter((x) => x.id !== d.id);
-          canvasSave([{ op: "add_frame", frame: { name: `画板 ${state.canvas.frames.length + 1}`, x: f.x, y: f.y, w: f.w, h: f.h } }]).then(() => {
-            state.canvasFrameSel = state.canvas.frames.find((x) => x.x === f.x)?.id ?? "";
-          });
-        }
-      } else if (d.mode === "move" || d.mode === "resize" || d.mode === "multimove") {
-        const ids = selIds();
-        const ops = ids.map((sid) => {
-          const sh = state.canvas.shapes.find((x) => x.id === sid);
-          const patch = d.mode === "resize" && sid === d.id ? { w: sh.w, h: sh.h } : { x: sh.x, y: sh.y };
-          if (sh.type === "arrow" && d.mode !== "resize") { patch.x2 = sh.x2; patch.y2 = sh.y2; }
-          return { op: "update", id: sid, patch };
-        });
-        canvasSave(ops);
-      } else if (d.mode === "marquee") {
-        const mq = state.marquee;
-        state.marquee = null;
-        if (mq && (mq.w > 4 || mq.h > 4)) {
-          state.canvasMulti = state.canvas.shapes
-            .filter((s) => s.x + (s.w ?? 0) >= mq.x && s.x <= mq.x + mq.w && s.y + (s.h ?? 0) >= mq.y && s.y <= mq.y + mq.h)
-            .map((s) => s.id);
-          state.canvasSel = state.canvasMulti.at(-1) ?? "";
-        }
-        render();
-      } else if (d.mode === "frame") {
-        const f = state.canvas.frames.find((x) => x.id === d.id);
-        if (!f) return;
-        const ops = [{ op: "update_frame", id: d.id, patch: { x: f.x, y: f.y } }];
-        for (const c of d.children) {
-          const cs = state.canvas.shapes.find((x) => x.id === c.id);
-          if (!cs) continue;
-          const patch = { x: cs.x, y: cs.y };
-          if (cs.type === "arrow") { patch.x2 = cs.x2; patch.y2 = cs.y2; }
-          ops.push({ op: "update", id: c.id, patch });
-        }
-        canvasSave(ops);
-      }
-    };
-    window.__wudiCanvasUp = upHandler;
-    window.addEventListener("mouseup", upHandler);
-
-    // 键盘：Delete 删除 / 方向键微调 / ⌘D 复制（只注册一次，画布页激活时才响应）
-    if (!window.__wudiCanvasKeys) {
-      window.__wudiCanvasKeys = (ev) => {
-        if (state.view !== "detail" || state.tab !== "canvas" || state.busy) return;
-        const tag = ev.target?.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-        if (!state.canvasSel) return;
-        const s = state.canvas.shapes.find((x) => x.id === state.canvasSel);
-        if (!s) return;
-        if (ev.key === "z" && (ev.ctrlKey || ev.metaKey)) {
-          ev.preventDefault();
-          ev.shiftKey ? canvasRedoFn() : canvasUndoFn();
-          return;
-        }
-        if (ev.key === "a" && (ev.ctrlKey || ev.metaKey)) {
-          ev.preventDefault();
-          const scope = state.canvasFrameSel || "";
-          state.canvasMulti = state.canvas.shapes.filter((s) => !scope || s.frameId === scope).map((s) => s.id);
-          state.canvasSel = state.canvasMulti.at(-1) ?? "";
-          render();
-          return;
-        }
-        if (ev.key === "Escape") {
-          state.canvasSel = ""; state.canvasMulti = []; state.canvasFrameSel = "";
-          render();
-          return;
-        }
-        if (ev.key === "c" && (ev.ctrlKey || ev.metaKey)) {
-          canvasClip = selIds().map((id) => structuredClone(state.canvas.shapes.find((x) => x.id === id))).filter(Boolean);
-          return;
-        }
-        if (ev.key === "v" && (ev.ctrlKey || ev.metaKey)) {
-          ev.preventDefault();
-          if (!canvasClip.length) return;
-          canvasSave(canvasClip.map((sh, i) => ({ op: "add", shape: { ...sh, id: undefined, x: (sh.x ?? 40) + 24, y: (sh.y ?? 40) + 24 } })));
-          return;
-        }
-        if (ev.key === "Delete" || ev.key === "Backspace") {
-          ev.preventDefault();
-          const ids = selIds();
-          state.canvasSel = ""; state.canvasMulti = [];
-          canvasSave([{ op: "delete", ids }]);
-          return;
-        }
-        if (ev.key === "d" && (ev.ctrlKey || ev.metaKey)) {
-          ev.preventDefault();
-          canvasSave([{ op: "add", shape: { ...s, id: undefined, x: s.x + 24, y: s.y + 24 } }]);
-          return;
-        }
-        const step = ev.shiftKey ? 10 : 1;
-        const moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
-        if (moves[ev.key]) {
-          ev.preventDefault();
-          const patch = { x: Math.max(-2000, Math.min(8000, s.x + moves[ev.key][0])), y: Math.max(-2000, Math.min(8000, s.y + moves[ev.key][1])) };
-          if (s.type === "arrow") { patch.x2 = (s.x2 ?? s.x) + moves[ev.key][0]; patch.y2 = (s.y2 ?? s.y) + moves[ev.key][1]; }
-          canvasSave([{ op: "update", id: s.id, patch }]);
-        }
-      };
-      window.addEventListener("keydown", window.__wudiCanvasKeys);
-    }
-
-    // 导出 PNG：序列化世界组为 SVG → Image → canvas 2x → downloadFile（兜底灯箱右键保存）
-    document.getElementById("cv-png")?.addEventListener("click", async () => {
-      const world = svg.querySelector("#cv-world");
-      if (!world || !state.canvas.shapes.length) return;
-      const shapesAll = state.canvas.shapes;
-      const minX = Math.max(0, Math.min(...shapesAll.map((s) => s.x)) - 30);
-      const minY = Math.max(0, Math.min(...shapesAll.map((s) => s.y)) - 30);
-      const maxX = Math.min(8000, Math.max(...shapesAll.map((s) => s.x + (s.w ?? 0))) + 30);
-      const maxY = Math.min(8000, Math.max(...shapesAll.map((s) => s.y + (s.h ?? 0))) + 30);
-      const w = maxX - minX, h = maxY - minY;
-      const defs = svg.querySelector("defs")?.outerHTML ?? "";
-      const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${minX} ${minY} ${w} ${h}"><rect x="${minX}" y="${minY}" width="${w}" height="${h}" fill="#ffffff"/>${defs}${world.innerHTML}</svg>`;
-      const blob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const img = new Image();
-      img.onload = async () => {
-        const scale = 2;
-        const canvas = document.createElement("canvas");
-        canvas.width = w * scale; canvas.height = h * scale;
-        const ctx = canvas.getContext("2d");
-        ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        URL.revokeObjectURL(url);
-        const dataUrl = canvas.toDataURL("image/png");
-        const b64 = dataUrl.split(",")[1];
-        let saved = false;
-        try {
-          if (app.getHostCapabilities()?.downloadFile) {
-            await app.downloadFile({ contents: [{ mimeType: "image/png", blob: b64 }] });
-            saved = true;
-          }
-        } catch { /* 走灯箱兜底 */ }
-        if (!saved) previewImage(dataUrl, `画布导出 ${w}×${h}（右键/长按保存）`);
-        state.notice = { kind: "ok", text: saved ? `PNG 已导出（${w}×${h} @2x）` : `PNG 已生成（${w}×${h} @2x），已弹出预览——宿主下载能力不可用，请右键保存` };
-        render();
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); state.notice = { kind: "err", text: "PNG 渲染失败" }; render(); };
-      img.src = url;
-    });
-    svg.addEventListener("dblclick", (ev) => {
-      const frameLabel = ev.target?.dataset?.framelabel;
-      if (frameLabel) {
-        const f = state.canvas.frames.find((x) => x.id === frameLabel);
-        inputDialog(`画板「${f.name}」重命名：`, f.name).then((name) => {
-          if (name && name !== f.name) canvasSave([{ op: "update_frame", id: frameLabel, patch: { name } }]);
-        });
-        return;
-      }
-      const id = ev.target?.dataset?.id;
-      const s = state.canvas.shapes.find((x) => x.id === id);
-      if (!s) return;
-      const input = document.createElement("input");
-      input.value = s.text ?? "";
-      input.style.cssText = `position:fixed;left:${ev.clientX - 60}px;top:${ev.clientY - 14}px;width:160px;z-index:50;${INPUT_CSS}`;
-      document.body.appendChild(input);
-      input.focus(); input.select();
-      const commit = () => { input.remove(); canvasSave([{ op: "update", id: s.id, patch: { text: input.value.slice(0, 200) } }]); };
-      input.addEventListener("blur", commit);
-      input.addEventListener("keydown", (e) => { if (e.key === "Enter") commit(); });
-    });
-  }
-
-  function frameIdAt(x, y) {
-    const f = (state.canvas.frames ?? []).find((fr) => x >= fr.x && x <= fr.x + fr.w && y >= fr.y && y <= fr.y + fr.h);
-    return f?.id ?? "";
-  }
-
-  function fitView() {
-    const frames = state.canvas.frames ?? [];
-    if (!frames.length) { state.cv = { tx: 40, ty: 40, scale: 1 }; render(); return; }
-    const minX = Math.min(...frames.map((f) => f.x)), minY = Math.min(...frames.map((f) => f.y));
-    const maxX = Math.max(...frames.map((f) => f.x + f.w)), maxY = Math.max(...frames.map((f) => f.y + f.h));
-    const scale = Math.min(2, Math.max(0.15, Math.min(900 / (maxX - minX + 160), 500 / (maxY - minY + 160))));
-    state.cv.scale = Math.round(scale * 100) / 100;
-    state.cv.tx = 60 - minX * state.cv.scale;
-    state.cv.ty = 40 - minY * state.cv.scale;
-    render();
   }
 
   /** 输入弹窗（Electron 无 window.prompt）：Promise<输入值|null>。 */
@@ -2052,7 +1055,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.34.5" },
+              hostInfo: { name: "wudi-workbench", version: "0.35.0" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -2210,7 +1213,8 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
     $root().querySelectorAll("[data-remove]").forEach((b) =>
       b.addEventListener("click", async (ev) => {
         ev.stopPropagation();
-        if (!confirm("从注册表移除该项目？（不影响项目文件）")) return;
+        const okRemove = await confirmDialog(`从工作台移除项目「${(state.projects?.projects ?? []).find((x) => x.id === b.dataset.remove)?.name ?? b.dataset.remove}」？（不影响项目文件）`);
+        if (!okRemove) return;
         setBusy(true);
         try { await callTool("wudi_projects_remove", { id: b.dataset.remove }); await loadAll(); } catch (err) {
           state.notice = { kind: "err", text: String(err.message ?? err).slice(0, 400) };
@@ -2336,44 +1340,51 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
     $root().querySelectorAll("[data-cv-open]").forEach((card) =>
       card.addEventListener("click", () => openOpEmbed(card.dataset.cvOpen))
     );
+    /* 画布重命名 / 删除（CRUD 的改与删） */
+    $root().querySelectorAll("[data-cv-rename]").forEach((b) =>
+      b.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        const path = b.dataset.cvRename;
+        const oldName = path.replace(/^designs\//, "").replace(/\.(fig|pen)$/i, "");
+        const name = await inputDialog(`重命名画布（当前：${oldName}）：`, oldName);
+        if (!name || name === oldName) return;
+        setBusy(true);
+        try {
+          const res = await callTool("wudi_design_rename", { path, name: `${name}.fig` });
+          state.notice = { kind: "ok", text: res.content?.map((c) => c.text).join("\n") ?? `已重命名为 ${name}` };
+          setBusy(false);
+          await loadDesign();
+        } catch (err) {
+          state.notice = { kind: "err", text: `重命名失败：${String(err.message ?? err).slice(0, 300)}` };
+          setBusy(false);
+        }
+      })
+    );
+    $root().querySelectorAll("[data-cv-delete]").forEach((b) =>
+      b.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        const path = b.dataset.cvDelete;
+        const okDel = await confirmDialog(`删除画布「${path}」？文件将被移除，不可恢复。`);
+        if (!okDel) return;
+        setBusy(true);
+        try {
+          const res = await callTool("wudi_design_delete", { path });
+          state.notice = { kind: "ok", text: res.content?.map((c) => c.text).join("\n") ?? `已删除 ${path}` };
+          if (state.opEmbed?.path === path) closeOpEmbed();
+          setBusy(false);
+          await loadDesign();
+        } catch (err) {
+          state.notice = { kind: "err", text: `删除失败：${String(err.message ?? err).slice(0, 300)}` };
+          setBusy(false);
+        }
+      })
+    );
     document.getElementById("btn-cv-create-toggle")?.addEventListener("click", () => {
       state.canvasCreateOpen = true;
       render();
       document.getElementById("op-name")?.focus();
     });
-    document.getElementById("btn-op-wire")?.addEventListener("click", async () => {
-      const name = String(document.getElementById("op-name-wire")?.value ?? "").trim() || `wireframe-${Date.now().toString(36)}`;
-      try {
-        if (!app.getHostCapabilities()?.message) {
-          state.notice = { kind: "err", text: "宿主不支持从面板发消息；请在会话里说「把无敌画布线框转入 OpenPencil 设计稿」。" };
-          render();
-          return;
-        }
-        await app.sendMessage({ role: "user", content: { type: "text", text: `请把无敌画布的线框转成 OpenPencil 设计稿：先用 wudi_canvas_get 读取全部形状，再用 OpenPencil 的 new_design 新建 designs/${name}.fig，按坐标用 create_shape 重建（rect→FRAME 或 RECTANGLE、text→TEXT、fill 映射 fills、ellipse→ELLIPSE），完成后 export_image 渲染到 .wudi/design/renders/ 并告诉我结果。` } });
-      } catch (err) {
-        state.notice = { kind: "err", text: `唤起失败：${String(err.message ?? err).slice(0, 300)}` };
-        render();
-      }
-    });
-    document.getElementById("btn-tokens-edit")?.addEventListener("click", tokensEditDialog);
-    document.getElementById("btn-op-new")?.addEventListener("click", async () => {
-      // 创建项目画布：new_design 建稿（经 wudi 代理直连 openpencil 子进程）→ 自动进内嵌编辑器
-      const name = String(document.getElementById("op-name")?.value ?? "").trim() || "ui";
-      if (DEMO) { await openOpEmbed(`designs/${name}.fig`); return; }
-      setBusy(true);
-      try {
-        const res = await callTool("new_design", { path: `designs/${name}.fig` });
-        state.notice = { kind: "ok", text: res.content?.map((c) => c.text).join("\n") ?? `已创建画布 designs/${name}.fig` };
-        state.canvasCreateOpen = false;
-        setBusy(false);
-        await loadDesign();
-        await openOpEmbed(`designs/${name}.fig`);
-        return;
-      } catch (err) {
-        state.notice = { kind: "err", text: `创建画布失败：${String(err.message ?? err).slice(0, 400)}` };
-      }
-      setBusy(false);
-    });$root().querySelectorAll("[data-act]").forEach((b) =>
+root().querySelectorAll("[data-act]").forEach((b) =>
       b.addEventListener("click", () => {
         const act = b.dataset.act;
         if (act === "goto-deploys") { state.view = "detail"; state.tab = "deploys"; }
@@ -2385,54 +1396,6 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
         saveWidgetState();
       })
     );
-    document.getElementById("btn-fig-save")?.addEventListener("click", async () => {
-      const url = String(document.getElementById("fig-url")?.value ?? "").trim();
-      setBusy(true);
-      try {
-        await callTool("wudi_figma_link", { url });
-        state.figmaUrl = url;
-        state.notice = { kind: "ok", text: "Figma 链接已保存。" };
-      } catch (err) {
-        state.notice = { kind: "err", text: String(err.message ?? err).slice(0, 300) };
-      }
-      setBusy(false);
-    });
-    document.getElementById("btn-fig-open")?.addEventListener("click", async () => {
-      const url = String(document.getElementById("fig-url")?.value ?? "").trim() || state.figmaUrl;
-      if (!url) return;
-      try {
-        await app.openLink({ url });
-      } catch (err) {
-        state.notice = { kind: "err", text: `打开失败：${String(err.message ?? err).slice(0, 200)}` };
-        render();
-      }
-    });
-    document.getElementById("btn-dc-new")?.addEventListener("click", async () => {
-      try {
-        if (!app.getHostCapabilities()?.message) {
-          state.notice = { kind: "err", text: "宿主不支持从面板发消息；请在会话里说「用 DesignCraft 新建设计文档」。" };
-          render();
-          return;
-        }
-        await app.sendMessage({ role: "user", content: { type: "text", text: "请用 DesignCraft 插件新建一个 1440x900 的设计文档（new_document），并在面板打开编辑器，告诉我文档状态。" } });
-      } catch (err) {
-        state.notice = { kind: "err", text: `唤起失败：${String(err.message ?? err).slice(0, 300)}` };
-        render();
-      }
-    });
-    document.getElementById("btn-dc-render")?.addEventListener("click", async () => {
-      try {
-        if (!app.getHostCapabilities()?.message) {
-          state.notice = { kind: "err", text: "宿主不支持从面板发消息；请在会话里说「用 DesignCraft 渲染当前页到 .wudi/design/renders/」。" };
-          render();
-          return;
-        }
-        await app.sendMessage({ role: "user", content: { type: "text", text: "请用 DesignCraft 的 render_page 或 export_png 把当前设计页渲染为 PNG，保存到 .wudi/design/renders/ 目录（文件名用 设计名-时间戳.png），完成后告诉我路径。" } });
-      } catch (err) {
-        state.notice = { kind: "err", text: `唤起失败：${String(err.message ?? err).slice(0, 300)}` };
-        render();
-      }
-    });
     document.getElementById("btn-ex-new")?.addEventListener("click", async () => {
       try {
         if (!app.getHostCapabilities()?.message) {
@@ -2476,38 +1439,6 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
         state.notice = { kind: "err", text: String(err.message ?? err).slice(0, 500) };
         setBusy(false);
       }
-    });
-    document.getElementById("btn-gen")?.addEventListener("click", async () => {
-      const name = String(document.getElementById("gen-name")?.value ?? "").trim();
-      const tmpl = String(document.getElementById("gen-template")?.value ?? "dashboard");
-      if (!name) {
-        state.notice = { kind: "err", text: "请先填页面名称（这是生成 HTML 设计稿的流程；只想快速建 .fig？用上方「新建并编辑」）。" };
-        render();
-        return;
-      }
-      try {
-        if (!app.getHostCapabilities()?.message) {
-          state.notice = { kind: "err", text: "宿主不支持从面板发消息；请在会话里直接执行 /wudi-ui。" };
-          render();
-          return;
-        }
-        state.notice = { kind: "ok", text: `已唤起 Agent：用 ${tmpl} 模板生成「${name}」设计稿，完成后回到本页刷新即可看到。` };
-        render();
-        await app.sendMessage({ role: "user", content: { type: "text", text: `请按 wudi-ui 技能的流程，从 ${tmpl} 模板起步为当前项目生成名为「${name}」的 UI 设计稿（复制模板到 .wudi/design/mockups/${name}-v1.html 后按业务改造、接入项目 tokens、截图自检一轮）。完成后告诉我。` } });
-      } catch (err) {
-        state.notice = { kind: "err", text: `唤起失败：${String(err.message ?? err).slice(0, 300)}` };
-        render();
-      }
-    });
-    document.getElementById("btn-export")?.addEventListener("click", async () => {
-      setBusy(true);
-      try {
-        const res = await callTool("wudi_design_tokens_export", { format: "css" });
-        state.notice = { kind: "ok", text: res.content?.map((c) => c.text).join("\n") ?? "已导出" };
-      } catch (err) {
-        state.notice = { kind: "err", text: String(err.message ?? err).slice(0, 500) };
-      }
-      setBusy(false);
     });
     $root().querySelectorAll(".row.clickable").forEach((el) =>
       el.addEventListener("click", async () => {
@@ -2581,27 +1512,10 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
 
   async function loadDesign(opts = {}) {
     if (DEMO) return;
-    state.design = null;
     try {
-      const [tokensRes, listRes] = await Promise.all([
-        callTool("wudi_design_tokens_get", {}).catch(() => null),
-        callTool("wudi_design_list", {}).catch(() => null),
-      ]);
-      state.design = {
-        tokens: tokensRes?.structuredContent?.tokens ?? null,
-        files: listRes?.structuredContent?.files ?? [],
-      };
-      try {
-        const linkRes = await callTool("wudi_figma_link", {});
-        state.figmaUrl = linkRes?.structuredContent?.url ?? "";
-      } catch { state.figmaUrl = ""; }
-      try {
-        const ds = await callTool("wudi_designs_list", {});
-        state.designs = struct(ds);
-      } catch { state.designs = null; }
-    } catch {
-      state.design = { tokens: null, files: [] };
-    }
+      const ds = await callTool("wudi_designs_list", {});
+      state.designs = struct(ds);
+    } catch { state.designs = null; }
     /* 设计页 = 画布：从项目导航进入设计页且只有一个画布时，直接进入编辑器 */
     if (opts?.autoEnter && state.view === "detail" && state.tab === "design" && !state.opEmbed) {
       const list = state.designs?.designs ?? [];
@@ -2662,44 +1576,6 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
         { name: "landing.fig", path: "designs/landing.fig", format: "fig（可编辑）", sizeKB: 42.1, updatedAt: iso(1800) },
       ],
     };
-    state.design = {
-      tokens: {
-        color: { primary: "#0066dd", accent: "#7c5cf0", text: "#171a21", bg: "#ffffff", ok: "#0e8a4f", err: "#c73a33" },
-        spacing: { sm: "8px", md: "16px", lg: "24px" },
-        radius: { md: "12px" },
-        typography: { "font-size-base": "13px" },
-      },
-      files: [
-        { path: ".wudi/design/mockups/workbench-v3.html", sizeKB: 48.2, updatedAt: iso(120) },
-        { path: ".wudi/design/mockups/workbench-v2.html", sizeKB: 44.1, updatedAt: iso(300) },
-        { path: ".wudi/design/figma/workbench-home.png", sizeKB: 320.5, updatedAt: iso(90) },
-        { path: ".wudi/design/figma/deploy-flow.png", sizeKB: 210.2, updatedAt: iso(95) },
-        { path: ".wudi/design/tokens.json", sizeKB: 0.8, updatedAt: iso(130) },
-        { path: ".wudi/design/tokens.css", sizeKB: 0.5, updatedAt: iso(130) },
-      ],
-    };
-  }
-
-  function loadDemoCanvas() {
-    state.cv = { tx: 30, ty: 30, scale: 0.55 };
-    state.canvas = {
-      frames: [
-        { id: "f-d1", name: "工作台-1440", x: 0, y: 0, w: 1440, h: 900, background: "#ffffff" },
-        { id: "f-d2", name: "移动端-375", x: 1560, y: 0, w: 375, h: 812, background: "#ffffff" },
-      ],
-      shapes: [
-        { id: "d-r1", type: "rect", frameId: "f-d1", x: 40, y: 40, w: 260, h: 800, fill: "#e9eefe", stroke: "#0066dd", fontSize: 14, text: "" },
-        { id: "d-t1", type: "text", frameId: "f-d1", x: 70, y: 90, w: 200, h: 24, fill: "", stroke: "#171a21", fontSize: 18, text: "侧栏导航" },
-        { id: "d-r2", type: "rect", frameId: "f-d1", x: 330, y: 40, w: 1070, h: 120, fill: "#f3ecfe", stroke: "#7c5cf0", fontSize: 14, text: "" },
-        { id: "d-t2", type: "text", frameId: "f-d1", x: 360, y: 90, w: 300, h: 22, fill: "", stroke: "#171a21", fontSize: 16, text: "统计卡片区 ×4" },
-        { id: "d-r3", type: "rect", frameId: "f-d1", x: 330, y: 180, w: 1070, h: 560, fill: "#e2f5ea", stroke: "#0e8a4f", fontSize: 14, text: "" },
-        { id: "d-t3", type: "text", frameId: "f-d1", x: 360, y: 220, w: 300, h: 22, fill: "", stroke: "#171a21", fontSize: 16, text: "表格区" },
-        { id: "d-m1", type: "rect", frameId: "f-d2", x: 1590, y: 60, w: 315, h: 120, fill: "#f3ecfe", stroke: "#7c5cf0", fontSize: 14, text: "" },
-        { id: "d-m2", type: "text", frameId: "f-d2", x: 1610, y: 100, w: 240, h: 22, fill: "", stroke: "#171a21", fontSize: 15, text: "移动端首屏" },
-        { id: "d-m3", type: "rect", frameId: "f-d2", x: 1590, y: 200, w: 315, h: 420, fill: "#e9eefe", stroke: "#0066dd", fontSize: 14, text: "" },
-        { id: "d-m4", type: "text", frameId: "f-d2", x: 1610, y: 240, w: 240, h: 22, fill: "", stroke: "#171a21", fontSize: 15, text: "列表区" },
-      ],
-    };
   }
 
   /* ---------- 启动 ---------- */
@@ -2726,20 +1602,6 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
       return;
     }
     applyTheme();
-    try {
-      // OpenPencil 式实时协同：订阅画布变更桥，Agent 操作实时同步到面板
-      const bridgeRes = await callTool("wudi_canvas_bridge", {}).catch(() => null);
-      const bridgeUrl = bridgeRes?.structuredContent?.url;
-      if (bridgeUrl) {
-        const es = new EventSource(bridgeUrl);
-        es.onmessage = (ev) => {
-          try {
-            const msg = JSON.parse(ev.data);
-            if (msg.type === "canvas-changed" && !state.canvasBusy && !state.canvasDragging) loadCanvas();
-          } catch { /* 忽略畸形消息 */ }
-        };
-      }
-    } catch { /* 桥不可用时降级为手动刷新 */ }
     try {
       render();          // 先渲染 landing（带加载态）
       await loadAll();   // 当前项目数据 + 注册表（loadAll 尾部在 landing 视图会拉项目列表）

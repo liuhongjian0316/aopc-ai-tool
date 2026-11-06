@@ -6,7 +6,7 @@ import { dirname as dirname2, join as join4, resolve as resolve4 } from "node:pa
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // src/tools.ts
-import { existsSync as existsSync3, mkdirSync as mkdirSync2, readdirSync as readdirSync2, readFileSync as readFileSync2, statSync, writeFileSync as writeFileSync2 } from "node:fs";
+import { existsSync as existsSync3, mkdirSync as mkdirSync2, readdirSync as readdirSync2, readFileSync as readFileSync2, renameSync as renameSync2, rmSync, statSync, writeFileSync as writeFileSync2 } from "node:fs";
 import { join as join2, resolve as resolve2 } from "node:path";
 
 // src/store.ts
@@ -1224,6 +1224,27 @@ var TOOLS = [
     inputSchema: { type: "object", properties: {} }
   },
   {
+    name: "wudi_design_delete",
+    description: "\u5220\u9664\u5DE5\u4F5C\u533A designs/ \u76EE\u5F55\u4E0B\u7684\u8BBE\u8BA1\u7A3F\u6587\u4EF6\uFF08.fig/.pen\uFF09\u3002\u4EC5\u5141\u8BB8 designs/ \u76EE\u5F55\u5185\u7684\u6587\u4EF6\uFF1B\u82E5\u7F16\u8F91\u5668\u6B63\u6253\u5F00\u8BE5\u8BBE\u8BA1\u7A3F\uFF0C\u5EFA\u8BAE\u5148\u5173\u95ED\u518D\u5220\u9664\u3002",
+    inputSchema: {
+      type: "object",
+      properties: { path: { type: "string", description: "\u8BBE\u8BA1\u7A3F\u8DEF\u5F84\uFF0C\u5982 designs/old.fig" } },
+      required: ["path"]
+    }
+  },
+  {
+    name: "wudi_design_rename",
+    description: "\u91CD\u547D\u540D\u5DE5\u4F5C\u533A designs/ \u76EE\u5F55\u4E0B\u7684\u8BBE\u8BA1\u7A3F\u6587\u4EF6\uFF08.fig/.pen\uFF09\u3002\u4EC5\u5141\u8BB8 designs/ \u76EE\u5F55\u5185\u64CD\u4F5C\uFF1B\u76EE\u6807\u540D\u5DF2\u5B58\u5728\u65F6\u62D2\u7EDD\u3002",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "\u73B0\u6709\u8BBE\u8BA1\u7A3F\u8DEF\u5F84\uFF0C\u5982 designs/old.fig" },
+        name: { type: "string", description: "\u65B0\u6587\u4EF6\u540D\uFF0C\u5982 new.fig\uFF08\u4E0D\u542B\u76EE\u5F55\uFF09" }
+      },
+      required: ["path", "name"]
+    }
+  },
+  {
     name: "wudi_figma_link",
     description: "\u8BB0\u4F4F/\u67E5\u770B\u9879\u76EE\u7684 Figma \u6587\u4EF6\u94FE\u63A5\uFF08https://www.figma.com/ \u5F00\u5934\uFF09\u3002\u8BBE\u7F6E\u540E\u9762\u677F\u8BBE\u8BA1\u9875\u53EF\u4E00\u952E\u5728\u6D4F\u89C8\u5668\u6253\u5F00 Figma \u5B8C\u6574\u7F16\u8F91\u5668\u3002\u6CE8\u610F\uFF1AFigma API \u53EA\u8BFB\uFF0CAgent \u80FD\u8BFB\u8BBE\u8BA1\u4F46\u6539\u4E0D\u4E86 Figma \u6587\u4EF6\uFF1B\u9700\u8981 Agent \u5199\u7684\u8BBE\u8BA1\u8D70 Excalidraw\u3002",
     _meta: UI_META,
@@ -1301,6 +1322,10 @@ async function callTool(name, args = {}) {
         return toolFigmaLink(args);
       case "wudi_designs_list":
         return toolDesignsList();
+      case "wudi_design_delete":
+        return toolDesignDelete(args);
+      case "wudi_design_rename":
+        return toolDesignRename(args);
       case "wudi_tokens_compare":
         return toolTokensCompare(args);
       case "wudi_canvas_get":
@@ -2585,6 +2610,45 @@ function toolTokensCompare(args = {}) {
   ].filter(Boolean);
   return ok(lines.join("\n").slice(0, 3e4), { added, changed, removed, same });
 }
+function resolveDesignFile(p) {
+  const dir = resolve2(join2(projectRoot(), "designs"));
+  const base = String(p ?? "").trim().replace(/^designs\//i, "");
+  if (!/^[\w.-]+\.(fig|pen)$/i.test(base)) throw new Error(`\u975E\u6CD5\u8BBE\u8BA1\u7A3F\u540D\uFF1A${p}\uFF08\u4EC5\u5141\u8BB8 designs/<\u540D\u79F0>.fig/.pen\uFF09`);
+  const file = resolve2(dir, base);
+  if (!file.startsWith(dir + "/")) throw new Error(`\u975E\u6CD5\u8BBE\u8BA1\u7A3F\u8DEF\u5F84\uFF1A${p}`);
+  return { dir, file, base };
+}
+function toolDesignDelete(args = {}) {
+  const path2 = String(args?.path ?? "").trim();
+  if (!path2) return fail("\u7F3A\u5C11 path\uFF1A\u8981\u5220\u9664\u7684\u8BBE\u8BA1\u7A3F\u8DEF\u5F84\uFF0C\u5982 designs/old.fig\u3002");
+  let file;
+  try {
+    file = resolveDesignFile(path2).file;
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  if (!existsSync3(file)) return fail(`\u8BBE\u8BA1\u7A3F\u4E0D\u5B58\u5728\uFF1A${path2}`);
+  rmSync(file);
+  return ok(`\u5DF2\u5220\u9664\u8BBE\u8BA1\u7A3F\uFF1A${path2}`);
+}
+function toolDesignRename(args = {}) {
+  const path2 = String(args?.path ?? "").trim();
+  const name = String(args?.name ?? "").trim();
+  if (!path2 || !name) return fail("\u7F3A\u5C11\u53C2\u6570\uFF1Apath\uFF08\u73B0\u6709\u8BBE\u8BA1\u7A3F\uFF09\u4E0E name\uFF08\u65B0\u6587\u4EF6\u540D\uFF0C\u5982 new.fig\uFF09\u3002");
+  let dir, file, base;
+  try {
+    ({ dir, file, base } = resolveDesignFile(path2));
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  if (!/^[\w.-]+\.(fig|pen)$/i.test(name)) return fail(`\u975E\u6CD5\u65B0\u6587\u4EF6\u540D\uFF1A${name}\uFF08\u4EC5\u5141\u8BB8 <\u540D\u79F0>.fig/.pen\uFF09`);
+  if (!existsSync3(file)) return fail(`\u8BBE\u8BA1\u7A3F\u4E0D\u5B58\u5728\uFF1A${path2}`);
+  const target = resolve2(dir, name);
+  if (!target.startsWith(dir + "/")) return fail(`\u975E\u6CD5\u76EE\u6807\u8DEF\u5F84\uFF1A${name}`);
+  if (existsSync3(target)) return fail(`\u76EE\u6807\u5DF2\u5B58\u5728\uFF1Adesigns/${name}`);
+  renameSync2(file, target);
+  return ok(`\u5DF2\u91CD\u547D\u540D\uFF1A${base} \u2192 designs/${name}`, { path: `designs/${name}` });
+}
 function toolDesignsList() {
   const dir = join2(projectRoot(), "designs");
   const designs = [];
@@ -2842,7 +2906,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.34.5" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.35.0" };
 var PANEL_URI = "ui://wudi-coding/panel.html";
 var PANEL_MIME = "text/html;profile=mcp-app";
 var panelPath = resolve4(join4(dirname2(fileURLToPath2(import.meta.url)), "ui", "panel.html"));

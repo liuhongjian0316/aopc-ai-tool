@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.34.5",
+      "version": "0.35.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,15 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.35.0",
+          "date": "2026-11-06",
+          "changes": [
+            "项目删除修复：AOPC 沙箱禁用原生 confirm()（永远返回 false，删除从未生效）；改用自定义确认弹窗，项目卡移除按钮常显",
+            "画布 CRUD：新增 wudi_design_delete / wudi_design_rename（designs/ 内 .fig/.pen，防路径穿越）；设计页画布卡支持重命名/删除，与创建/进入构成完整增删改查",
+            "设计页收敛为 openPencil 画布：移除「设计资产」「更多工具」折叠区（DesignCraft/Figma/HTML 稿生成/线框转换）；移除「画布」标签页（无敌线框实验画布下线，Agent 侧 wudi_canvas_* 工具保留）"
+          ]
+        },
         {
           "version": "0.34.5",
           "date": "2026-11-05",

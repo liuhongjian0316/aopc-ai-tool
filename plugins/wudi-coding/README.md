@@ -326,6 +326,14 @@ plugins/wudi-coding/
 - 宿主对页面发起的 `resources/read` 有 **8 MiB 解码上限**（超出直接报 `resource_too_large`，面板实例可能被关掉 → 「MCP App connection is no longer available」）；完整 Noto Sans SC（7.94MiB）贴着红线。
 - 用 fontTools 按 **GB2312 全字符集**（6763 汉字 + 拉丁 + 常用标点，共 7904 字符）子集化为 **1.92MiB**，字形覆盖验证通过（测试用字全部命中）；离线可用、远离大小上限。
 
+## 画布 CRUD 与面板收敛（v0.35.0）
+
+- **项目支持删除**：项目卡的移除按钮改为常显；删除确认改用自定义弹窗（AOPC 沙箱禁用原生 `confirm()`，此前确认永远返回 false 导致删除从未生效——这就是「项目不支持删除」的原因）。
+- **画布 CRUD**：新增 `wudi_design_delete` / `wudi_design_rename`（仅允许 designs/ 内 .fig/.pen，防路径穿越）；设计页画布卡带「重命名 ✎ / 删除 ×」，配合创建/进入即完整增删改查。
+- **设计页收敛为画布**：「设计资产」「更多工具」（DesignCraft / Figma / HTML 设计稿生成 / 线框转换）整块移除——设计工作全部基于 openPencil 画布；总览的「设计产物」统计改为「设计画布」数。
+- **移除「画布」标签页**：无敌线框实验画布（renderCanvas + 相关状态/SSE 订阅）整体下线；Agent 侧 `wudi_canvas_*` 工具保留，工作台的设计入口统一为「设计」页的 openPencil 画布。
+- smoke 新增 6 项画布 CRUD 回归（109 项全绿）。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。

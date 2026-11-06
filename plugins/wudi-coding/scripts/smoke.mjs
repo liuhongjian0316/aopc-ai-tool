@@ -379,6 +379,20 @@ async function protocolTests() {
     check("op_proxy: new_design 经 wudi 代理建稿", !errOf(r) && textOf(r).includes("proxy-smoke.fig"), textOf(r).slice(0, 160));
     r = await s.call("tools/call", { name: "wudi_designs_list", arguments: {} });
     check("op_proxy: designs_list 发现代理建的稿", (r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "proxy-smoke.fig"));
+    /* 画布 CRUD：删除 / 重命名 / 防路径穿越 */
+    r = await s.call("tools/call", { name: "wudi_design_delete", arguments: { path: "designs/proxy-smoke.fig" } });
+    check("design_delete: 删除设计稿", !errOf(r) && textOf(r).includes("已删除"));
+    r = await s.call("tools/call", { name: "wudi_designs_list", arguments: {} });
+    check("design_delete: 列表不再包含", !(r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "proxy-smoke.fig"));
+    r = await s.call("tools/call", { name: "wudi_design_rename", arguments: { path: "designs/proxy-smoke.fig", name: "x.fig" } });
+    check("design_rename: 不存在时拒绝", errOf(r) && textOf(r).includes("不存在"));
+    r = await s.call("tools/call", { name: "new_design", arguments: { path: "designs/RenOld.fig" } });
+    r = await s.call("tools/call", { name: "wudi_design_rename", arguments: { path: "designs/RenOld.fig", name: "RenNew.fig" } });
+    check("design_rename: 重命名成功", !errOf(r) && textOf(r).includes("RenNew.fig"));
+    r = await s.call("tools/call", { name: "wudi_designs_list", arguments: {} });
+    check("design_rename: 列表包含新名", (r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "RenNew.fig"));
+    r = await s.call("tools/call", { name: "wudi_design_rename", arguments: { path: "designs/RenNew.fig", name: "../evil.fig" } });
+    check("design_rename: 非法名拒绝", errOf(r));
     r = await s.call("tools/call", { name: "wudi_canvas_bridge", arguments: {} });
     const bridgeUrlSc = r?.result?.structuredContent?.url ?? "";
     check("op_embed: 协同桥端点可用", bridgeUrlSc.startsWith("http://127.0.0.1:"));
