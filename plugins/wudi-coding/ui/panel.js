@@ -19,7 +19,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.35.0" },
+    { name: "wudi-coding", version: "0.35.1" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -602,7 +602,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.35.0" },
+              hostInfo: { name: "wudi-workbench", version: "0.35.1" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -931,7 +931,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
       render();
       document.getElementById("op-name")?.focus();
     });
-root().querySelectorAll("[data-act]").forEach((b) =>
+    $root().querySelectorAll("[data-act]").forEach((b) =>
       b.addEventListener("click", () => {
         const act = b.dataset.act;
         if (act === "goto-deploys") { state.view = "detail"; state.tab = "deploys"; }

@@ -2906,7 +2906,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.35.0" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.35.1" };
 var PANEL_URI = "ui://wudi-coding/panel.html";
 var PANEL_MIME = "text/html;profile=mcp-app";
 var panelPath = resolve4(join4(dirname2(fileURLToPath2(import.meta.url)), "ui", "panel.html"));

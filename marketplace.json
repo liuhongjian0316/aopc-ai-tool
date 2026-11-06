@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.35.0",
+      "version": "0.35.1",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,13 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.35.1",
+          "date": "2026-11-06",
+          "changes": [
+            "修复面板渲染出错（root is not a function）：上一轮按钮替换时吞掉了 $root() 的 $，设计页/数据绑定崩溃；已修复并全量渲染验证"
+          ]
+        },
         {
           "version": "0.35.0",
           "date": "2026-11-06",
