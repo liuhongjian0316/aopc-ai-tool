@@ -1417,6 +1417,42 @@ console.log("\n[T55] 升级后首次唤醒宣布演化;同版本不宣布");
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// ---------- T56 请示队列:request/decide 生命周期 ----------
+
+console.log("\n[T56] self_mission request/decide:B 类请示入队/批复/永久规则化");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const kb = fs.mkdtempSync(path.join(os.tmpdir(), "sa-kb-"));
+  spawnSync("git", ["init"], { cwd: kb, encoding: "utf8" });
+  spawnSync("git", ["config", "user.email", "agent@test"], { cwd: kb, encoding: "utf8" });
+  spawnSync("git", ["config", "user.name", "guanji-test"], { cwd: kb, encoding: "utf8" });
+  fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify({ knowledgeBase: { path: kb } }));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    return { text: m?.result?.content?.[0]?.text || "", sc: m?.result?.structuredContent, isError: !!m?.result?.isError };
+  };
+  call("self_mission", { action: "start", title: "测试使命", autonomy: "full" });
+  const r1 = call("self_mission", { action: "request", question: "抖音开放平台授权方式选哪种?", options: "A: dy_auth_listen(推荐) / B: 手动 URL 换取", type: "B" });
+  check("请示入队得 r001", !r1.isError && r1.text.includes("r001") && r1.text.includes("不等待"), r1.text.slice(0, 200));
+  const g = call("self_mission", { action: "get" });
+  check("get 展示待用户决策", g.text.includes("【待用户决策】1 条") && g.text.includes("[r001/B]"), g.text.slice(0, 300));
+  check("structured 带待决策队列", g.sc?.mission?.pendingRequests?.length === 1 && g.sc.mission.pendingRequests[0].type === "B");
+  const d = call("self_mission", { action: "decide", id: "r001", decision: "选 A:dy_auth_listen 授权,授权后保持 profile 登录态", makeRule: true });
+  check("批复成功并固化规则", !d.isError && d.text.includes("已批复") && d.text.includes("已固化为 ops-fixes 规则"), d.text.slice(0, 250));
+  const ops = fs.readFileSync(path.join(dir, "self", "playbooks", "ops-fixes.md"), "utf8");
+  check("规则带 r001 出处", ops.includes("← r001"), ops.slice(-200));
+  const d2 = call("self_mission", { action: "decide", id: "r001", decision: "重复批复" });
+  check("重复批复拒绝", d2.isError && d2.text.includes("未找到待决策"), d2.text.slice(0, 150));
+  const r3 = call("self_mission", { action: "request", question: "第二个问题" });
+  check("第二个请示 r002", !r3.isError && r3.text.includes("r002"));
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(kb, { recursive: true, force: true });
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);

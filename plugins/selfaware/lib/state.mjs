@@ -157,6 +157,8 @@ export function listEventSids() {
 const MISSION_LOG_CAP = 200;
 const MISSION_OPEN_CAP = 30;
 const MISSION_LEDGER_CAP = 60;
+const MISSION_REQUESTS_PENDING_CAP = 30;
+const MISSION_REQUESTS_DECIDED_KEEP = 10;
 
 export function readMission() {
   try {
@@ -167,13 +169,15 @@ export function readMission() {
         log: Array.isArray(j.log) ? j.log : [],
         open: Array.isArray(j.open) ? j.open : [], // 1.5.0:待研究困难队列
         ledger: Array.isArray(j.ledger) ? j.ledger : [], // 1.8.0:内容实验台账
+        requests: Array.isArray(j.requests) ? j.requests : [], // 3.1.0:待用户决策请示队列
         // 1.8.0 事故教训:readMission 必须透传序号字段,否则每次读取后 seq 从 1 重新计数,
         // 第二条 publish/obstacle 会顶掉第一条(T43 抓出)
         ledgerSeq: Number.isFinite(j.ledgerSeq) ? j.ledgerSeq : 0,
         openSeq: Number.isFinite(j.openSeq) ? j.openSeq : 0,
+        requestSeq: Number.isFinite(j.requestSeq) ? j.requestSeq : 0,
       };
   } catch {}
-  return { active: null, log: [], open: [], ledger: [], ledgerSeq: 0, openSeq: 0 };
+  return { active: null, log: [], open: [], ledger: [], requests: [], ledgerSeq: 0, openSeq: 0, requestSeq: 0 };
 }
 
 export function writeMission(m) {
@@ -187,6 +191,10 @@ export function writeMission(m) {
   const ledMeasured = (m.ledger || []).filter((l) => l.status === "measured").slice(-MISSION_LEDGER_CAP / 2);
   const ledAwaiting = (m.ledger || []).filter((l) => l.status !== "measured");
   m.ledger = [...ledAwaiting, ...ledMeasured];
+  // 请示队列:pending 全保留(封顶 30),decided 留最近 10 条备查
+  const reqPending = (m.requests || []).filter((r) => r.status === "pending").slice(-MISSION_REQUESTS_PENDING_CAP);
+  const reqDecided = (m.requests || []).filter((r) => r.status === "decided").slice(-MISSION_REQUESTS_DECIDED_KEEP);
+  m.requests = [...reqPending, ...reqDecided];
   const tmp = missionPath() + ".tmp-" + process.pid;
   fs.writeFileSync(tmp, JSON.stringify(m, null, 2) + "\n");
   fs.renameSync(tmp, missionPath());

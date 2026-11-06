@@ -6,7 +6,7 @@ const { App } = GUANJI_SDK;
 
 (() => {
   const app = new App(
-    { name: "selfaware", version: "3.0.0" },
+    { name: "selfaware", version: "3.1.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
 

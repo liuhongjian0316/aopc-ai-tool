@@ -89,7 +89,7 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["get", "start", "note", "close", "obstacle", "resolve", "publish", "measure", "void"] },
+        action: { type: "string", enum: ["get", "start", "note", "close", "obstacle", "resolve", "publish", "measure", "void", "request", "decide"] },
         title: { type: "string", description: "start:使命标题(一句话);resolve:已研究的困难知识标题(将写入知识库);publish:发布的内容标题" },
         goal: { type: "string", description: "start:完成判据/目标(可选)" },
         autonomy: { type: "string", enum: ["supervised", "full"], description: "start:自主等级。full=完全自主(日常发布与数据分析无需逐条请示,红线仍须请示);supervised=受监督(默认)" },
@@ -912,6 +912,51 @@ function selfMission(args) {
     writeMission(m);
     return { text: `已度量 ${item.id}「${item.title.slice(0, 60)}」:${stats.slice(0, 120)}\n对照定位假设:胜出模式值得在下周复制,证伪的写「洞察:」note 进周进化。`, structured: missionStructured(m, loadState()) };
   }
+  if (action === "request") {
+    // 3.1.0:标准请示的结构化入队——B/C 类障碍的正式落点(无头会话不等待,批复经面板/下次会话)
+    const question = String(args.question || "").trim();
+    if (!question) throw new Error("request 需要 question(请示的问题)");
+    const seq = (m.requestSeq = (m.requestSeq || 0) + 1);
+    m.requests = m.requests || [];
+    const item = {
+      id: `r${String(seq).padStart(3, "0")}`,
+      t: Date.now(),
+      type: args.type === "C" ? "C" : "B",
+      question: question.slice(0, 200),
+      options: String(args.options || "").slice(0, 200),
+      context: String(args.context || "").slice(0, 300),
+      status: "pending",
+    };
+    m.requests.push(item);
+    m.log.push({ t: Date.now(), kind: "request", text: `${item.id} [${item.type}] ${question.slice(0, 80)}` });
+    writeMission(m);
+    return { text: `请示已入队(${item.id},${item.type} 类):${question.slice(0, 80)}\n无头会话不等待——批复经面板/下次会话;decide 时可 makeRule 固化为永久规则。`, structured: missionStructured(m, loadState()) };
+  }
+  if (action === "decide") {
+    const id = String(args.id || "");
+    const decision = String(args.decision || "").trim();
+    if (!id || !decision) throw new Error("decide 需要 id 与 decision(批复内容)");
+    const m2 = readMission();
+    const item = (m2.requests || []).find((r) => r.id === id && r.status === "pending");
+    if (!item) throw new Error(`未找到待决策的请示:${id}`);
+    item.status = "decided";
+    item.decision = decision.slice(0, 200);
+    item.decidedAt = Date.now();
+    m2.log.push({ t: Date.now(), kind: "decide", text: `${item.id} ${decision.slice(0, 80)}` });
+    // 回复一次即成永久规则(B 类凭据/流程类批复机械沉淀)
+    let ruleLine = "";
+    if (args.makeRule) {
+      try {
+        const opsFile = path.join(selfDir(), "playbooks", "ops-fixes.md");
+        fs.mkdirSync(path.dirname(opsFile), { recursive: true });
+        if (!fs.existsSync(opsFile)) fs.writeFileSync(opsFile, "# Ops Fixes(障碍自愈手册)\n");
+        fs.appendFileSync(opsFile, `- [P1][${new Date().toISOString().slice(0, 10)}] ${decision.slice(0, 120)} ← ${item.id}\n`);
+        ruleLine = "\n已固化为 ops-fixes 规则(回复一次即成永久规则)。";
+      } catch {}
+    }
+    writeMission(m2);
+    return { text: `请示 ${item.id} 已批复:${decision.slice(0, 100)}${ruleLine}`, structured: missionStructured(m2, loadState()) };
+  }
   if (action === "void") {
     // 2.2.0:假阳性账目作废——账要平,更要真实(v002 首发时发现 v001 的"已发布"是假阳性,当时无状态可标)
     const item = (m.ledger || []).find((l) => l.id === String(args.id || "") && l.status !== "void");
@@ -934,6 +979,12 @@ function missionText(m) {
     lines.push(`当前使命:「${m.active.title}」(第 ${missionDay(m.active)} 天)${m.active.goal ? `\n目标:${m.active.goal}` : ""}`);
   } else {
     lines.push("当前无进行中的使命(self_mission action=start 立项)");
+  }
+  // 3.1.0:待用户决策的请示——排在最前(这是 agent 对用户的汇报义务)
+  const pendingReq = (m.requests || []).filter((r) => r.status === "pending");
+  if (pendingReq.length) {
+    lines.push(`【待用户决策】${pendingReq.length} 条请示(批复经面板或直接回复;decide 可 makeRule 固化永久规则):`);
+    for (const r of pendingReq.slice(-3)) lines.push(`- [${r.id}/${r.type}] ${r.question.slice(0, 80)}`);
   }
   const openDiff = (m.open || []).filter((d) => d.status === "open");
   if (openDiff.length) {
@@ -965,6 +1016,7 @@ function missionStructured(m, st) {
   const ledger = m.ledger || [];
   const openD = (m.open || []).filter((d) => d.status === "open");
   const agingD = openD.length ? Math.floor((now - Math.min(...openD.map((d) => d.t || now))) / 86400000) : 0;
+  const pendingReq = (m.requests || []).filter((r) => r.status === "pending");
   return {
     mission: {
       active: m.active
@@ -973,6 +1025,7 @@ function missionStructured(m, st) {
       recentLog: m.log.slice(-8).reverse(),
       openDifficulties: openD,
       difficultyAgingDays: agingD,
+      pendingRequests: pendingReq,
       ledger: {
         awaiting: ledger.filter((l) => l.status === "awaiting").length,
         due: ledger.filter((l) => l.status === "awaiting" && now - l.t >= 48 * 3600000).map((l) => ({ id: l.id, title: l.title, t: l.t })),

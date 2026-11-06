@@ -611,7 +611,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "3.0.0",
+      "version": "3.1.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -626,6 +626,15 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "3.1.0",
+          "date": "2026-11-04",
+          "changes": [
+            "待决策请示队列(第三条兜底「借授权」的基础设施):self_mission 新增 request/decide——B/C 类标准请示结构化入队(mission note 不再沉底),面板/agent 均可见;decide 批复时可选 makeRule 固化为 ops-fixes 永久规则(回复一次即成永久规则的机械通道)",
+            "get/self_state 展示【待用户决策】队列(排在最前——汇报义务)",
+            "冒烟测试 229 → 236 项全绿"
+          ]
+        },
         {
           "version": "3.0.0",
           "date": "2026-11-04",
