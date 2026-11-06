@@ -611,7 +611,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "2.12.0",
+      "version": "3.0.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -626,6 +626,17 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "3.0.0",
+          "date": "2026-11-04",
+          "changes": [
+            "能力自扩展成为基础设施(3.0.0 主题——无所不能的诚实实现:不是预先拥有一切,而是遇事必通的三条兜底:组合现有工具/自造脚本与技能/借一次授权永久记住)",
+            "ops-scripts 注册表:self/ops/ops-scripts.json 登记 name/desc/usage/lastVerifiedAt;self_state 对照目录实况暴露注册与未注册——能力账上有欠条自己看得见",
+            "技能自造协议:可复用方法论写 SKILL.md 进用户技能根(走文件审批),下会话起天生会;当前会话直接按内容执行",
+            "autonomous-ops 头部:无所不能的诚实定义(三条兜底 + 走不通的记为已知边界提案)",
+            "冒烟测试 229 项全绿(opsScripts 结构升级断言同步)"
+          ]
+        },
         {
           "version": "2.12.0",
           "date": "2026-11-04",

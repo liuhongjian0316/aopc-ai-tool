@@ -31,7 +31,7 @@ import {
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "2.12.0";
+const VERSION = "3.0.0";
 
 const TOOLS = [
   {
@@ -428,11 +428,24 @@ function selfState() {
     }
   })();
   const opsScripts = (() => {
+    // 3.0.0:自造能力注册表——ops-scripts.json(登记)与目录实况(实际存在)对照,未登记的暴露出来
+    const dir = path.join(selfDir(), "ops", "scripts");
+    let onDisk = [];
     try {
-      return fs.readdirSync(path.join(selfDir(), "ops", "scripts")).filter((f) => !f.startsWith("."));
-    } catch {
-      return [];
-    }
+      onDisk = fs.readdirSync(dir).filter((f) => !f.startsWith("."));
+    } catch {}
+    let registry = [];
+    const regPath = path.join(selfDir(), "ops", "ops-scripts.json");
+    try {
+      const j = JSON.parse(fs.readFileSync(regPath, "utf8"));
+      if (Array.isArray(j)) registry = j;
+    } catch {}
+    const registered = registry
+      .filter((r) => r && r.name)
+      .map((r) => ({ name: r.name, desc: String(r.desc || "").slice(0, 80), usage: String(r.usage || "").slice(0, 120), lastVerifiedAt: r.lastVerifiedAt || null, registered: true }));
+    const regNames = new Set(registered.map((r) => r.name));
+    const unregistered = onDisk.filter((f) => !regNames.has(f)).map((f) => ({ name: f, registered: false }));
+    return [...registered, ...unregistered];
   })();
   const structured = {
     session: cur

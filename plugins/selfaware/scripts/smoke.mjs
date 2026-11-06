@@ -773,7 +773,7 @@ console.log("\n[T31] self_state 暴露 opsScripts 与 playbookFiles");
     .map((m) => JSON.stringify(m)).join("\n") + "\n";
   const r = spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000 });
   const sc = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).map((m) => m?.result?.structuredContent)[0];
-  check("自造脚本入清单", sc?.opsScripts?.includes("resize_video.sh"), JSON.stringify(sc?.opsScripts));
+  check("自造脚本入清单(未注册标记)", sc?.opsScripts?.some((s) => s.name === "resize_video.sh" && s.registered === false), JSON.stringify(sc?.opsScripts));
   check("领域手册入清单", sc?.playbookFiles?.includes("douyin-ops.md") && sc?.playbookFiles?.includes("ops-fixes.md"), JSON.stringify(sc?.playbookFiles));
   fs.rmSync(dir, { recursive: true, force: true });
 }
