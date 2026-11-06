@@ -20,6 +20,7 @@ import { execSync } from "node:child_process";
 const PANEL_URI = "ui://selfaware/panel.html";
 const PANEL_MIME = "text/html;profile=mcp-app";
 const panelPath = path.resolve(path.join(path.dirname(fileURLToPath(import.meta.url)), "panel.html"));
+const PLUGIN_ROOT = path.dirname(panelPath); // 3.2.0:能力自述枚举自身资产用
 function readPanel() {
   if (!fs.existsSync(panelPath)) throw new Error(`面板文件缺失:${panelPath}(先运行 scripts/build-panel.mjs)`);
   return fs.readFileSync(panelPath, "utf-8");
@@ -404,6 +405,7 @@ function selfState() {
     }
   })();
   const rulesByFile = {};
+  let rulesTotal = 0; // 填充后计算(2.11 修正:const 提前声明 + 填充后赋值,供 capabilities 引用)
   try {
     for (const f of fs.readdirSync(playbooksDir()).filter((f) => f.endsWith(".md") && f !== "README.md")) {
       // 规则计数:P 规则行(出处格式 v1.1 起多样化——journal#/日期+证据均合法)
@@ -411,6 +413,7 @@ function selfState() {
       if (n) rulesByFile[f] = n;
     }
   } catch {}
+  rulesTotal = Object.values(rulesByFile).reduce((a, b) => a + b, 0);
   const ledgerAll = mission.ledger || [];
   const ledgerView = {
     awaiting: ledgerAll.filter((l) => l.status === "awaiting").length,
@@ -447,6 +450,28 @@ function selfState() {
     const unregistered = onDisk.filter((f) => !regNames.has(f)).map((f) => ({ name: f, registered: false }));
     return [...registered, ...unregistered];
   })();
+  // 3.2.0:能力自述——"你都能干什么"的可验证答案(枚举自身插件资产,零幻觉)
+  // 3.2.0:能力自述——"你都能干什么"的可验证答案(枚举自身插件资产,零幻觉)
+  const dirList = (sub) => {
+    try {
+      return fs
+        .readdirSync(path.join(PLUGIN_ROOT, sub))
+        .filter((f) => !f.startsWith(".") && f !== "README.md")
+        .map((f) => f.replace(/\.md$/, ""));
+    } catch {
+      return [];
+    }
+  };
+  const selfCapabilities = {
+    tools: TOOLS.map((t) => t.name),
+    skills: dirList("skills"),
+    agents: dirList("agents"),
+    commands: dirList("commands"),
+    scripts: opsScripts,
+    playbooks: rulesByFile,
+    rulesTotal,
+    knowledgeTotal: knowledge.total,
+  };
   const structured = {
     session: cur
       ? {
@@ -472,6 +497,7 @@ function selfState() {
     journalDiet,
     pluginProposals: journalEntries.filter((e) => e.kind === "plugin_proposal").slice(-5).reverse(),
     difficultyAgingDays,
+    capabilities: selfCapabilities,
     evolution: { modelChanges: modelChangeLines, rulesByFile, journalLanded: journalEntries.filter((e) => e.status === "landed").length },
     opsScripts,
     mission: {
@@ -506,7 +532,6 @@ function selfState() {
   lines.push(`学习食谱(${journalEntries.length} 条):${diet || "空"}——${(journalDiet["failure_postmortem"] || 0) > (journalDiet["user_feedback"] || 0) + (journalDiet["plugin_proposal"] || 0) + (journalDiet["guanji_report"] || 0) && journalEntries.length >= 6 ? "⚠ 偏食:失败复盘占比过高,该主动学习与征询反馈了" : "均衡"}`);
   lines.push(`自扩展资产:自造脚本 ${opsScripts.length} 个 / playbook ${playbookFiles.length} 个(含 ${playbookFiles.filter((f) => f.endsWith("-ops.md")).length} 份领域手册);明细见 structured`);
   lines.push(`知识库:${knowledge.configured ? `累计 ${knowledge.total} 条 / 今日 ${knowledge.today} 条(${knowledge.path})` : "未配置——self_config set knowledgeBase.path 后,每日学习写入 Obsidian"}`);
-  const rulesTotal = Object.values(rulesByFile).reduce((a, b) => a + b, 0);
   lines.push(`进化时间线:playbook 规则 ${rulesTotal} 条(带出处)/ journal landed ${journalEntries.filter((e) => e.status === "landed").length} / 自我模型变更 ${modelChangeLines.length} 次(明细见 structured)`);
   lines.push(`自我档案健康:${health}`);
   lines.push(`自我档案:${selfModelPath()}${fs.existsSync(selfModelPath()) ? "" : "(尚未创建——首次 /reflect 时建立)"}`);
