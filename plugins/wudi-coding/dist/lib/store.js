@@ -447,6 +447,16 @@ function registryAdd(path2, name = "") {
   saveRegistry(list);
   return { entry, added: true };
 }
+function registryRename(idOrPath, name) {
+  const trimmed = String(name ?? "").trim();
+  if (!trimmed) throw new Error("name \u4E0D\u80FD\u4E3A\u7A7A\u3002");
+  const list = loadRegistry();
+  const entry = list.find((e) => e.id === idOrPath || e.path === idOrPath);
+  if (!entry) return null;
+  entry.name = trimmed;
+  saveRegistry(list);
+  return entry;
+}
 function registryRemove(idOrPath) {
   const list = loadRegistry();
   const next = list.filter((e) => e.id !== idOrPath && e.path !== idOrPath);
@@ -508,6 +518,7 @@ export {
   registerDoc,
   registryAdd,
   registryRemove,
+  registryRename,
   registrySummaries,
   releaseStamp,
   resolveEnv,

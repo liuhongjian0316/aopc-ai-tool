@@ -525,6 +525,18 @@ export function registryAdd(path, name = "") {
   return { entry, added: true };
 }
 
+/** 重命名注册表条目（只改显示名，不动项目目录）。 */
+export function registryRename(idOrPath, name) {
+  const trimmed = String(name ?? "").trim();
+  if (!trimmed) throw new Error("name 不能为空。");
+  const list = loadRegistry();
+  const entry = list.find((e) => e.id === idOrPath || e.path === idOrPath);
+  if (!entry) return null;
+  entry.name = trimmed;
+  saveRegistry(list);
+  return entry;
+}
+
 export function registryRemove(idOrPath) {
   const list = loadRegistry();
   const next = list.filter((e) => e.id !== idOrPath && e.path !== idOrPath);

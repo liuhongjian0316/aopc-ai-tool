@@ -159,6 +159,26 @@ export const TOOLS = [
     },
   },
   {
+    name: "wudi_fs_list_dirs",
+    description: "列出当前项目根目录（或其子目录）下的直接子文件夹，供工作台登记项目时选择路径。仅允许浏览当前项目根目录内的路径。",
+    inputSchema: {
+      type: "object",
+      properties: { path: { type: "string", description: "要浏览的目录（缺省为当前项目根）" } },
+    },
+  },
+  {
+    name: "wudi_projects_rename",
+    description: "重命名工作台里的项目条目（只改显示名，不影响项目目录与文件）。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "项目 id（wudi_projects_list 里取）" },
+        name: { type: "string", description: "新的项目显示名" },
+      },
+      required: ["id", "name"],
+    },
+  },
+  {
     name: "wudi_status",
     description: "项目全景：档案摘要（含环境列表与当前环境解析结果）+ 最近部署 + 文档清单 + SSH 配置状态。/wudi 命令与工作台面板的数据源。",
     _meta: UI_META,
@@ -574,6 +594,10 @@ export async function callTool(name, args = {}) {
         return toolProjectsAdd(args);
       case "wudi_projects_remove":
         return toolProjectsRemove(args);
+      case "wudi_projects_rename":
+        return toolProjectsRename(args);
+      case "wudi_fs_list_dirs":
+        return toolFsListDirs(args);
       case "wudi_figma_images":
         return await toolFigmaImages(args);
       case "wudi_figma_tokens_diff":
@@ -1515,7 +1539,9 @@ function toolDesignList() {
 function toolProjectsList() {
   const root = store.projectRoot();
   try {
-    store.registryAdd(root, store.loadProject()?.name || "");
+    // 仅全新条目用档案名初始化；已存在条目保留用户可能改过的显示名
+    const exists = store.loadRegistry().some((e) => resolve(e.path) === resolve(root));
+    if (!exists) store.registryAdd(root, store.loadProject()?.name || "");
   } catch { /* 注册失败不阻塞列表 */ }
   const projects = store.registrySummaries(root);
   const lines = projects
@@ -1529,10 +1555,63 @@ function toolProjectsList() {
   return ok(`═══ 项目注册表（${projects.length}）═══\n${lines || "（空）"}`, { projects });
 }
 
+/** 当前项目根（工作区）—— 项目登记与目录浏览的唯一允许范围。 */
+function currentProjectRoot() {
+  return resolve(store.projectRoot());
+}
+
+/** 路径是否在当前项目根内（含根本身）。 */
+function withinProjectRoot(p) {
+  const root = currentProjectRoot();
+  const abs = resolve(String(p ?? ""));
+  return abs === root || abs.startsWith(root + "/");
+}
+
+function toolFsListDirs(args: any = {}) {
+  const root = currentProjectRoot();
+  const target = args?.path ? resolve(String(args.path)) : root;
+  if (target !== root && !target.startsWith(root + "/")) {
+    return fail(`只能浏览当前项目（${root}）及其子文件夹内的路径。`);
+  }
+  if (!existsSync(target) || !statSync(target).isDirectory()) return fail(`目录不存在：${target}`);
+  let dirs = [];
+  try {
+    dirs = readdirSync(target, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => ({ name: d.name, path: join(target, d.name) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch (err: any) {
+    return fail(`读取目录失败：${String(err?.message ?? err)}`);
+  }
+  const parent = target !== root ? resolve(target, "..") : "";
+  return ok(
+    `目录：${target}\n子文件夹（${dirs.length}）：${dirs.map((d) => d.name).join("、") || "（无）"}`,
+    { root, path: target, parent, dirs }
+  );
+}
+
+function toolProjectsRename(args: any = {}) {
+  const id = String(args?.id ?? "").trim();
+  const name = String(args?.name ?? "").trim();
+  if (!id || !name) return fail("缺少参数：id（项目 id）与 name（新显示名）。");
+  let entry;
+  try {
+    entry = store.registryRename(id, name);
+  } catch (err: any) {
+    return fail(String(err?.message ?? err));
+  }
+  if (!entry) return fail(`注册表中找不到 ${id}（用 wudi_projects_list 查 id）。`);
+  return ok(`已重命名项目：${entry.name}（${entry.path}）`, { project: entry });
+}
+
 function toolProjectsAdd(args) {
   const path = String(args.path ?? "").trim();
   if (!path) return fail("缺少 path：要登记的项目根目录绝对路径。");
   if (!existsSync(path)) return fail(`目录不存在：${path}`);
+  if (!statSync(path).isDirectory()) return fail(`不是目录：${path}`);
+  if (!withinProjectRoot(path)) {
+    return fail(`只能登记当前项目（${currentProjectRoot()}）本身或其子文件夹；${path} 不在范围内。`);
+  }
   let res;
   try {
     res = store.registryAdd(path, args.name ? String(args.name) : "");

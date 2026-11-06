@@ -6,7 +6,7 @@
  * 用法：node scripts/smoke.mjs   —— 全绿退出码 0，任何失败退出码 1。
  */
 import { spawn } from "node:child_process";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -271,6 +271,32 @@ async function protocolTests() {
     check("projects_add: 重复路径幂等（改名生效）", !errOf(r) && textOf(r).includes("已在注册表") && textOf(r).includes("smoke-alias"));
     r = await s.call("tools/call", { name: "wudi_projects_add", arguments: { path: "/nonexistent-xyz" } });
     check("projects_add: 不存在路径拒绝", errOf(r) && textOf(r).includes("不存在"));
+    /* 登记范围：只能是当前项目根或其子文件夹 */
+    const sub = join(workdir, "subproj");
+    await mkdir(sub, { recursive: true });
+    const outside = await mkdtemp(join(tmpdir(), "wudi-outside-"));
+    try {
+      r = await s.call("tools/call", { name: "wudi_projects_add", arguments: { path: sub, name: "subproj" } });
+      check("projects_add: 子文件夹可登记", !errOf(r) && textOf(r).includes("subproj"));
+      r = await s.call("tools/call", { name: "wudi_projects_add", arguments: { path: outside } });
+      check("projects_add: 项目根之外拒绝", errOf(r) && textOf(r).includes("不在范围内"));
+      /* 目录浏览：默认根 / 子目录 / 越界拒绝 */
+      r = await s.call("tools/call", { name: "wudi_fs_list_dirs", arguments: {} });
+      check("fs_list_dirs: 默认列当前项目根", !errOf(r) && r?.result?.structuredContent?.path === workdir && (r?.result?.structuredContent?.dirs ?? []).some((d) => d.name === "subproj"));
+      r = await s.call("tools/call", { name: "wudi_fs_list_dirs", arguments: { path: sub } });
+      check("fs_list_dirs: 子目录可浏览", !errOf(r) && r?.result?.structuredContent?.path === sub && !!(r?.result?.structuredContent?.parent));
+      r = await s.call("tools/call", { name: "wudi_fs_list_dirs", arguments: { path: outside } });
+      check("fs_list_dirs: 越界拒绝", errOf(r) && textOf(r).includes("只能浏览"));
+      /* 项目重命名 */
+      r = await s.call("tools/call", { name: "wudi_projects_list", arguments: {} });
+      const cur = (r?.result?.structuredContent?.projects ?? []).find((x) => x.isCurrent);
+      r = await s.call("tools/call", { name: "wudi_projects_rename", arguments: { id: cur?.id, name: "smoke-renamed" } });
+      check("projects_rename: 重命名成功", !errOf(r) && textOf(r).includes("smoke-renamed"));
+      r = await s.call("tools/call", { name: "wudi_projects_list", arguments: {} });
+      check("projects_rename: 列表生效", (r?.result?.structuredContent?.projects ?? []).some((x) => x.name === "smoke-renamed"));
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
     r = await s.call("tools/call", { name: "wudi_projects_remove", arguments: { id: curEntry.id } });
     check("projects_remove: 移除成功", !errOf(r) && textOf(r).includes("已从注册表移除"));
     r = await s.call("tools/call", { name: "wudi_projects_list", arguments: {} });

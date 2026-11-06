@@ -458,6 +458,16 @@ function registryAdd(path2, name = "") {
   saveRegistry(list);
   return { entry, added: true };
 }
+function registryRename(idOrPath, name) {
+  const trimmed = String(name ?? "").trim();
+  if (!trimmed) throw new Error("name \u4E0D\u80FD\u4E3A\u7A7A\u3002");
+  const list = loadRegistry();
+  const entry = list.find((e) => e.id === idOrPath || e.path === idOrPath);
+  if (!entry) return null;
+  entry.name = trimmed;
+  saveRegistry(list);
+  return entry;
+}
 function registryRemove(idOrPath) {
   const list = loadRegistry();
   const next = list.filter((e) => e.id !== idOrPath && e.path !== idOrPath);
@@ -936,6 +946,26 @@ var TOOLS = [
     }
   },
   {
+    name: "wudi_fs_list_dirs",
+    description: "\u5217\u51FA\u5F53\u524D\u9879\u76EE\u6839\u76EE\u5F55\uFF08\u6216\u5176\u5B50\u76EE\u5F55\uFF09\u4E0B\u7684\u76F4\u63A5\u5B50\u6587\u4EF6\u5939\uFF0C\u4F9B\u5DE5\u4F5C\u53F0\u767B\u8BB0\u9879\u76EE\u65F6\u9009\u62E9\u8DEF\u5F84\u3002\u4EC5\u5141\u8BB8\u6D4F\u89C8\u5F53\u524D\u9879\u76EE\u6839\u76EE\u5F55\u5185\u7684\u8DEF\u5F84\u3002",
+    inputSchema: {
+      type: "object",
+      properties: { path: { type: "string", description: "\u8981\u6D4F\u89C8\u7684\u76EE\u5F55\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u9879\u76EE\u6839\uFF09" } }
+    }
+  },
+  {
+    name: "wudi_projects_rename",
+    description: "\u91CD\u547D\u540D\u5DE5\u4F5C\u53F0\u91CC\u7684\u9879\u76EE\u6761\u76EE\uFF08\u53EA\u6539\u663E\u793A\u540D\uFF0C\u4E0D\u5F71\u54CD\u9879\u76EE\u76EE\u5F55\u4E0E\u6587\u4EF6\uFF09\u3002",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "\u9879\u76EE id\uFF08wudi_projects_list \u91CC\u53D6\uFF09" },
+        name: { type: "string", description: "\u65B0\u7684\u9879\u76EE\u663E\u793A\u540D" }
+      },
+      required: ["id", "name"]
+    }
+  },
+  {
     name: "wudi_status",
     description: "\u9879\u76EE\u5168\u666F\uFF1A\u6863\u6848\u6458\u8981\uFF08\u542B\u73AF\u5883\u5217\u8868\u4E0E\u5F53\u524D\u73AF\u5883\u89E3\u6790\u7ED3\u679C\uFF09+ \u6700\u8FD1\u90E8\u7F72 + \u6587\u6863\u6E05\u5355 + SSH \u914D\u7F6E\u72B6\u6001\u3002/wudi \u547D\u4EE4\u4E0E\u5DE5\u4F5C\u53F0\u9762\u677F\u7684\u6570\u636E\u6E90\u3002",
     _meta: UI_META,
@@ -1348,6 +1378,10 @@ async function callTool(name, args = {}) {
         return toolProjectsAdd(args);
       case "wudi_projects_remove":
         return toolProjectsRemove(args);
+      case "wudi_projects_rename":
+        return toolProjectsRename(args);
+      case "wudi_fs_list_dirs":
+        return toolFsListDirs(args);
       case "wudi_figma_images":
         return await toolFigmaImages(args);
       case "wudi_figma_tokens_diff":
@@ -2206,7 +2240,8 @@ ${lines}`, { files });
 function toolProjectsList() {
   const root = projectRoot();
   try {
-    registryAdd(root, loadProject()?.name || "");
+    const exists = loadRegistry().some((e) => resolve2(e.path) === resolve2(root));
+    if (!exists) registryAdd(root, loadProject()?.name || "");
   } catch {
   }
   const projects = registrySummaries(root);
@@ -2218,10 +2253,55 @@ function toolProjectsList() {
   return ok(`\u2550\u2550\u2550 \u9879\u76EE\u6CE8\u518C\u8868\uFF08${projects.length}\uFF09\u2550\u2550\u2550
 ${lines || "\uFF08\u7A7A\uFF09"}`, { projects });
 }
+function currentProjectRoot() {
+  return resolve2(projectRoot());
+}
+function withinProjectRoot(p) {
+  const root = currentProjectRoot();
+  const abs = resolve2(String(p ?? ""));
+  return abs === root || abs.startsWith(root + "/");
+}
+function toolFsListDirs(args = {}) {
+  const root = currentProjectRoot();
+  const target = args?.path ? resolve2(String(args.path)) : root;
+  if (target !== root && !target.startsWith(root + "/")) {
+    return fail(`\u53EA\u80FD\u6D4F\u89C8\u5F53\u524D\u9879\u76EE\uFF08${root}\uFF09\u53CA\u5176\u5B50\u6587\u4EF6\u5939\u5185\u7684\u8DEF\u5F84\u3002`);
+  }
+  if (!existsSync3(target) || !statSync(target).isDirectory()) return fail(`\u76EE\u5F55\u4E0D\u5B58\u5728\uFF1A${target}`);
+  let dirs = [];
+  try {
+    dirs = readdirSync2(target, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => ({ name: d.name, path: join2(target, d.name) })).sort((a, b) => a.name.localeCompare(b.name));
+  } catch (err) {
+    return fail(`\u8BFB\u53D6\u76EE\u5F55\u5931\u8D25\uFF1A${String(err?.message ?? err)}`);
+  }
+  const parent = target !== root ? resolve2(target, "..") : "";
+  return ok(
+    `\u76EE\u5F55\uFF1A${target}
+\u5B50\u6587\u4EF6\u5939\uFF08${dirs.length}\uFF09\uFF1A${dirs.map((d) => d.name).join("\u3001") || "\uFF08\u65E0\uFF09"}`,
+    { root, path: target, parent, dirs }
+  );
+}
+function toolProjectsRename(args = {}) {
+  const id = String(args?.id ?? "").trim();
+  const name = String(args?.name ?? "").trim();
+  if (!id || !name) return fail("\u7F3A\u5C11\u53C2\u6570\uFF1Aid\uFF08\u9879\u76EE id\uFF09\u4E0E name\uFF08\u65B0\u663E\u793A\u540D\uFF09\u3002");
+  let entry;
+  try {
+    entry = registryRename(id, name);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  if (!entry) return fail(`\u6CE8\u518C\u8868\u4E2D\u627E\u4E0D\u5230 ${id}\uFF08\u7528 wudi_projects_list \u67E5 id\uFF09\u3002`);
+  return ok(`\u5DF2\u91CD\u547D\u540D\u9879\u76EE\uFF1A${entry.name}\uFF08${entry.path}\uFF09`, { project: entry });
+}
 function toolProjectsAdd(args) {
   const path2 = String(args.path ?? "").trim();
   if (!path2) return fail("\u7F3A\u5C11 path\uFF1A\u8981\u767B\u8BB0\u7684\u9879\u76EE\u6839\u76EE\u5F55\u7EDD\u5BF9\u8DEF\u5F84\u3002");
   if (!existsSync3(path2)) return fail(`\u76EE\u5F55\u4E0D\u5B58\u5728\uFF1A${path2}`);
+  if (!statSync(path2).isDirectory()) return fail(`\u4E0D\u662F\u76EE\u5F55\uFF1A${path2}`);
+  if (!withinProjectRoot(path2)) {
+    return fail(`\u53EA\u80FD\u767B\u8BB0\u5F53\u524D\u9879\u76EE\uFF08${currentProjectRoot()}\uFF09\u672C\u8EAB\u6216\u5176\u5B50\u6587\u4EF6\u5939\uFF1B${path2} \u4E0D\u5728\u8303\u56F4\u5185\u3002`);
+  }
   let res;
   try {
     res = registryAdd(path2, args.name ? String(args.name) : "");
@@ -2906,7 +2986,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.35.2" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.36.0" };
 var PANEL_URI = "ui://wudi-coding/panel.html";
 var PANEL_MIME = "text/html;profile=mcp-app";
 var panelPath = resolve4(join4(dirname2(fileURLToPath2(import.meta.url)), "ui", "panel.html"));

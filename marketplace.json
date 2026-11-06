@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.35.2",
+      "version": "0.36.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,15 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.36.0",
+          "date": "2026-11-06",
+          "changes": [
+            "登记项目支持文件夹弹框选择：面板内目录浏览器（wudi_fs_list_dirs 驱动），可选范围限定为当前项目根目录及其子文件夹，服务端对浏览与登记双重校验",
+            "项目支持重命名（wudi_projects_rename，仅改显示名）；修复 wudi_projects_list 每次用 .wudi 档案名覆盖用户改名的问题",
+            "smoke 新增 6 项（目录浏览/越界拒绝/子目录登记/重命名），116 项全绿"
+          ]
+        },
         {
           "version": "0.35.2",
           "date": "2026-11-06",

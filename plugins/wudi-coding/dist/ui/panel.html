@@ -140,6 +140,18 @@ body {
   margin-left: 6px; transition: color .12s, background .12s;
 }
 .pcard .link-del:hover { color: var(--err); background: var(--err-bg); }
+.pcard .link-act {
+  border: none; background: transparent; color: var(--text-dim);
+  font-size: 11.5px; font-weight: 600; cursor: pointer; padding: 2px 7px; border-radius: 6px;
+  margin-left: 6px; transition: color .12s, background .12s;
+}
+.pcard .link-act:hover { color: var(--accent-strong); background: var(--accent); }
+.fp-list { max-height: 260px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
+.fp-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-top: 1px dashed var(--border); font-size: 12.5px; }
+.fp-row:first-child { border-top: none; }
+.fp-row:hover { background: var(--accent); }
+.fp-row .fp-icon { color: var(--text-dim); font-size: 10px; }
+.fp-row .fp-name { flex: 1; font-family: var(--mono); word-break: break-all; }
 .pcard .cta { margin-top: 9px; font-size: 11.5px; font-weight: 700; color: var(--accent-strong); }
 .pcard:hover .cta { text-decoration: underline; }
 .pcard.add {
@@ -465,7 +477,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.35.2" },
+    { name: "wudi-coding", version: "0.36.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -692,7 +704,7 @@ const EmptyResultSchema = {
           ${p.techStack ? `<span class="chip accent">${esc(p.techStack)}</span>` : ""}
           ${(p.envNames ?? []).slice(0, 3).map((e) => `<span class="chip">${esc(e)}</span>`).join("")}
         </div>
-        <div class="foot">${healthDot(p)}<span style="flex:1"></span>文档 ${p.docsCount} · 设计 ${p.designCount}<button class="link-del" data-remove="${esc(p.id)}" title="从工作台移除（不影响项目文件）">移除</button></div>
+        <div class="foot">${healthDot(p)}<span style="flex:1"></span>文档 ${p.docsCount} · 设计 ${p.designCount}<button class="link-act" data-prj-rename="${esc(p.id)}" title="重命名项目显示名">重命名</button><button class="link-del" data-remove="${esc(p.id)}" title="从工作台移除（不影响项目文件）">移除</button></div>
         ${p.isCurrent ? '<div class="cta">进入项目内容 →</div>' : ""}
       </div>`).join("");
     /* 「＋ 登记项目」虚线卡：点开展开登记表单（也是页面上唯一的创建入口） */
@@ -706,7 +718,7 @@ const EmptyResultSchema = {
       <div class="card" style="margin-top:12px">
         <h3>登记项目<span class="line"></span>${list.length ? '<button class="btn" id="btn-pcollapse">收起</button>' : ""}</h3>
         <div class="kv">
-          <span class="k">项目路径</span><span class="v"><input id="p-path" placeholder="/Users/me/code/my-app（绝对路径）"></span>
+          <span class="k">项目路径</span><span class="v" style="display:flex;gap:6px"><input id="p-path" placeholder="当前项目根或其子文件夹（可点右侧浏览）"><button class="btn" id="btn-pbrowse" style="flex:none;white-space:nowrap">浏览…</button></span>
           <span class="k">显示名</span><span class="v"><input id="p-name" placeholder="缺省取目录名"></span>
         </div>
         <div class="btnrow" style="margin-top:10px"><button class="btn primary" id="btn-padd" ${state.busy ? "disabled" : ""}>登记</button><span class="muted">登记后回到这里选择进入；部署操作仍在该项目工作区进行</span></div>
@@ -891,6 +903,84 @@ const EmptyResultSchema = {
     </div>`;
   }
 
+  /* 文件夹选择弹窗：仅浏览当前项目根及其子文件夹（后端 wudi_fs_list_dirs 强校验） */
+  const DEMO_FS = {
+    "/Users/me/code/zongheng-app": ["apps", "packages", "docs", "scripts"],
+    "/Users/me/code/zongheng-app/apps": ["web", "mobile"],
+    "/Users/me/code/zongheng-app/packages": ["ui", "shared"],
+  };
+  async function fsList(path) {
+    if (DEMO) {
+      const root = "/Users/me/code/zongheng-app";
+      const cur = path || root;
+      const names = DEMO_FS[cur] ?? [];
+      return {
+        root,
+        path: cur,
+        parent: cur !== root ? cur.split("/").slice(0, -1).join("/") : "",
+        dirs: names.map((n) => ({ name: n, path: `${cur}/${n}` })),
+      };
+    }
+    const res = await callTool("wudi_fs_list_dirs", path ? { path } : {});
+    return struct(res) ?? null;
+  }
+
+  function pickFolderDialog(initialPath = "") {
+    return new Promise((resolvePromise) => {
+      const overlay = document.createElement("div");
+      overlay.className = "overlay";
+      overlay.innerHTML = `<div class="dialog" style="width:min(560px, calc(100vw - 40px))">
+        <h3>选择项目文件夹</h3>
+        <div class="muted" style="margin-bottom:8px" id="fp-scope">可选范围：当前项目根目录及其子文件夹</div>
+        <div class="mono" id="fp-path" style="background:var(--bg-inset);border-radius:8px;padding:7px 10px;font-size:11.5px;word-break:break-all;margin-bottom:8px"></div>
+        <div id="fp-list" class="fp-list"><div class="muted"><span class="spin"></span>加载中…</div></div>
+        <div class="btnrow" style="margin-top:10px">
+          <button class="btn" id="fp-up">↑ 上一级</button>
+          <span style="flex:1"></span>
+          <button class="btn" id="fp-cancel">取消</button>
+          <button class="btn primary" id="fp-pick">选择此文件夹</button>
+        </div>
+      </div>`;
+      document.body.appendChild(overlay);
+      let data = null;
+      const pathEl = overlay.querySelector("#fp-path");
+      const listEl = overlay.querySelector("#fp-list");
+      const upBtn = overlay.querySelector("#fp-up");
+      const draw = () => {
+        pathEl.textContent = data?.path ?? "";
+        upBtn.disabled = !data?.parent;
+        listEl.innerHTML = (data?.dirs ?? []).length
+          ? data.dirs.map((d) => `<div class="fp-row" data-fp="${esc(d.path)}"><span class="fp-icon">▸</span><span class="fp-name">${esc(d.name)}</span><span class="muted">进入</span></div>`).join("")
+          : '<div class="muted" style="padding:14px 4px">（没有子文件夹）</div>';
+        listEl.querySelectorAll("[data-fp]").forEach((row) =>
+          row.addEventListener("dblclick", () => go(row.dataset.fp))
+        );
+        listEl.querySelectorAll("[data-fp]").forEach((row) => {
+          const enter = document.createElement("button");
+          enter.className = "btn";
+          enter.textContent = "进入";
+          enter.addEventListener("click", (ev) => { ev.stopPropagation(); go(row.dataset.fp); });
+          row.querySelector("span.muted")?.replaceWith(enter);
+        });
+      };
+      const go = async (p) => {
+        listEl.innerHTML = '<div class="muted"><span class="spin"></span>加载中…</div>';
+        try {
+          data = await fsList(p);
+          draw();
+        } catch (err) {
+          listEl.innerHTML = `<div class="muted">读取失败：${esc(String(err.message ?? err).slice(0, 200))}</div>`;
+        }
+      };
+      const done = (val) => { overlay.remove(); resolvePromise(val); };
+      overlay.querySelector("#fp-cancel").addEventListener("click", () => done(null));
+      overlay.addEventListener("click", (ev) => { if (ev.target === overlay) done(null); });
+      overlay.querySelector("#fp-pick").addEventListener("click", () => done(data?.path ?? ""));
+      upBtn.addEventListener("click", () => { if (data?.parent) go(data.parent); });
+      go(initialPath || "");
+    });
+  }
+
   /** 确认弹窗（AOPC 沙箱禁用原生 confirm/alert）：Promise<boolean>。 */
   function confirmDialog(message) {
     return new Promise((resolvePromise) => {
@@ -1047,7 +1137,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.35.2" },
+              hostInfo: { name: "wudi-workbench", version: "0.36.0" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -1210,6 +1300,31 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
         setBusy(true);
         try { await callTool("wudi_projects_remove", { id: b.dataset.remove }); await loadAll(); } catch (err) {
           state.notice = { kind: "err", text: String(err.message ?? err).slice(0, 400) };
+          setBusy(false);
+        }
+      })
+    );
+    document.getElementById("btn-pbrowse")?.addEventListener("click", async () => {
+      const picked = await pickFolderDialog(String(document.getElementById("p-path")?.value ?? "").trim());
+      if (picked) {
+        const input = document.getElementById("p-path");
+        if (input) input.value = picked;
+      }
+    });
+    $root().querySelectorAll("[data-prj-rename]").forEach((b) =>
+      b.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        const p = (state.projects?.projects ?? []).find((x) => x.id === b.dataset.prjRename);
+        const name = await inputDialog(`重命名项目（当前：${p?.name ?? b.dataset.prjRename}）：`, p?.name ?? "");
+        if (!name || name === p?.name) return;
+        setBusy(true);
+        try {
+          const res = await callTool("wudi_projects_rename", { id: b.dataset.prjRename, name });
+          state.notice = { kind: "ok", text: res.content?.map((c) => c.text).join("\n") ?? "已重命名" };
+          setBusy(false);
+          await loadAll();
+        } catch (err) {
+          state.notice = { kind: "err", text: `重命名失败：${String(err.message ?? err).slice(0, 300)}` };
           setBusy(false);
         }
       })
