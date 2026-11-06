@@ -19,7 +19,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.35.1" },
+    { name: "wudi-coding", version: "0.35.2" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -239,7 +239,6 @@ const EmptyResultSchema = {
     const list = projects ?? [];
     const cards = list.map((p) => `
       <div class="pcard ${p.isCurrent ? "current" : ""}" data-pid="${esc(p.id)}" data-current="${p.isCurrent ? 1 : 0}">
-        <button class="remove" data-remove="${esc(p.id)}" title="从注册表移除">×</button>
         <div class="pname">${esc(p.name)}</div>
         <div class="ppath">${esc(shortPath(p.path))}</div>
         <div class="stats">
@@ -247,7 +246,7 @@ const EmptyResultSchema = {
           ${p.techStack ? `<span class="chip accent">${esc(p.techStack)}</span>` : ""}
           ${(p.envNames ?? []).slice(0, 3).map((e) => `<span class="chip">${esc(e)}</span>`).join("")}
         </div>
-        <div class="foot">${healthDot(p)}<span style="flex:1"></span>文档 ${p.docsCount} · 设计 ${p.designCount}</div>
+        <div class="foot">${healthDot(p)}<span style="flex:1"></span>文档 ${p.docsCount} · 设计 ${p.designCount}<button class="link-del" data-remove="${esc(p.id)}" title="从工作台移除（不影响项目文件）">移除</button></div>
         ${p.isCurrent ? '<div class="cta">进入项目内容 →</div>' : ""}
       </div>`).join("");
     /* 「＋ 登记项目」虚线卡：点开展开登记表单（也是页面上唯一的创建入口） */
@@ -602,7 +601,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.35.1" },
+              hostInfo: { name: "wudi-workbench", version: "0.35.2" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",

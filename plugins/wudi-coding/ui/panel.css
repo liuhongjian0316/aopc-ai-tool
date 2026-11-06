@@ -128,19 +128,12 @@ body {
 .pcard .foot .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .pcard .foot .dot.ok { background: var(--ok); } .pcard .foot .dot.warn { background: var(--warn); }
 .pcard .foot .dot.err { background: var(--err); } .pcard .foot .dot.none { background: var(--border-strong); }
-.pcard .remove {
-  position: absolute; top: 8px; left: 10px; width: 20px; height: 20px; border-radius: 6px;
-  border: none; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 13px; line-height: 1;
-  opacity: .55; transition: opacity .12s, color .12s;
+.pcard .link-del {
+  border: none; background: transparent; color: var(--text-dim);
+  font-size: 11.5px; font-weight: 600; cursor: pointer; padding: 2px 7px; border-radius: 6px;
+  margin-left: 6px; transition: color .12s, background .12s;
 }
-.pcard .remove:hover { opacity: 1; color: var(--err); background: var(--err-bg); }
-.pcard .cv-del, .pcard .cv-ren {
-  position: absolute; top: 8px; width: 22px; height: 22px; border-radius: 6px;
-  border: none; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 13px; line-height: 1;
-}
-.pcard .cv-del { right: 8px; } .pcard .cv-del:hover { color: var(--err); background: var(--err-bg); }
-.pcard .cv-ren { right: 34px; } .pcard .cv-ren:hover { color: var(--accent-strong); background: var(--accent); }
-.pcard .remove:hover { background: var(--err-bg); color: var(--err); }
+.pcard .link-del:hover { color: var(--err); background: var(--err-bg); }
 .pcard .cta { margin-top: 9px; font-size: 11.5px; font-weight: 700; color: var(--accent-strong); }
 .pcard:hover .cta { text-decoration: underline; }
 .pcard.add {
