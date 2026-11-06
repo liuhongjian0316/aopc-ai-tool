@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.36.1",
+      "version": "0.37.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,15 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.37.0",
+          "date": "2026-11-06",
+          "changes": [
+            "所有项目均可进入项目内容：非当前项目不再只读下钻，总览/部署历史/设计/文档按该项目根加载（wudi_status/history/designs/delete/rename/project_get 新增 root 参数）",
+            "openpencil 子进程多实例（按项目根 __root 路由）+ 资源读取 wudiRoot + get_design_status WS 端点改写为协同桥 /op-ws 透明反代，任意项目画布均可在面板内编辑",
+            "非当前项目写操作边界：部署/回滚/健康检查/周报/SSH 测试禁用并提示到该项目工作区执行；smoke +5（123 全绿）"
+          ]
+        },
         {
           "version": "0.36.1",
           "date": "2026-11-06",

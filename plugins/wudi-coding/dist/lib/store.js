@@ -64,6 +64,27 @@ var PROJECT_TEMPLATE = {
   defaultEnv: "",
   notes: ""
 };
+function readJSONAt(root, name, fallback) {
+  const p = join(resolve(root), ".wudi", name);
+  if (!existsSync(p)) return fallback;
+  try {
+    return JSON.parse(readFileSync(p, "utf-8"));
+  } catch (err) {
+    console.error(`[wudi-coding] ${p} \u89E3\u6790\u5931\u8D25\uFF0C\u4F7F\u7528\u9ED8\u8BA4\u503C\uFF1A${err.message}`);
+    return fallback;
+  }
+}
+function loadProjectAt(root) {
+  const raw = readJSONAt(root, "project.json", null);
+  if (!raw) return null;
+  return {
+    ...structuredClone(PROJECT_TEMPLATE),
+    ...raw,
+    package: { ...PROJECT_TEMPLATE.package, ...raw.package ?? {} },
+    healthCheck: { ...PROJECT_TEMPLATE.healthCheck, ...raw.healthCheck ?? {} },
+    envs: Array.isArray(raw.envs) ? raw.envs : []
+  };
+}
 function loadProject() {
   const raw = readJSON("project.json", null);
   if (!raw) return null;
@@ -127,6 +148,14 @@ function resolveEnv(project, envName) {
 function listEnvNames(project) {
   const envs = Array.isArray(project?.envs) ? project.envs : [];
   return envs.length ? envs.map((e) => e.name) : ["default"];
+}
+function loadDeploysAt(root) {
+  const list = readJSONAt(root, "deploys.json", []);
+  return Array.isArray(list) ? list : [];
+}
+function loadDocsAt(root) {
+  const list = readJSONAt(root, "docs.json", []);
+  return Array.isArray(list) ? list : [];
 }
 function loadDeploys() {
   const list = readJSON("deploys.json", []);
@@ -527,8 +556,11 @@ export {
   listEnvNames,
   loadCanvas,
   loadDeploys,
+  loadDeploysAt,
   loadDocs,
+  loadDocsAt,
   loadProject,
+  loadProjectAt,
   loadRegistry,
   loadTokens,
   pluginDataDir,

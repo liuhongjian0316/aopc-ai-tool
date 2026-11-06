@@ -87,6 +87,30 @@ export const PROJECT_TEMPLATE = {
 };
 
 /** 读项目档案；不存在返回 null。 */
+function readJSONAt(root, name, fallback) {
+  const p = join(resolve(root), ".wudi", name);
+  if (!existsSync(p)) return fallback;
+  try {
+    return JSON.parse(readFileSync(p, "utf-8"));
+  } catch (err) {
+    console.error(`[wudi-coding] ${p} 解析失败，使用默认值：${err.message}`);
+    return fallback;
+  }
+}
+
+/** 读指定项目根的档案（工作台多项目内容页用）；不存在返回 null。 */
+export function loadProjectAt(root) {
+  const raw = readJSONAt(root, "project.json", null);
+  if (!raw) return null;
+  return {
+    ...structuredClone(PROJECT_TEMPLATE),
+    ...raw,
+    package: { ...PROJECT_TEMPLATE.package, ...(raw.package ?? {}) },
+    healthCheck: { ...PROJECT_TEMPLATE.healthCheck, ...(raw.healthCheck ?? {}) },
+    envs: Array.isArray(raw.envs) ? raw.envs : [],
+  };
+}
+
 export function loadProject() {
   const raw = readJSON("project.json", null);
   if (!raw) return null;
@@ -169,6 +193,18 @@ export function listEnvNames(project) {
 }
 
 /* ---------------- 部署历史 deploys.json ---------------- */
+
+/** 读指定项目根的部署历史（只读，不做僵尸清扫）。 */
+export function loadDeploysAt(root) {
+  const list = readJSONAt(root, "deploys.json", []);
+  return Array.isArray(list) ? list : [];
+}
+
+/** 读指定项目根的文档库。 */
+export function loadDocsAt(root) {
+  const list = readJSONAt(root, "docs.json", []);
+  return Array.isArray(list) ? list : [];
+}
 
 export function loadDeploys() {
   const list = readJSON("deploys.json", []);

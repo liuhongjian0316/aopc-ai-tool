@@ -6,7 +6,7 @@
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { TOOLS, callTool, bridgeConnectDomains, frameDomains, fontCdnDomains } from "./tools";
+import { TOOLS, callTool, bridgeConnectDomains, frameDomains, fontCdnDomains, opWsProxyUrl } from "./tools";
 import { ensureWudiDir, ensureProfileAt, projectRoot } from "./store";
 
 // 进程级兜底：任何未捕获错误都不能杀掉 server（宿主连接断开的根因）
@@ -22,7 +22,7 @@ let opToolsCache = (() => {
   catch { return []; }
 })(); // 静态工具定义（117 个），后台动态刷新
 
-const SERVER_INFO = { name: "wudi-coding", version: "0.36.1" };
+const SERVER_INFO = { name: "wudi-coding", version: "0.37.0" };
 
 /* 只要插件被使用：自动创建 .wudi/ 与最小项目档案（不再有「未建档」状态） */
 try {
@@ -184,7 +184,15 @@ function handleMessage(line) {
         return;
       }
       if (uri.startsWith("ui://openpencil/")) {
-        openpencilReadResource(uri)
+        // 资源按项目根寻址：面板在非当前项目上下文读资源时带 ?wudiRoot=<项目根>
+        let cleanUri = uri;
+        let root = "";
+        try {
+          const u = new URL(uri);
+          const r = u.searchParams.get("wudiRoot");
+          if (r) { root = r; u.search = ""; cleanUri = u.toString(); }
+        } catch { /* 非法 URI 交由子进程报错 */ }
+        openpencilReadResource(root || undefined, cleanUri)
           .then((result) => send(id, result))
           .catch((err) => sendError(id, -32602, `OpenPencil 资源读取失败：${String(err?.message ?? err).slice(0, 200)}`));
         return;
@@ -217,11 +225,24 @@ function handleMessage(line) {
     const isWudiTool = TOOLS.some((t) => t.name === toolName);
     const callPromise = isWudiTool
       ? callTool(toolName, params?.arguments ?? {})
-      : openpencilCall(toolName, params?.arguments ?? {}).then((r) => ({
-          content: (r.content ?? []).map((c) => ({ type: "text", text: c.text ?? "" })),
-          isError: !!r.isError,
-          structuredContent: r.structuredContent,
-        }));
+      : (() => {
+          // openpencil 工具按项目根路由：面板/Agent 可带 __root（wudi 内部约定，转发前剥离）
+          const rawArgs = { ...(params?.arguments ?? {}) };
+          const rootArg = rawArgs.__root;
+          delete rawArgs.__root;
+          return openpencilCall(rootArg, toolName, rawArgs).then((r) => {
+            const sc = r.structuredContent;
+            // 编辑器 WS 端点统一改写成 wudi 桥反代（任意项目根的端口都在 CSP 允许的桥 origin 下）
+            if (toolName === "get_design_status" && sc?.bridge?.url) {
+              sc.bridge = { ...sc.bridge, url: opWsProxyUrl(sc.bridge.url) };
+            }
+            return {
+              content: (r.content ?? []).map((c) => ({ type: "text", text: c.text ?? "" })),
+              isError: !!r.isError,
+              structuredContent: sc,
+            };
+          });
+        })();
     callPromise
       .then((result) => send(id, result))
       .catch((err) => sendError(id, -32603, `工具内部错误：${String(err?.message ?? err).slice(0, 500)}`))

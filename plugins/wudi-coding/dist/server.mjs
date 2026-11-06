@@ -75,6 +75,27 @@ var PROJECT_TEMPLATE = {
   defaultEnv: "",
   notes: ""
 };
+function readJSONAt(root, name, fallback) {
+  const p = join(resolve(root), ".wudi", name);
+  if (!existsSync(p)) return fallback;
+  try {
+    return JSON.parse(readFileSync(p, "utf-8"));
+  } catch (err) {
+    console.error(`[wudi-coding] ${p} \u89E3\u6790\u5931\u8D25\uFF0C\u4F7F\u7528\u9ED8\u8BA4\u503C\uFF1A${err.message}`);
+    return fallback;
+  }
+}
+function loadProjectAt(root) {
+  const raw = readJSONAt(root, "project.json", null);
+  if (!raw) return null;
+  return {
+    ...structuredClone(PROJECT_TEMPLATE),
+    ...raw,
+    package: { ...PROJECT_TEMPLATE.package, ...raw.package ?? {} },
+    healthCheck: { ...PROJECT_TEMPLATE.healthCheck, ...raw.healthCheck ?? {} },
+    envs: Array.isArray(raw.envs) ? raw.envs : []
+  };
+}
 function loadProject() {
   const raw = readJSON("project.json", null);
   if (!raw) return null;
@@ -138,6 +159,14 @@ function resolveEnv(project, envName) {
 function listEnvNames(project) {
   const envs = Array.isArray(project?.envs) ? project.envs : [];
   return envs.length ? envs.map((e) => e.name) : ["default"];
+}
+function loadDeploysAt(root) {
+  const list = readJSONAt(root, "deploys.json", []);
+  return Array.isArray(list) ? list : [];
+}
+function loadDocsAt(root) {
+  const list = readJSONAt(root, "docs.json", []);
+  return Array.isArray(list) ? list : [];
 }
 function loadDeploys() {
   const list = readJSON("deploys.json", []);
@@ -697,7 +726,7 @@ function extractStyles(tree, { maxNodes = 2e3 } = {}) {
         fontSizes.set(key, (fontSizes.get(key) ?? 0) + 1);
       }
     }
-    for (const child2 of node.children ?? []) walk(child2);
+    for (const child of node.children ?? []) walk(child);
   };
   walk(tree);
   return {
@@ -748,8 +777,8 @@ function distill(node, depth, maxDepth, budget) {
   }
   const kids = node.children ?? [];
   if (kids.length && depth < maxDepth) {
-    const children = kids.slice(0, 40).map((k) => distill(k, depth + 1, maxDepth, budget)).filter(Boolean);
-    if (children.length) out.children = children;
+    const children2 = kids.slice(0, 40).map((k) => distill(k, depth + 1, maxDepth, budget)).filter(Boolean);
+    if (children2.length) out.children = children2;
   } else if (kids.length) {
     out.childrenTruncated = kids.length;
   }
@@ -832,6 +861,7 @@ async function sendNotify(cfg, info) {
 
 // src/tools.ts
 import http from "node:http";
+import net from "node:net";
 import { dirname as _dirname, join as _join } from "node:path";
 import { fileURLToPath as _fURL } from "node:url";
 var ok = (text, structuredContent) => ({
@@ -881,6 +911,45 @@ var bridgeServer = http.createServer((req, res) => {
 bridgeServer.listen(0, "127.0.0.1", () => {
   bridgePort = bridgeServer.address().port;
 });
+function opWsProxyUrl(target) {
+  if (!bridgePort || !target) return target;
+  return `ws://127.0.0.1:${bridgePort}/op-ws?target=${encodeURIComponent(target)}`;
+}
+bridgeServer.on("upgrade", (req, socket, head) => {
+  let target = null;
+  try {
+    const u = new URL(req.url ?? "/", "http://127.0.0.1");
+    if (u.pathname !== "/op-ws") throw new Error("not ws proxy");
+    target = new URL(u.searchParams.get("target") ?? "");
+  } catch {
+    socket.destroy();
+    return;
+  }
+  const host = target.hostname;
+  const port = Number(target.port || 80);
+  if (host !== "127.0.0.1" || !port) {
+    socket.destroy();
+    return;
+  }
+  const upstream = net.connect(port, host, () => {
+    const lines = [];
+    for (const [k, v] of Object.entries(req.headers)) {
+      if (k.toLowerCase() === "host") continue;
+      lines.push(`${k}: ${Array.isArray(v) ? v.join(", ") : v}`);
+    }
+    lines.push(`Host: 127.0.0.1:${port}`);
+    upstream.write(`${req.method} / HTTP/1.1\r
+${lines.join("\r\n")}\r
+\r
+`);
+    if (head?.length) upstream.write(head);
+    upstream.pipe(socket);
+    socket.pipe(upstream);
+  });
+  upstream.on("error", () => socket.destroy());
+  socket.on("error", () => upstream.destroy());
+  socket.on("close", () => upstream.destroy());
+});
 function broadcastCanvasChanged() {
   for (const res of bridgeSubscribers) {
     try {
@@ -905,7 +974,7 @@ var TOOLS = [
   {
     name: "wudi_project_get",
     description: "\u8BFB\u53D6\u5F53\u524D\u9879\u76EE\u7684\u65E0\u654C\u7F16\u7A0B\u6863\u6848\uFF08.wudi/project.json\uFF1A\u6280\u672F\u6808/\u6784\u5EFA\u547D\u4EE4/\u6253\u5305\u65B9\u5F0F/\u90E8\u7F72\u6839\u76EE\u5F55/\u8FDC\u7AEF\u811A\u672C/\u5065\u5EB7\u68C0\u67E5\uFF09\u3002\u6863\u6848\u4E0D\u5B58\u5728\u65F6\u8FD4\u56DE\u7F3A\u5931\u8BF4\u660E\u4E0E\u5EFA\u6863\u5B57\u6BB5\u6A21\u677F\u3002",
-    inputSchema: { type: "object", properties: {} }
+    inputSchema: { type: "object", properties: { root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF1B\u5DE5\u4F5C\u53F0\u591A\u9879\u76EE\u5185\u5BB9\u9875\u4F20\u5165\uFF09" } } }
   },
   {
     name: "wudi_project_init",
@@ -988,6 +1057,7 @@ var TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
+        root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF1B\u5DE5\u4F5C\u53F0\u591A\u9879\u76EE\u5185\u5BB9\u9875\u4F20\u5165\uFF09" },
         env: { type: "string", description: "\u76EE\u6807\u73AF\u5883\u540D\uFF1B\u6863\u6848\u914D\u7F6E\u4E86\u591A\u4E2A\u73AF\u5883\u65F6\u7F3A\u7701\u7528 defaultEnv/\u7B2C\u4E00\u4E2A" },
         deployLimit: { type: "number", description: "\u8FD4\u56DE\u6700\u8FD1\u51E0\u6B21\u90E8\u7F72\uFF0C\u9ED8\u8BA4 5" }
       }
@@ -1038,6 +1108,7 @@ var TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
+        root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF1B\u5DE5\u4F5C\u53F0\u591A\u9879\u76EE\u5185\u5BB9\u9875\u4F20\u5165\uFF09" },
         env: { type: "string", description: "\u53EA\u770B\u67D0\u4E2A\u73AF\u5883\u7684\u8BB0\u5F55" },
         limit: { type: "number", description: "\u8FD4\u56DE\u6761\u6570\uFF0C\u9ED8\u8BA4 10\uFF0C\u6700\u5927 50" }
       }
@@ -1267,14 +1338,14 @@ var TOOLS = [
     name: "wudi_designs_list",
     description: "\u5217\u51FA\u5DE5\u4F5C\u533A designs/ \u76EE\u5F55\u4E0B\u7684 .fig/.pen \u8BBE\u8BA1\u7A3F\u6587\u4EF6\uFF08\u540D\u79F0\u3001\u5927\u5C0F\u3001\u4FEE\u6539\u65F6\u95F4\uFF09\u3002\u914D\u5408 OpenPencil \u63D2\u4EF6\uFF1AAgent \u53EF\u7528 open_design \u6253\u5F00\u534F\u540C\u7F16\u8F91\u3001export_image \u6E32\u67D3 PNG \u5230 .wudi/design/renders/ \u8FDB\u9762\u677F\u56FE\u5899\u3002",
     _meta: UI_META,
-    inputSchema: { type: "object", properties: {} }
+    inputSchema: { type: "object", properties: { root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF1B\u5DE5\u4F5C\u53F0\u591A\u9879\u76EE\u5185\u5BB9\u9875\u4F20\u5165\uFF09" } } }
   },
   {
     name: "wudi_design_delete",
     description: "\u5220\u9664\u5DE5\u4F5C\u533A designs/ \u76EE\u5F55\u4E0B\u7684\u8BBE\u8BA1\u7A3F\u6587\u4EF6\uFF08.fig/.pen\uFF09\u3002\u4EC5\u5141\u8BB8 designs/ \u76EE\u5F55\u5185\u7684\u6587\u4EF6\uFF1B\u82E5\u7F16\u8F91\u5668\u6B63\u6253\u5F00\u8BE5\u8BBE\u8BA1\u7A3F\uFF0C\u5EFA\u8BAE\u5148\u5173\u95ED\u518D\u5220\u9664\u3002",
     inputSchema: {
       type: "object",
-      properties: { path: { type: "string", description: "\u8BBE\u8BA1\u7A3F\u8DEF\u5F84\uFF0C\u5982 designs/old.fig" } },
+      properties: { root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF1B\u5DE5\u4F5C\u53F0\u591A\u9879\u76EE\u5185\u5BB9\u9875\u4F20\u5165\uFF09" }, path: { type: "string", description: "\u8BBE\u8BA1\u7A3F\u8DEF\u5F84\uFF0C\u5982 designs/old.fig" } },
       required: ["path"]
     }
   },
@@ -1284,6 +1355,7 @@ var TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
+        root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF1B\u5DE5\u4F5C\u53F0\u591A\u9879\u76EE\u5185\u5BB9\u9875\u4F20\u5165\uFF09" },
         path: { type: "string", description: "\u73B0\u6709\u8BBE\u8BA1\u7A3F\u8DEF\u5F84\uFF0C\u5982 designs/old.fig" },
         name: { type: "string", description: "\u65B0\u6587\u4EF6\u540D\uFF0C\u5982 new.fig\uFF08\u4E0D\u542B\u76EE\u5F55\uFF09" }
       },
@@ -1329,7 +1401,7 @@ async function callTool(name, args = {}) {
   try {
     switch (name) {
       case "wudi_project_get":
-        return toolProjectGet();
+        return toolProjectGet(args);
       case "wudi_project_init":
         return toolProjectInit(args);
       case "wudi_status":
@@ -1367,7 +1439,7 @@ async function callTool(name, args = {}) {
       case "wudi_figma_link":
         return toolFigmaLink(args);
       case "wudi_designs_list":
-        return toolDesignsList();
+        return toolDesignsList(args);
       case "wudi_design_delete":
         return toolDesignDelete(args);
       case "wudi_design_rename":
@@ -1409,8 +1481,8 @@ async function callTool(name, args = {}) {
     return fail(`\u5DE5\u5177 ${name} \u6267\u884C\u5931\u8D25\uFF1A${String(err?.message ?? err).slice(0, 1500)}`);
   }
 }
-function toolProjectGet() {
-  const project = loadProject();
+function toolProjectGet(args = {}) {
+  const project = loadProjectAt(toolRoot(args));
   if (!project) {
     return ok(
       [
@@ -1516,7 +1588,13 @@ function toolProjectInit(args) {
   return ok(lines.join("\n"), { project });
 }
 async function toolStatus(args = {}) {
-  const project = loadProject();
+  let root;
+  try {
+    root = toolRoot(args);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  const project = loadProjectAt(root);
   const envName = args.env ? String(args.env) : void 0;
   let resolved = null;
   let envErr = null;
@@ -1528,8 +1606,8 @@ async function toolStatus(args = {}) {
     }
   }
   const deployLimit = Math.min(Math.max(Number(args.deployLimit) || 5, 1), 20);
-  const deploys = loadDeploys().slice(0, deployLimit);
-  const docs = loadDocs();
+  const deploys = loadDeploysAt(root).slice(0, deployLimit);
+  const docs = loadDocsAt(root);
   let sshLine = "SSH\uFF1A\u672A\u914D\u7F6E\uFF08\u63D2\u4EF6\u8BBE\u7F6E\u91CC\u586B sshHost \u7B49\uFF09";
   try {
     const cfg = sshConfig(resolved?.ssh ?? {});
@@ -1822,7 +1900,13 @@ ${await pruneReleases(envObj)}`;
 function toolDeployHistory(args = {}) {
   const limit = Math.min(Math.max(Number(args.limit) || 10, 1), 50);
   const envFilter = args.env ? String(args.env) : null;
-  const deploys = loadDeploys().filter((d) => !envFilter || d.env === envFilter).slice(0, limit);
+  let root;
+  try {
+    root = toolRoot(args);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  const deploys = loadDeploysAt(root).filter((d) => !envFilter || d.env === envFilter).slice(0, limit);
   if (!deploys.length) return ok(envFilter ? `\u73AF\u5883 ${envFilter} \u8FD8\u6CA1\u6709\u90E8\u7F72\u8BB0\u5F55\u3002` : "\u8FD8\u6CA1\u6709\u90E8\u7F72\u8BB0\u5F55\u3002", { deploys: [] });
   const lines = deploys.map(
     (d) => [
@@ -2270,6 +2354,13 @@ function toolProjectsList() {
   return ok(`\u2550\u2550\u2550 \u9879\u76EE\u6CE8\u518C\u8868\uFF08${projects.length}\uFF09\u2550\u2550\u2550
 ${lines || "\uFF08\u7A7A\uFF09"}`, { projects });
 }
+function toolRoot(args = {}) {
+  const raw = String(args?.root ?? "").trim();
+  if (!raw) return projectRoot();
+  const abs = resolve2(raw);
+  if (!existsSync3(abs) || !statSync(abs).isDirectory()) throw new Error(`\u9879\u76EE\u6839\u4E0D\u5B58\u5728\uFF1A${raw}`);
+  return abs;
+}
 function currentProjectRoot() {
   return resolve2(projectRoot());
 }
@@ -2712,8 +2803,8 @@ function toolTokensCompare(args = {}) {
   ].filter(Boolean);
   return ok(lines.join("\n").slice(0, 3e4), { added, changed, removed, same });
 }
-function resolveDesignFile(p) {
-  const dir = resolve2(join2(projectRoot(), "designs"));
+function resolveDesignFile(p, root) {
+  const dir = resolve2(join2(root || projectRoot(), "designs"));
   const base = String(p ?? "").trim().replace(/^designs\//i, "");
   if (!/^[\w.-]+\.(fig|pen)$/i.test(base)) throw new Error(`\u975E\u6CD5\u8BBE\u8BA1\u7A3F\u540D\uFF1A${p}\uFF08\u4EC5\u5141\u8BB8 designs/<\u540D\u79F0>.fig/.pen\uFF09`);
   const file = resolve2(dir, base);
@@ -2725,7 +2816,7 @@ function toolDesignDelete(args = {}) {
   if (!path2) return fail("\u7F3A\u5C11 path\uFF1A\u8981\u5220\u9664\u7684\u8BBE\u8BA1\u7A3F\u8DEF\u5F84\uFF0C\u5982 designs/old.fig\u3002");
   let file;
   try {
-    file = resolveDesignFile(path2).file;
+    file = resolveDesignFile(path2, toolRoot(args)).file;
   } catch (err) {
     return fail(String(err?.message ?? err));
   }
@@ -2739,7 +2830,7 @@ function toolDesignRename(args = {}) {
   if (!path2 || !name) return fail("\u7F3A\u5C11\u53C2\u6570\uFF1Apath\uFF08\u73B0\u6709\u8BBE\u8BA1\u7A3F\uFF09\u4E0E name\uFF08\u65B0\u6587\u4EF6\u540D\uFF0C\u5982 new.fig\uFF09\u3002");
   let dir, file, base;
   try {
-    ({ dir, file, base } = resolveDesignFile(path2));
+    ({ dir, file, base } = resolveDesignFile(path2, toolRoot(args)));
   } catch (err) {
     return fail(String(err?.message ?? err));
   }
@@ -2751,8 +2842,8 @@ function toolDesignRename(args = {}) {
   renameSync2(file, target);
   return ok(`\u5DF2\u91CD\u547D\u540D\uFF1A${base} \u2192 designs/${name}`, { path: `designs/${name}` });
 }
-function toolDesignsList() {
-  const dir = join2(projectRoot(), "designs");
+function toolDesignsList(args = {}) {
+  const dir = join2(toolRoot(args), "designs");
   const designs = [];
   try {
     for (const f of readdirSync2(dir)) {
@@ -2877,119 +2968,139 @@ import { dirname, join as join3, resolve as resolve3 } from "node:path";
 import { fileURLToPath } from "node:url";
 var vendorRoot = resolve3(join3(dirname(fileURLToPath(import.meta.url)), "..", "vendor", "openpencil"));
 var childServerPath = join3(vendorRoot, "dist", "server.mjs");
-var child = null;
-var pendingId = 0;
-var pending = /* @__PURE__ */ new Map();
-var childStderr = "";
-var buffer = "";
-var initDone = null;
-function ensureChild(env = {}) {
-  if (child) return child;
-  const wsRoot = env.workspaceRoot || process.env.AOPC_PROJECT_DIR || process.env.AOPC_WORKSPACE_ROOT || process.cwd();
+function defaultWorkspaceRoot() {
+  return resolve3(process.env.AOPC_PROJECT_DIR || process.env.AOPC_WORKSPACE_ROOT || process.cwd());
+}
+var children = /* @__PURE__ */ new Map();
+function createState(root) {
+  return {
+    root,
+    child: null,
+    pendingId: 0,
+    pending: /* @__PURE__ */ new Map(),
+    stderr: "",
+    buffer: "",
+    initDone: null
+  };
+}
+function ensureChild(root) {
+  const key = resolve3(root || defaultWorkspaceRoot());
+  let st = children.get(key);
+  if (!st) {
+    st = createState(key);
+    children.set(key, st);
+  }
+  if (st.child) return st;
   try {
-    child = spawn(process.execPath, [childServerPath], {
+    st.child = spawn(process.execPath, [childServerPath], {
       env: {
         ...process.env,
-        ZCODE_WORKSPACE_ROOT: wsRoot,
+        ZCODE_WORKSPACE_ROOT: st.root,
         ZCODE_PLUGIN_ROOT: vendorRoot,
-        ZCODE_WORKSPACE_IDENTITY: wsRoot
+        ZCODE_WORKSPACE_IDENTITY: st.root
       },
       stdio: ["pipe", "pipe", "pipe"]
     });
   } catch (err) {
     console.error("[wudi] OpenPencil spawn \u5931\u8D25:", err.message);
-    child = null;
-    return;
+    st.child = null;
+    return st;
   }
-  child.stdout.setEncoding("utf-8");
-  child.stdout.on("data", (chunk) => {
-    buffer += chunk;
+  st.child.stdout.setEncoding("utf-8");
+  st.child.stdout.on("data", (chunk) => {
+    st.buffer += chunk;
     let idx;
-    while ((idx = buffer.indexOf("\n")) >= 0) {
-      const line = buffer.slice(0, idx).trim();
-      buffer = buffer.slice(idx + 1);
+    while ((idx = st.buffer.indexOf("\n")) >= 0) {
+      const line = st.buffer.slice(0, idx).trim();
+      st.buffer = st.buffer.slice(idx + 1);
       if (!line) continue;
       try {
         const msg = JSON.parse(line);
-        if (msg.id !== void 0 && pending.has(msg.id)) {
-          pending.get(msg.id)(msg);
-          pending.delete(msg.id);
+        if (msg.id !== void 0 && st.pending.has(msg.id)) {
+          const res = st.pending.get(msg.id);
+          st.pending.delete(msg.id);
+          res(msg);
         }
       } catch {
       }
     }
   });
-  child.stderr.on("data", (d) => {
-    childStderr += d;
+  st.child.stderr.on("data", (d) => {
+    st.stderr += d;
   });
-  child.on("exit", (code) => {
-    console.error("[wudi] OpenPencil \u5B50\u8FDB\u7A0B\u9000\u51FA code=" + code);
-    child = null;
-    initDone = null;
+  st.child.on("exit", (code) => {
+    console.error(`[wudi] OpenPencil \u5B50\u8FDB\u7A0B\u9000\u51FA root=${st.root} code=` + code);
+    st.child = null;
+    st.initDone = null;
   });
-  initDone = request("initialize", {
+  st.initDone = request(st, "initialize", {
     protocolVersion: "2024-11-05",
     capabilities: {},
     clientInfo: { name: "wudi-coding", version: "1.0" }
-  }).then(() => notify("notifications/initialized"));
-  return child;
+  }).then(() => notify(st, "notifications/initialized"));
+  return st;
 }
-function request(method, params) {
-  ensureChild();
-  const id = ++pendingId;
+function request(st, method, params) {
+  ensureChild(st.root);
+  if (!st.child) return Promise.reject(new Error("OpenPencil \u5B50\u8FDB\u7A0B\u672A\u542F\u52A8"));
+  const id = ++st.pendingId;
   const p = new Promise((res, rej) => {
-    pending.set(id, res);
+    st.pending.set(id, res);
     setTimeout(() => {
-      if (pending.has(id)) {
-        pending.delete(id);
+      if (st.pending.has(id)) {
+        st.pending.delete(id);
         rej(new Error(`openpencil \u5B50\u8FDB\u7A0B\u8BF7\u6C42\u8D85\u65F6\uFF1A${method}
-stderr: ${childStderr.slice(-300)}`));
+stderr: ${st.stderr.slice(-300)}`));
       }
     }, 6e4);
   });
-  child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
+  st.child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
   return p.then((r) => {
     if (r.error) throw Object.assign(new Error(r.error.message ?? "openpencil error"), { code: r.error.code });
     return r.result;
   });
 }
-function notify(method, params) {
-  ensureChild();
-  child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method, params }) + "\n");
+function notify(st, method, params) {
+  ensureChild(st.root);
+  st.child?.stdin.write(JSON.stringify({ jsonrpc: "2.0", method, params }) + "\n");
 }
-async function openpencilTools() {
-  await initDone;
-  const r = await request("tools/list", {});
+async function openpencilTools(root = void 0) {
+  const st = ensureChild(root);
+  await st.initDone;
+  const r = await request(st, "tools/list", {});
   return r.tools ?? [];
 }
-async function openpencilCall(name, args) {
-  await initDone;
-  const r = await request("tools/call", { name, arguments: args ?? {} });
-  return r;
+async function openpencilCall(root = void 0, name, args = void 0) {
+  const st = ensureChild(root);
+  await st.initDone;
+  return request(st, "tools/call", { name, arguments: args ?? {} });
 }
-async function openpencilReadResource(uri) {
-  await initDone;
-  return request("resources/read", { uri });
+async function openpencilReadResource(root = void 0, uri) {
+  const st = ensureChild(root);
+  await st.initDone;
+  return request(st, "resources/read", { uri });
 }
-async function openpencilBridgeEndpoint() {
-  const r = await openpencilCall("get_design_status", {});
+async function openpencilBridgeEndpoint(root = void 0) {
+  const r = await openpencilCall(root, "get_design_status", {});
   const sc = r.structuredContent ?? {};
   return sc.bridge ?? null;
 }
-var _epCache = { at: 0, value: null };
-async function openpencilBridgeEndpointCached() {
-  if (Date.now() - _epCache.at < 3e4) return _epCache.value;
+var _epCache = /* @__PURE__ */ new Map();
+async function openpencilBridgeEndpointCached(root = void 0) {
+  const key = resolve3(root || defaultWorkspaceRoot());
+  const cur = _epCache.get(key);
+  if (cur && Date.now() - cur.at < 3e4) return cur.value;
   try {
-    const ep = await openpencilBridgeEndpoint();
-    _epCache = { at: Date.now(), value: ep };
+    const ep = await openpencilBridgeEndpoint(key);
+    _epCache.set(key, { at: Date.now(), value: ep });
     return ep;
   } catch {
-    _epCache = { at: Date.now(), value: null };
+    _epCache.set(key, { at: Date.now(), value: null });
     return null;
   }
 }
 try {
-  ensureChild();
+  ensureChild(defaultWorkspaceRoot());
 } catch (e) {
   console.error("[wudi] OpenPencil \u9884\u70ED\u5931\u8D25:", e.message);
 }
@@ -3008,7 +3119,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.36.1" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.37.0" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());
@@ -3061,15 +3172,15 @@ function sendError(id, code, message) {
   process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } })}
 `);
 }
-var buffer2 = "";
+var buffer = "";
 var inFlight = 0;
 process.stdin.setEncoding("utf-8");
 process.stdin.on("data", (chunk) => {
-  buffer2 += chunk;
+  buffer += chunk;
   let newlineIndex;
-  while ((newlineIndex = buffer2.indexOf("\n")) >= 0) {
-    const line = buffer2.slice(0, newlineIndex).trim();
-    buffer2 = buffer2.slice(newlineIndex + 1);
+  while ((newlineIndex = buffer.indexOf("\n")) >= 0) {
+    const line = buffer.slice(0, newlineIndex).trim();
+    buffer = buffer.slice(newlineIndex + 1);
     if (line) handleMessage(line);
   }
 });
@@ -3158,7 +3269,19 @@ function handleMessage(line) {
         return;
       }
       if (uri.startsWith("ui://openpencil/")) {
-        openpencilReadResource(uri).then((result) => send(id, result)).catch((err) => sendError(id, -32602, `OpenPencil \u8D44\u6E90\u8BFB\u53D6\u5931\u8D25\uFF1A${String(err?.message ?? err).slice(0, 200)}`));
+        let cleanUri = uri;
+        let root = "";
+        try {
+          const u = new URL(uri);
+          const r = u.searchParams.get("wudiRoot");
+          if (r) {
+            root = r;
+            u.search = "";
+            cleanUri = u.toString();
+          }
+        } catch {
+        }
+        openpencilReadResource(root || void 0, cleanUri).then((result) => send(id, result)).catch((err) => sendError(id, -32602, `OpenPencil \u8D44\u6E90\u8BFB\u53D6\u5931\u8D25\uFF1A${String(err?.message ?? err).slice(0, 200)}`));
         return;
       }
       const m = uri.match(/^ui:\/\/wudi-coding\/(mockup|image)\/([\w.-]+)$/);
@@ -3190,11 +3313,22 @@ function handleMessage(line) {
     inFlight++;
     const toolName = params?.name ?? "";
     const isWudiTool = TOOLS.some((t) => t.name === toolName);
-    const callPromise = isWudiTool ? callTool(toolName, params?.arguments ?? {}) : openpencilCall(toolName, params?.arguments ?? {}).then((r) => ({
-      content: (r.content ?? []).map((c) => ({ type: "text", text: c.text ?? "" })),
-      isError: !!r.isError,
-      structuredContent: r.structuredContent
-    }));
+    const callPromise = isWudiTool ? callTool(toolName, params?.arguments ?? {}) : (() => {
+      const rawArgs = { ...params?.arguments ?? {} };
+      const rootArg = rawArgs.__root;
+      delete rawArgs.__root;
+      return openpencilCall(rootArg, toolName, rawArgs).then((r) => {
+        const sc = r.structuredContent;
+        if (toolName === "get_design_status" && sc?.bridge?.url) {
+          sc.bridge = { ...sc.bridge, url: opWsProxyUrl(sc.bridge.url) };
+        }
+        return {
+          content: (r.content ?? []).map((c) => ({ type: "text", text: c.text ?? "" })),
+          isError: !!r.isError,
+          structuredContent: sc
+        };
+      });
+    })();
     callPromise.then((result) => send(id, result)).catch((err) => sendError(id, -32603, `\u5DE5\u5177\u5185\u90E8\u9519\u8BEF\uFF1A${String(err?.message ?? err).slice(0, 500)}`)).finally(() => {
       inFlight--;
     });

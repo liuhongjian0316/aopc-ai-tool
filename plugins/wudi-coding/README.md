@@ -349,6 +349,14 @@ plugins/wudi-coding/
 - 项目卡布局修正：状态行与「重命名/移除」操作行分开，窄卡片不再竖排挤压。
 - smoke 新增 2 项（启动即建档案 / 登记自动建档），118 项全绿。
 
+## 所有项目可进入内容（v0.37.0）
+
+- **项目卡全部可进入内容页**：非当前工作区项目不再只是只读下钻——总览（档案/环境/部署历史/文档）、部署历史、设计、文档都按**该项目根**加载。
+- **多根寻址**：`wudi_status` / `wudi_deploy_history` / `wudi_designs_list` / `wudi_design_delete` / `wudi_design_rename` / `wudi_project_get` 新增 `root` 参数；openpencil 子进程改为**按项目根多实例**（`__root` 路由），资源读取携带 `wudiRoot`。
+- **编辑器 WS 反代**：`get_design_status` 返回的 WS 端点统一改写为 wudi 协同桥的 `/op-ws` 透明代理——任意项目根的编辑器端口都落在宿主 CSP 已放行的桥 origin 下，非当前项目的画布也能在面板内编辑。
+- **安全边界**：非当前项目为「看内容 + 管设计稿」；部署/回滚/健康检查/周报/SSH 测试按钮禁用并提示在该项目工作区执行。
+- smoke 新增 5 项多根回归（123 项全绿）。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。

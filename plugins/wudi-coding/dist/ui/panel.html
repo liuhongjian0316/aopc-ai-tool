@@ -479,14 +479,15 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.36.1" },
+    { name: "wudi-coding", version: "0.37.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
 
   const state = {
     view: "projects",  // 打开先见项目选择/创建页；点项目卡片选中后才进入项目内容（v0.31）
-    drill: null,       // 非当前项目的只读下钻（registry summary）
+    drill: null,       // 历史字段（保留兼容）
+    projectRoot: "",   // 正在查看的项目根（空 = 当前工作区；非空 = 已登记的其他项目）
     tab: "overview",
     createOpen: false, // landing 登记项目表单展开态（无项目时强制展开）
     envs: [],
@@ -655,6 +656,7 @@ const EmptyResultSchema = {
       b.addEventListener("click", () => {
         state.drill = null;
         state.view = b.dataset.tab === "projects" ? "projects" : "detail";
+        if (b.dataset.tab === "projects") state.projectRoot = "";
         state.tab = b.dataset.tab === "projects" ? state.tab : b.dataset.tab;
         state.notice = null;
         if (state.tab === "design" && state.view === "detail") loadDesign({ autoEnter: true });
@@ -672,6 +674,7 @@ const EmptyResultSchema = {
     document.getElementById("btn-back-projects")?.addEventListener("click", () => {
       state.view = "projects";
       state.tab = "overview";
+      state.projectRoot = "";
       state.notice = null;
       render();
       saveWidgetState();
@@ -706,7 +709,7 @@ const EmptyResultSchema = {
           ${(p.envNames ?? []).slice(0, 3).map((e) => `<span class="chip">${esc(e)}</span>`).join("")}
         </div>
         <div class="foot">${healthDot(p)}<span style="flex:1"></span>文档 ${p.docsCount} · 设计 ${p.designCount}</div>
-        ${p.isCurrent ? '<div class="cta">进入项目内容 →</div>' : ""}
+        <div class="cta">进入项目内容 →</div>
         <div class="pcard-actions">
           <button class="link-act" data-prj-rename="${esc(p.id)}" title="重命名项目显示名">重命名</button>
           <button class="link-del" data-remove="${esc(p.id)}" title="从工作台移除（不影响项目文件）">移除</button>
@@ -759,6 +762,11 @@ const EmptyResultSchema = {
   function renderOverview(p) {
     const resolvedCfg = state.data?.resolved;
     /* 档案缺失或部署配置不完整：显示（预填的）配置表单 —— 「未建档」概念已取消，档案由插件自动创建 */
+    if ((!p || !p.build || !resolvedCfg?.deployRoot) && isForeignProject()) {
+      return `<div class="card"><h3>部署配置<span class="line"></span></h3>
+        <div class="muted">该项目还没有完整的构建/部署配置。请在该项目的工作区会话中完善（工作台里对非当前项目为只读）。</div>
+      </div>`;
+    }
     if (!p || !p.build || !resolvedCfg?.deployRoot) {
       return `
       <div class="card"><h3>${p ? "完善部署配置" : "快速建档"}<span class="line"></span></h3>
@@ -818,13 +826,13 @@ const EmptyResultSchema = {
           <span class="k">健康检查</span><span class="v">${esc(resolved?.healthCheck?.url || "未配置")}<span class="muted">（期望 ${esc(resolved?.healthCheck?.expect ?? 200)}，${esc(resolved?.healthCheck?.checkFrom ?? "remote")} 侧）</span></span>
         </div>
       </div>
-      <div class="card"><h3>连接与通知<span class="line"></span></h3>
+      ${isForeignProject() ? "" : `<div class="card"><h3>连接与通知<span class="line"></span></h3>
         <div class="btnrow">
           <button class="btn" id="btn-ping" ${state.busy ? "disabled" : ""}>测试 SSH</button>
           <button class="btn" id="btn-notify-test" ${state.busy ? "disabled" : ""}>测试通知</button>
           <span id="ping-result" class="muted">凭据来自插件设置；通知按档案 notifyWebhook</span>
         </div>
-      </div>
+      </div>`}
       <div class="card"><h3>最近部署<span class="line"></span></h3>
         ${latest ? `<div class="kv"><span class="k">版本</span><span class="v">${esc(latest.release ?? latest.id)}</span><span class="k">状态</span><span class="v plain">${badge(latest.status)}</span></div>` : '<span class="muted">还没有部署记录，去「部署」页发布第一版。</span>'}
       </div>`;
@@ -835,10 +843,10 @@ const EmptyResultSchema = {
     return `
       <div class="card"><h3>操作<span class="line"></span></h3>
         <div class="btnrow">
-          <button class="btn primary" id="btn-deploy" ${state.busy || !state.data?.project ? "disabled" : ""}>部署新版本…</button>
-          <button class="btn" id="btn-health" ${state.busy ? "disabled" : ""}>健康检查</button>
-          <button class="btn danger" id="btn-rollback" ${state.busy || !deploys.length ? "disabled" : ""}>回滚上一版…</button>
-          <span class="muted">均先出预检计划，确认后执行（走宿主审批）</span>
+          <button class="btn primary" id="btn-deploy" ${state.busy || !state.data?.project || isForeignProject() ? "disabled" : ""}>部署新版本…</button>
+          <button class="btn" id="btn-health" ${state.busy || isForeignProject() ? "disabled" : ""}>健康检查</button>
+          <button class="btn danger" id="btn-rollback" ${state.busy || !deploys.length || isForeignProject() ? "disabled" : ""}>回滚上一版…</button>
+          <span class="muted">${isForeignProject() ? "查看其他项目：部署/回滚/体检请在该项目工作区进行（此处只读）" : "均先出预检计划，确认后执行（走宿主审批）"}</span>
         </div>
       </div>
       ${deploys.length ? deploys.map((d) => {
@@ -900,8 +908,8 @@ const EmptyResultSchema = {
     const docs = state.data?.docs ?? [];
     return `<div class="card"><h3>文档库（.wudi/docs.json）<span class="line"></span></h3>
       <div class="btnrow" style="margin-bottom:8px">
-        <button class="btn" id="btn-weekly" ${state.busy ? "disabled" : ""}>生成周报</button>
-        <span class="muted">从 git log 生成近 7 天周报草稿并登记</span>
+        <button class="btn" id="btn-weekly" ${state.busy || isForeignProject() ? "disabled" : ""}>生成周报</button>
+        <span class="muted">${isForeignProject() ? "查看其他项目：只读（生成周报请在该项目工作区进行）" : "从 git log 生成近 7 天周报草稿并登记"}</span>
       </div>
       ${docs.length ? docs.map((d) =>
         `<div class="row clickable" data-path="${esc(d.path)}" title="点击让 Agent 打开并简介这份文档"><span class="badge neutral">${esc(TYPE_ZH[d.type] ?? d.type)}</span><span class="path">${esc(d.path)}</span><span class="time">${esc(fmtTime(d.updatedAt))}</span></div>`
@@ -1143,7 +1151,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.36.1" },
+              hostInfo: { name: "wudi-workbench", version: "0.37.0" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -1151,8 +1159,14 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
               },
             });
             break;
-          case "tools/call": reply(await callTool(p.name, p.arguments ?? {})); break;
-          case "resources/read": reply(await app.readServerResource({ uri: p.uri })); break;
+          case "tools/call":
+            reply(await callTool(p.name, { ...(p.arguments ?? {}), ...(state.projectRoot ? { __root: state.projectRoot } : {}) }));
+            break;
+          case "resources/read": {
+            const uri = state.projectRoot ? `${p.uri}${String(p.uri).includes("?") ? "&" : "?"}wudiRoot=${encodeURIComponent(state.projectRoot)}` : p.uri;
+            reply(await app.readServerResource({ uri }));
+            break;
+          }
           case "resources/list": reply(await app.listServerResources?.() ?? { resources: [] }); break;
           case "ping": reply({}); break;
           case "ui/open-link": await app.openLink?.({ url: p.url }); reply({}); break;
@@ -1198,7 +1212,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
     }
     if (path) {
       try {
-        await callTool("open_design", { path }); // 子进程侧登记活动设计稿，编辑器起来即加载
+        await callTool("open_design", { path, ...(state.projectRoot ? { __root: state.projectRoot } : {}) }); // 子进程侧登记活动设计稿（按项目根路由）
       } catch (err) {
         state.notice = { kind: "err", text: `登记活动设计稿失败（编辑器内仍可手动打开）：${String(err.message ?? err).slice(0, 200)}` };
       }
@@ -1283,6 +1297,12 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
     return state.env ? { env: state.env } : {};
   }
 
+  /** 项目根参数：查看其他项目时随工具调用传递（空 = 当前工作区）。 */
+  function rootArg() {
+    return state.projectRoot ? { root: state.projectRoot } : {};
+  }
+  const isForeignProject = () => !!state.projectRoot;
+
   function bindActions() {
     document.getElementById("btn-padd")?.addEventListener("click", async () => {
       const path = String(document.getElementById("p-path")?.value ?? "").trim();
@@ -1346,19 +1366,14 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
         const p = (state.projects?.projects ?? []).find((x) => x.id === pid);
         if (!p) return;
         state.createOpen = false;
-        if (card.dataset.current === "1") {
-          // 选中当前项目 → 进入项目内容页（数据启动时已加载，缺了就补一次）
-          state.drill = null;
-          state.view = "detail";
-          state.tab = "overview";
-          render();
-          saveWidgetState();
-          if (!state.data) loadAll();
-        } else {
-          state.drill = p;
-          render();
-          saveWidgetState();
-        }
+        state.drill = null;
+        state.projectRoot = p.isCurrent ? "" : p.path;
+        state.view = "detail";
+        state.tab = "overview";
+        if (!DEMO) { state.data = null; state.history = null; state.designs = null; }
+        render();
+        saveWidgetState();
+        loadAll();
       })
     );
     $root().querySelectorAll("[data-env]").forEach((b) =>
@@ -1463,7 +1478,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
         if (!name || name === oldName) return;
         setBusy(true);
         try {
-          const res = await callTool("wudi_design_rename", { path, name: `${name}.fig` });
+          const res = await callTool("wudi_design_rename", { path, name: `${name}.fig`, ...rootArg() });
           state.notice = { kind: "ok", text: res.content?.map((c) => c.text).join("\n") ?? `已重命名为 ${name}` };
           setBusy(false);
           await loadDesign();
@@ -1481,7 +1496,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
         if (!okDel) return;
         setBusy(true);
         try {
-          const res = await callTool("wudi_design_delete", { path });
+          const res = await callTool("wudi_design_delete", { path, ...rootArg() });
           state.notice = { kind: "ok", text: res.content?.map((c) => c.text).join("\n") ?? `已删除 ${path}` };
           if (state.opEmbed?.path === path) closeOpEmbed();
           setBusy(false);
@@ -1626,7 +1641,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
   async function loadDesign(opts = {}) {
     if (DEMO) return;
     try {
-      const ds = await callTool("wudi_designs_list", {});
+      const ds = await callTool("wudi_designs_list", rootArg());
       state.designs = struct(ds);
     } catch { state.designs = null; }
     /* 设计页 = 画布：从项目导航进入设计页且只有一个画布时，直接进入编辑器 */
@@ -1642,11 +1657,11 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
     setBusy(true);
     try {
       const envArg = state.env ? { env: state.env } : {};
-      const status = await callTool("wudi_status", { ...envArg, deployLimit: 5 });
+      const status = await callTool("wudi_status", { ...envArg, ...rootArg(), deployLimit: 5 });
       state.data = struct(status);
       state.notice = null;
       try {
-        const history = await callTool("wudi_deploy_history", { limit: 10 });
+        const history = await callTool("wudi_deploy_history", { limit: 10, ...rootArg() });
         state.history = struct(history);
       } catch { state.history = null; }
     } catch (err) {

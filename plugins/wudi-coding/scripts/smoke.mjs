@@ -297,6 +297,16 @@ async function protocolTests() {
       check("projects_rename: 重命名成功", !errOf(r) && textOf(r).includes("smoke-renamed"));
       r = await s.call("tools/call", { name: "wudi_projects_list", arguments: {} });
       check("projects_rename: 列表生效", (r?.result?.structuredContent?.projects ?? []).some((x) => x.name === "smoke-renamed"));
+      /* 多项目内容：按 root 读取与写入（__root 路由 openpencil 子进程） */
+      r = await s.call("tools/call", { name: "wudi_status", arguments: { root: sub } });
+      check("multi_root: status 按根返回", !errOf(r) && r?.result?.structuredContent?.project?.name === "subproj", textOf(r).slice(0, 120));
+      r = await s.call("tools/call", { name: "new_design", arguments: { path: "designs/sub.fig", __root: sub } });
+      check("multi_root: openpencil 按 __root 建稿", !errOf(r) && (textOf(r).includes("sub.fig") || textOf(r).includes("已存在")), textOf(r).slice(0, 120));
+      check("multi_root: 文件落在对应项目", existsSync(join(sub, "designs", "sub.fig")));
+      r = await s.call("tools/call", { name: "wudi_designs_list", arguments: { root: sub } });
+      check("multi_root: designs_list 按根", (r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "sub.fig"));
+      r = await s.call("tools/call", { name: "wudi_designs_list", arguments: {} });
+      check("multi_root: 当前根不含他项目设计稿", !(r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "sub.fig"));
     } finally {
       await rm(outside, { recursive: true, force: true });
     }

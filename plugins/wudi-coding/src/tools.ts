@@ -28,6 +28,7 @@ const clip = (s, n = 1500) => String(s ?? "").trim().slice(-n);
 
 /* ---- 实时协同桥：canvas 变更 SSE 广播（OpenPencil 式 agent↔面板活同步） ---- */
 import http from "node:http";
+import net from "node:net";
 import { dirname as _dirname, join as _join } from "node:path";
 import { fileURLToPath as _fURL } from "node:url";
 
@@ -70,6 +71,43 @@ bridgeServer.listen(0, "127.0.0.1", () => {
   bridgePort = bridgeServer.address().port;
 });
 
+/** 把 openpencil 子进程的 WS 端点包装成经 wudi 协同桥的代理 URL（面板 CSP 只需放行桥 origin）。 */
+export function opWsProxyUrl(target) {
+  if (!bridgePort || !target) return target;
+  return `ws://127.0.0.1:${bridgePort}/op-ws?target=${encodeURIComponent(target)}`;
+}
+
+/* 透明 WS 反代：/op-ws?target=ws://127.0.0.1:PORT → 转发握手与字节流到目标编辑器服务 */
+bridgeServer.on("upgrade", (req, socket, head) => {
+  let target = null;
+  try {
+    const u = new URL(req.url ?? "/", "http://127.0.0.1");
+    if (u.pathname !== "/op-ws") throw new Error("not ws proxy");
+    target = new URL(u.searchParams.get("target") ?? "");
+  } catch {
+    socket.destroy();
+    return;
+  }
+  const host = target.hostname;
+  const port = Number(target.port || 80);
+  if (host !== "127.0.0.1" || !port) { socket.destroy(); return; }
+  const upstream = net.connect(port, host, () => {
+    const lines = [];
+    for (const [k, v] of Object.entries(req.headers)) {
+      if (k.toLowerCase() === "host") continue;
+      lines.push(`${k}: ${Array.isArray(v) ? v.join(", ") : v}`);
+    }
+    lines.push(`Host: 127.0.0.1:${port}`);
+    upstream.write(`${req.method} / HTTP/1.1\r\n${lines.join("\r\n")}\r\n\r\n`);
+    if (head?.length) upstream.write(head);
+    upstream.pipe(socket);
+    socket.pipe(upstream);
+  });
+  upstream.on("error", () => socket.destroy());
+  socket.on("error", () => upstream.destroy());
+  socket.on("close", () => upstream.destroy());
+});
+
 /** 向所有已连接面板广播画布变更。 */
 function broadcastCanvasChanged() {
   for (const res of bridgeSubscribers) {
@@ -102,7 +140,7 @@ export const TOOLS = [
   {
     name: "wudi_project_get",
     description: "读取当前项目的无敌编程档案（.wudi/project.json：技术栈/构建命令/打包方式/部署根目录/远端脚本/健康检查）。档案不存在时返回缺失说明与建档字段模板。",
-    inputSchema: { type: "object", properties: {} },
+    inputSchema: { type: "object", properties: { root: { type: "string", description: "项目根路径（缺省为当前工作区；工作台多项目内容页传入）" },} },
   },
   {
     name: "wudi_project_init",
@@ -184,7 +222,7 @@ export const TOOLS = [
     _meta: UI_META,
     inputSchema: {
       type: "object",
-      properties: {
+      properties: { root: { type: "string", description: "项目根路径（缺省为当前工作区；工作台多项目内容页传入）" },
         env: { type: "string", description: "目标环境名；档案配置了多个环境时缺省用 defaultEnv/第一个" },
         deployLimit: { type: "number", description: "返回最近几次部署，默认 5" },
       },
@@ -234,7 +272,7 @@ export const TOOLS = [
     _meta: UI_META,
     inputSchema: {
       type: "object",
-      properties: {
+      properties: { root: { type: "string", description: "项目根路径（缺省为当前工作区；工作台多项目内容页传入）" },
         env: { type: "string", description: "只看某个环境的记录" },
         limit: { type: "number", description: "返回条数，默认 10，最大 50" },
       },
@@ -464,14 +502,14 @@ export const TOOLS = [
     name: "wudi_designs_list",
     description: "列出工作区 designs/ 目录下的 .fig/.pen 设计稿文件（名称、大小、修改时间）。配合 OpenPencil 插件：Agent 可用 open_design 打开协同编辑、export_image 渲染 PNG 到 .wudi/design/renders/ 进面板图墙。",
     _meta: UI_META,
-    inputSchema: { type: "object", properties: {} },
+    inputSchema: { type: "object", properties: { root: { type: "string", description: "项目根路径（缺省为当前工作区；工作台多项目内容页传入）" },} },
   },
   {
     name: "wudi_design_delete",
     description: "删除工作区 designs/ 目录下的设计稿文件（.fig/.pen）。仅允许 designs/ 目录内的文件；若编辑器正打开该设计稿，建议先关闭再删除。",
     inputSchema: {
       type: "object",
-      properties: { path: { type: "string", description: "设计稿路径，如 designs/old.fig" } },
+      properties: { root: { type: "string", description: "项目根路径（缺省为当前工作区；工作台多项目内容页传入）" }, path: { type: "string", description: "设计稿路径，如 designs/old.fig" } },
       required: ["path"],
     },
   },
@@ -480,7 +518,7 @@ export const TOOLS = [
     description: "重命名工作区 designs/ 目录下的设计稿文件（.fig/.pen）。仅允许 designs/ 目录内操作；目标名已存在时拒绝。",
     inputSchema: {
       type: "object",
-      properties: {
+      properties: { root: { type: "string", description: "项目根路径（缺省为当前工作区；工作台多项目内容页传入）" },
         path: { type: "string", description: "现有设计稿路径，如 designs/old.fig" },
         name: { type: "string", description: "新文件名，如 new.fig（不含目录）" },
       },
@@ -529,7 +567,7 @@ export async function callTool(name, args = {}) {
   try {
     switch (name) {
       case "wudi_project_get":
-        return toolProjectGet();
+        return toolProjectGet(args);
       case "wudi_project_init":
         return toolProjectInit(args);
       case "wudi_status":
@@ -567,7 +605,7 @@ export async function callTool(name, args = {}) {
       case "wudi_figma_link":
         return toolFigmaLink(args);
       case "wudi_designs_list":
-        return toolDesignsList();
+        return toolDesignsList(args);
       case "wudi_design_delete":
         return toolDesignDelete(args);
       case "wudi_design_rename":
@@ -612,8 +650,8 @@ export async function callTool(name, args = {}) {
 
 /* ================= 项目档案 ================= */
 
-function toolProjectGet() {
-  const project = store.loadProject();
+function toolProjectGet(args: any = {}) {
+  const project = store.loadProjectAt(toolRoot(args));
   if (!project) {
     return ok(
       [
@@ -725,7 +763,9 @@ function toolProjectInit(args) {
 /* ================= 状态汇总 ================= */
 
 async function toolStatus(args: any = {}) {
-  const project = store.loadProject();
+  let root;
+  try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
+  const project = store.loadProjectAt(root);
   const envName = args.env ? String(args.env) : undefined;
   let resolved = null;
   let envErr = null;
@@ -737,8 +777,8 @@ async function toolStatus(args: any = {}) {
     }
   }
   const deployLimit = Math.min(Math.max(Number(args.deployLimit) || 5, 1), 20);
-  const deploys = store.loadDeploys().slice(0, deployLimit);
-  const docs = store.loadDocs();
+  const deploys = store.loadDeploysAt(root).slice(0, deployLimit);
+  const docs = store.loadDocsAt(root);
   let sshLine = "SSH：未配置（插件设置里填 sshHost 等）";
   try {
     const cfg = sshConfig(resolved?.ssh ?? {});
@@ -1067,8 +1107,10 @@ async function toolDeploy(args: any = {}) {
 function toolDeployHistory(args: any = {}) {
   const limit = Math.min(Math.max(Number(args.limit) || 10, 1), 50);
   const envFilter = args.env ? String(args.env) : null;
+  let root;
+  try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
   const deploys = store
-    .loadDeploys()
+    .loadDeploysAt(root)
     .filter((d) => !envFilter || d.env === envFilter)
     .slice(0, limit);
   if (!deploys.length) return ok(envFilter ? `环境 ${envFilter} 还没有部署记录。` : "还没有部署记录。", { deploys: [] });
@@ -1557,6 +1599,15 @@ function toolProjectsList() {
   return ok(`═══ 项目注册表（${projects.length}）═══\n${lines || "（空）"}`, { projects });
 }
 
+/** 工具调用的项目根：显式 root 参数优先（多项目内容页），否则当前工作区。 */
+function toolRoot(args: any = {}) {
+  const raw = String(args?.root ?? "").trim();
+  if (!raw) return store.projectRoot();
+  const abs = resolve(raw);
+  if (!existsSync(abs) || !statSync(abs).isDirectory()) throw new Error(`项目根不存在：${raw}`);
+  return abs;
+}
+
 /** 当前项目根（工作区）—— 项目登记与目录浏览的唯一允许范围。 */
 function currentProjectRoot() {
   return resolve(store.projectRoot());
@@ -2030,8 +2081,8 @@ function toolTokensCompare(args: any = {}) {
 }
 
 /** 校验并解析 designs/ 目录内的设计稿路径（防路径穿越，仅 .fig/.pen）。 */
-function resolveDesignFile(p: string) {
-  const dir = resolve(join(store.projectRoot(), "designs"));
+function resolveDesignFile(p: string, root?: string) {
+  const dir = resolve(join(root || store.projectRoot(), "designs"));
   const base = String(p ?? "").trim().replace(/^designs\//i, "");
   if (!/^[\w.-]+\.(fig|pen)$/i.test(base)) throw new Error(`非法设计稿名：${p}（仅允许 designs/<名称>.fig/.pen）`);
   const file = resolve(dir, base);
@@ -2044,7 +2095,7 @@ function toolDesignDelete(args: any = {}) {
   if (!path) return fail("缺少 path：要删除的设计稿路径，如 designs/old.fig。");
   let file: string;
   try {
-    file = resolveDesignFile(path).file;
+    file = resolveDesignFile(path, toolRoot(args)).file;
   } catch (err: any) {
     return fail(String(err?.message ?? err));
   }
@@ -2059,7 +2110,7 @@ function toolDesignRename(args: any = {}) {
   if (!path || !name) return fail("缺少参数：path（现有设计稿）与 name（新文件名，如 new.fig）。");
   let dir: string, file: string, base: string;
   try {
-    ({ dir, file, base } = resolveDesignFile(path));
+    ({ dir, file, base } = resolveDesignFile(path, toolRoot(args)));
   } catch (err: any) {
     return fail(String(err?.message ?? err));
   }
@@ -2072,8 +2123,8 @@ function toolDesignRename(args: any = {}) {
   return ok(`已重命名：${base} → designs/${name}`, { path: `designs/${name}` });
 }
 
-function toolDesignsList() {
-  const dir = join(store.projectRoot(), "designs");
+function toolDesignsList(args: any = {}) {
+  const dir = join(toolRoot(args), "designs");
   const designs = [];
   try {
     for (const f of readdirSync(dir)) {
