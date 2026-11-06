@@ -638,7 +638,7 @@ function toolProjectGet() {
 /** 新增/更新/删除环境；返回更新后的档案。 */
 function toolEnvSet(args) {
   const project = store.loadProject();
-  if (!project) return fail("项目未建档，先 wudi_project_init。");
+  if (!project) return fail("项目档案缺失，先 wudi_project_init。");
   const name = String(args.name ?? "").trim();
   if (!name) return fail("缺少 name。");
   if (name === "default") return fail("default 是单环境模式的虚拟名，不能作为显式环境名。");
@@ -758,7 +758,7 @@ async function toolStatus(args: any = {}) {
           envErr ? `环境解析失败：${envErr}` : resolved ? `部署（${resolved.name}）：${resolved.deployRoot || "(未配置)"}；切换脚本：${resolved.remoteScript || "(无)"}；日志：${resolved.logCommand || "(未配置)"}` : "",
           `健康检查：${resolved?.healthCheck?.url || "(未配置)"}（期望 ${resolved?.healthCheck?.expect ?? 200}，${resolved?.healthCheck?.checkFrom ?? "remote"} 侧检查）`,
         ].filter(Boolean).join("\n")
-      : "项目档案：未建档（用 wudi_project_init 或 /wudi 建档）",
+      : "项目档案：缺失（用 wudi_project_init 或 /wudi 建档）",
     sshLine,
     `最近部署（${deploys.length}）：`,
     deploys.length
@@ -875,7 +875,7 @@ function planText(lines, confirmHint) {
 
 async function toolDeploy(args: any = {}) {
   const project = store.loadProject();
-  if (!project) return fail("项目未建档，先 wudi_project_init。");
+  if (!project) return fail("项目档案缺失，先 wudi_project_init。");
   let envObj;
   try {
     envObj = store.resolveEnv(project, args.env ? String(args.env) : undefined);
@@ -1101,7 +1101,7 @@ async function readCurrentRelease(envObj) {
 
 async function toolRollback(args: any = {}) {
   const project = store.loadProject();
-  if (!project) return fail("项目未建档。");
+  if (!project) return fail("项目档案缺失。");
   let envObj;
   try {
     envObj = store.resolveEnv(project, args.env ? String(args.env) : undefined);
@@ -1232,7 +1232,7 @@ async function toolRollback(args: any = {}) {
 
 async function toolHealthCheck(args: any = {}) {
   const project = store.loadProject();
-  if (!project) return fail("项目未建档。");
+  if (!project) return fail("项目档案缺失。");
   let envObj;
   try {
     envObj = store.resolveEnv(project, args.env ? String(args.env) : undefined);
@@ -1258,7 +1258,7 @@ async function toolHealthCheck(args: any = {}) {
 
 async function toolRemoteExec(args: any = {}) {
   const project = store.loadProject();
-  if (!project) return fail("项目未建档。");
+  if (!project) return fail("项目档案缺失。");
   let envObj;
   try {
     envObj = store.resolveEnv(project, args.env ? String(args.env) : undefined);
@@ -1296,7 +1296,7 @@ async function toolDoctor(args: any = {}) {
   const add = (name, status, detail) => checks.push({ name, status, detail: String(detail).slice(0, 400) });
 
   if (!project) {
-    add("项目档案", "fail", "未建档（.wudi/project.json 不存在），先 wudi_project_init。");
+    add("项目档案", "fail", ".wudi/project.json 不存在，先 wudi_project_init。");
     return failReport(checks);
   }
   let envObj;
@@ -1391,7 +1391,7 @@ function failReport(checks) {
 
 async function toolDeployLogs(args: any = {}) {
   const project = store.loadProject();
-  if (!project) return fail("项目未建档。");
+  if (!project) return fail("项目档案缺失。");
   let envObj;
   try {
     envObj = store.resolveEnv(project, args.env ? String(args.env) : undefined);
@@ -1539,6 +1539,8 @@ function toolDesignList() {
 function toolProjectsList() {
   const root = store.projectRoot();
   try {
+    // 当前项目自动纳入注册表并确保有 .wudi 档案（取消「未建档」）
+    store.ensureProfileAt(root);
     // 仅全新条目用档案名初始化；已存在条目保留用户可能改过的显示名
     const exists = store.loadRegistry().some((e) => resolve(e.path) === resolve(root));
     if (!exists) store.registryAdd(root, store.loadProject()?.name || "");
@@ -1549,7 +1551,7 @@ function toolProjectsList() {
       const last = p.lastDeploy
         ? `${p.lastDeploy.type === "rollback" ? "回滚" : "部署"}@${p.lastDeploy.env ?? "default"} ${p.lastDeploy.release}（${p.lastDeploy.status}）`
         : "无部署";
-      return `- ${p.isCurrent ? "★当前 " : ""}${p.name}｜${p.path}${p.archived ? "" : "（未建档）"}\n  技术栈 ${p.techStack || "?"}｜环境 ${(p.envNames || ["—"]).join("、")}｜${last}｜文档 ${p.docsCount}｜设计产物 ${p.designCount}`;
+      return `- ${p.isCurrent ? "★当前 " : ""}${p.name}｜${p.path}\n  技术栈 ${p.techStack || "?"}｜环境 ${(p.envNames || ["—"]).join("、")}｜${last}｜文档 ${p.docsCount}｜设计产物 ${p.designCount}`;
     })
     .join("\n");
   return ok(`═══ 项目注册表（${projects.length}）═══\n${lines || "（空）"}`, { projects });
@@ -1618,9 +1620,15 @@ function toolProjectsAdd(args) {
   } catch (err) {
     return fail(String(err?.message ?? err));
   }
+  /* 登记即为项目建档：在目标目录创建 .wudi/project.json（缺省名/目录名） */
+  try {
+    store.ensureProfileAt(res.entry.path, res.entry.name);
+  } catch (err: any) {
+    return fail(`已登记但创建 .wudi 失败：${String(err?.message ?? err)}`);
+  }
   const s = store.registrySummaries(store.projectRoot()).find((x) => x.id === res.entry.id);
   return ok(
-    `${res.added ? "已登记项目" : "项目已在注册表"}：${res.entry.name}（${res.entry.path}）${s?.archived ? "" : "\n注意：该项目还没有 .wudi 档案，去该项目工作区跑 /wudi 建档。"}`,
+    `${res.added ? "已登记项目" : "项目已在注册表"}：${res.entry.name}（${res.entry.path}），已初始化 .wudi/project.json`,
     { project: s }
   );
 }
@@ -1946,7 +1954,7 @@ function toolDesignTokensExport(args: any = {}) {
 
 async function toolNotifyTest(args: any = {}) {
   const project = store.loadProject();
-  if (!project) return fail("项目未建档，先 wudi_project_init。");
+  if (!project) return fail("项目档案缺失，先 wudi_project_init。");
   let envObj;
   try {
     envObj = store.resolveEnv(project, args.env ? String(args.env) : undefined);

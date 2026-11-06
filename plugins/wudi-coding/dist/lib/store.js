@@ -9,6 +9,22 @@ function projectRoot() {
 function wudiDir() {
   return join(projectRoot(), ".wudi");
 }
+function ensureWudiDir() {
+  mkdirSync(wudiDir(), { recursive: true });
+  return wudiDir();
+}
+function ensureProfileAt(root, name = "") {
+  const abs = resolve(root);
+  const dir = join(abs, ".wudi");
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, "project.json");
+  if (!existsSync(file)) {
+    const base = String(name || abs.split("/").filter(Boolean).pop() || "project").trim();
+    const doc = { ...structuredClone(PROJECT_TEMPLATE), name: base };
+    writeFileSync(file, JSON.stringify(doc, null, 2));
+  }
+  return file;
+}
 function path(name) {
   return join(wudiDir(), name);
 }
@@ -503,6 +519,8 @@ export {
   appendDeploy,
   deleteFrame,
   designDir,
+  ensureProfileAt,
+  ensureWudiDir,
   exportCanvasToExcalidraw,
   exportCanvasToMockups,
   getFigmaUrl,

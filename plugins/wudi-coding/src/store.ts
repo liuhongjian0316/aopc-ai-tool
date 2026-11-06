@@ -18,6 +18,29 @@ export function wudiDir() {
   return join(projectRoot(), ".wudi");
 }
 
+/** 启动即建 .wudi/（插件只要被使用就存在），返回目录。 */
+export function ensureWudiDir() {
+  mkdirSync(wudiDir(), { recursive: true });
+  return wudiDir();
+}
+
+/**
+ * 确保指定项目根存在 .wudi/project.json（缺省用给定名/目录名初始化）。
+ * 登记项目、打开项目列表、服务启动时调用 —— 「未建档」概念由此取消。
+ */
+export function ensureProfileAt(root, name = "") {
+  const abs = resolve(root);
+  const dir = join(abs, ".wudi");
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, "project.json");
+  if (!existsSync(file)) {
+    const base = String(name || abs.split("/").filter(Boolean).pop() || "project").trim();
+    const doc = { ...structuredClone(PROJECT_TEMPLATE), name: base };
+    writeFileSync(file, JSON.stringify(doc, null, 2));
+  }
+  return file;
+}
+
 function path(name) {
   return join(wudiDir(), name);
 }

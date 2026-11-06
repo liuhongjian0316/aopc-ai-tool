@@ -7,6 +7,7 @@
  */
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm, readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -278,6 +279,8 @@ async function protocolTests() {
     try {
       r = await s.call("tools/call", { name: "wudi_projects_add", arguments: { path: sub, name: "subproj" } });
       check("projects_add: 子文件夹可登记", !errOf(r) && textOf(r).includes("subproj"));
+      check("auto_profile: 启动即建 .wudi/project.json", existsSync(join(workdir, ".wudi", "project.json")));
+      check("auto_profile: 登记项目自动建档", existsSync(join(sub, ".wudi", "project.json")));
       r = await s.call("tools/call", { name: "wudi_projects_add", arguments: { path: outside } });
       check("projects_add: 项目根之外拒绝", errOf(r) && textOf(r).includes("不在范围内"));
       /* 目录浏览：默认根 / 子目录 / 越界拒绝 */

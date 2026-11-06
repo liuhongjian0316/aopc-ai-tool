@@ -19,7 +19,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.36.0" },
+    { name: "wudi-coding", version: "0.36.1" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -77,7 +77,7 @@ const EmptyResultSchema = {
     const acts = [];
     const resolved = state.data?.resolved;
     const deploys = state.history?.deploys ?? state.data?.deploys ?? [];
-    if (!p.build) acts.push(["补构建命令", "流水线配置缺 build —— 用顶部快速建档补全", "hint"]);
+    if (!p.build) acts.push(["补构建命令", "流水线配置缺 build —— 在总览页完善部署配置", "hint"]);
     if (!resolved?.deployRoot) acts.push(["补部署目标", "档案缺 deployRoot，部署流水线无法启动", "hint"]);
     if (!resolved?.healthCheck?.url) acts.push(["配健康检查", "没有健康检查 URL，部署将跳过线上验证", "hint"]);
     if (p.build && resolved?.deployRoot && !deploys.length) acts.push(["首次部署", "一切就绪，去「部署」页走五阶段流水线", "goto-deploys"]);
@@ -242,12 +242,15 @@ const EmptyResultSchema = {
         <div class="pname">${esc(p.name)}</div>
         <div class="ppath">${esc(shortPath(p.path))}</div>
         <div class="stats">
-          ${p.archived ? "" : '<span class="badge warn">未建档</span>'}
           ${p.techStack ? `<span class="chip accent">${esc(p.techStack)}</span>` : ""}
           ${(p.envNames ?? []).slice(0, 3).map((e) => `<span class="chip">${esc(e)}</span>`).join("")}
         </div>
-        <div class="foot">${healthDot(p)}<span style="flex:1"></span>文档 ${p.docsCount} · 设计 ${p.designCount}<button class="link-act" data-prj-rename="${esc(p.id)}" title="重命名项目显示名">重命名</button><button class="link-del" data-remove="${esc(p.id)}" title="从工作台移除（不影响项目文件）">移除</button></div>
+        <div class="foot">${healthDot(p)}<span style="flex:1"></span>文档 ${p.docsCount} · 设计 ${p.designCount}</div>
         ${p.isCurrent ? '<div class="cta">进入项目内容 →</div>' : ""}
+        <div class="pcard-actions">
+          <button class="link-act" data-prj-rename="${esc(p.id)}" title="重命名项目显示名">重命名</button>
+          <button class="link-del" data-remove="${esc(p.id)}" title="从工作台移除（不影响项目文件）">移除</button>
+        </div>
       </div>`).join("");
     /* 「＋ 登记项目」虚线卡：点开展开登记表单（也是页面上唯一的创建入口） */
     const addCard = `
@@ -281,7 +284,6 @@ const EmptyResultSchema = {
           <span class="chip">${esc(shortPath(p.path, 56))}</span>
           ${p.techStack ? `<span class="chip">${esc(p.techStack)}</span>` : ""}
           ${(p.envNames ?? []).map((e) => `<span class="chip">${esc(e)}</span>`).join("")}
-          ${p.archived ? "" : '<span class="chip">未建档</span>'}
         </div>
       </div>
       <div class="card"><h3>最近部署<span class="line"></span></h3>
@@ -295,22 +297,24 @@ const EmptyResultSchema = {
 
   /* ---------- 当前项目四页 ---------- */
   function renderOverview(p) {
-    if (!p) {
+    const resolvedCfg = state.data?.resolved;
+    /* 档案缺失或部署配置不完整：显示（预填的）配置表单 —— 「未建档」概念已取消，档案由插件自动创建 */
+    if (!p || !p.build || !resolvedCfg?.deployRoot) {
       return `
-      <div class="card"><h3>快速建档<span class="line"></span></h3>
-        <div class="muted" style="margin-bottom:8px">填基础档案即可开通部署流水线；多环境/通知/确认词在建档后用 <span class="mono">wudi_env_set</span> 配置。</div>
+      <div class="card"><h3>${p ? "完善部署配置" : "快速建档"}<span class="line"></span></h3>
+        <div class="muted" style="margin-bottom:8px">${p ? "档案已自动创建；填好构建/部署信息即可开通部署流水线。" : "填基础配置即可开通部署流水线。"}多环境/通知/确认词可用 <span class="mono">wudi_env_set</span> 配置。</div>
         <div class="kv">
-          <span class="k">项目名</span><span class="v"><input id="f-name" style="${INPUT_CSS}" placeholder="my-app"></span>
-          <span class="k">技术栈</span><span class="v"><input id="f-tech" style="${INPUT_CSS}" placeholder="vite-spa / go-service / node-nest"></span>
-          <span class="k">构建命令</span><span class="v"><input id="f-build" style="${INPUT_CSS}" placeholder="npm run build"></span>
-          <span class="k">打包</span><span class="v"><select id="f-ptype" style="${INPUT_CSS}"><option value="dir">产物目录（软链发布）</option><option value="docker-image">Docker 镜像</option></select></span>
-          <span class="k">产物路径</span><span class="v"><input id="f-ppath" style="${INPUT_CSS}" placeholder="dist（镜像模式填镜像名如 myapp:latest）"></span>
-          <span class="k">部署根目录</span><span class="v"><input id="f-root" style="${INPUT_CSS}" placeholder="/srv/myapp"></span>
-          <span class="k">切换脚本</span><span class="v"><input id="f-script" style="${INPUT_CSS}" placeholder="docker compose up -d（可留空）"></span>
-          <span class="k">健康检查</span><span class="v"><input id="f-health" style="${INPUT_CSS}" placeholder="http://127.0.0.1:8080/healthz（可留空）"></span>
+          <span class="k">项目名</span><span class="v"><input id="f-name" style="${INPUT_CSS}" placeholder="my-app" value="${esc(p?.name ?? "")}"></span>
+          <span class="k">技术栈</span><span class="v"><input id="f-tech" style="${INPUT_CSS}" placeholder="vite-spa / go-service / node-nest" value="${esc(p?.techStack ?? "")}"></span>
+          <span class="k">构建命令</span><span class="v"><input id="f-build" style="${INPUT_CSS}" placeholder="npm run build" value="${esc(p?.build ?? "")}"></span>
+          <span class="k">打包</span><span class="v"><select id="f-ptype" style="${INPUT_CSS}"><option value="dir" ${p?.package?.type === "docker-image" ? "" : "selected"}>产物目录（软链发布）</option><option value="docker-image" ${p?.package?.type === "docker-image" ? "selected" : ""}>Docker 镜像</option></select></span>
+          <span class="k">产物路径</span><span class="v"><input id="f-ppath" style="${INPUT_CSS}" placeholder="dist（镜像模式填镜像名如 myapp:latest）" value="${esc(p?.package?.type === "docker-image" ? (p?.package?.dockerImage ?? "") : (p?.package?.path ?? ""))}"></span>
+          <span class="k">部署根目录</span><span class="v"><input id="f-root" style="${INPUT_CSS}" placeholder="/srv/myapp" value="${esc(p?.deployRoot ?? "")}"></span>
+          <span class="k">切换脚本</span><span class="v"><input id="f-script" style="${INPUT_CSS}" placeholder="docker compose up -d（可留空）" value="${esc(p?.remoteScript ?? "")}"></span>
+          <span class="k">健康检查</span><span class="v"><input id="f-health" style="${INPUT_CSS}" placeholder="http://127.0.0.1:8080/healthz（可留空）" value="${esc(p?.healthCheck?.url ?? "")}"></span>
         </div>
         <div class="btnrow" style="margin-top:10px">
-          <button class="btn primary" id="btn-init" ${state.busy ? "disabled" : ""}>建立档案</button>
+          <button class="btn primary" id="btn-init" ${state.busy ? "disabled" : ""}>${p ? "保存配置" : "建立档案"}</button>
           <span class="muted">SSH 目标在插件设置里配置（host/用户/密钥）</span>
         </div>
       </div>`;
@@ -679,7 +683,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.36.0" },
+              hostInfo: { name: "wudi-workbench", version: "0.36.1" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",

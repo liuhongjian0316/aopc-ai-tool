@@ -20,6 +20,22 @@ function projectRoot() {
 function wudiDir() {
   return join(projectRoot(), ".wudi");
 }
+function ensureWudiDir() {
+  mkdirSync(wudiDir(), { recursive: true });
+  return wudiDir();
+}
+function ensureProfileAt(root, name = "") {
+  const abs = resolve(root);
+  const dir = join(abs, ".wudi");
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, "project.json");
+  if (!existsSync(file)) {
+    const base = String(name || abs.split("/").filter(Boolean).pop() || "project").trim();
+    const doc = { ...structuredClone(PROJECT_TEMPLATE), name: base };
+    writeFileSync(file, JSON.stringify(doc, null, 2));
+  }
+  return file;
+}
 function path(name) {
   return join(wudiDir(), name);
 }
@@ -1417,7 +1433,7 @@ ${j(project)}${envLine}`, { project });
 }
 function toolEnvSet(args) {
   const project = loadProject();
-  if (!project) return fail("\u9879\u76EE\u672A\u5EFA\u6863\uFF0C\u5148 wudi_project_init\u3002");
+  if (!project) return fail("\u9879\u76EE\u6863\u6848\u7F3A\u5931\uFF0C\u5148 wudi_project_init\u3002");
   const name = String(args.name ?? "").trim();
   if (!name) return fail("\u7F3A\u5C11 name\u3002");
   if (name === "default") return fail("default \u662F\u5355\u73AF\u5883\u6A21\u5F0F\u7684\u865A\u62DF\u540D\uFF0C\u4E0D\u80FD\u4F5C\u4E3A\u663E\u5F0F\u73AF\u5883\u540D\u3002");
@@ -1530,7 +1546,7 @@ async function toolStatus(args = {}) {
       envsLine,
       envErr ? `\u73AF\u5883\u89E3\u6790\u5931\u8D25\uFF1A${envErr}` : resolved ? `\u90E8\u7F72\uFF08${resolved.name}\uFF09\uFF1A${resolved.deployRoot || "(\u672A\u914D\u7F6E)"}\uFF1B\u5207\u6362\u811A\u672C\uFF1A${resolved.remoteScript || "(\u65E0)"}\uFF1B\u65E5\u5FD7\uFF1A${resolved.logCommand || "(\u672A\u914D\u7F6E)"}` : "",
       `\u5065\u5EB7\u68C0\u67E5\uFF1A${resolved?.healthCheck?.url || "(\u672A\u914D\u7F6E)"}\uFF08\u671F\u671B ${resolved?.healthCheck?.expect ?? 200}\uFF0C${resolved?.healthCheck?.checkFrom ?? "remote"} \u4FA7\u68C0\u67E5\uFF09`
-    ].filter(Boolean).join("\n") : "\u9879\u76EE\u6863\u6848\uFF1A\u672A\u5EFA\u6863\uFF08\u7528 wudi_project_init \u6216 /wudi \u5EFA\u6863\uFF09",
+    ].filter(Boolean).join("\n") : "\u9879\u76EE\u6863\u6848\uFF1A\u7F3A\u5931\uFF08\u7528 wudi_project_init \u6216 /wudi \u5EFA\u6863\uFF09",
     sshLine,
     `\u6700\u8FD1\u90E8\u7F72\uFF08${deploys.length}\uFF09\uFF1A`,
     deploys.length ? deploys.map(
@@ -1621,7 +1637,7 @@ function planText(lines, confirmHint) {
 }
 async function toolDeploy(args = {}) {
   const project = loadProject();
-  if (!project) return fail("\u9879\u76EE\u672A\u5EFA\u6863\uFF0C\u5148 wudi_project_init\u3002");
+  if (!project) return fail("\u9879\u76EE\u6863\u6848\u7F3A\u5931\uFF0C\u5148 wudi_project_init\u3002");
   let envObj;
   try {
     envObj = resolveEnv(project, args.env ? String(args.env) : void 0);
@@ -1827,7 +1843,7 @@ async function readCurrentRelease(envObj) {
 }
 async function toolRollback(args = {}) {
   const project = loadProject();
-  if (!project) return fail("\u9879\u76EE\u672A\u5EFA\u6863\u3002");
+  if (!project) return fail("\u9879\u76EE\u6863\u6848\u7F3A\u5931\u3002");
   let envObj;
   try {
     envObj = resolveEnv(project, args.env ? String(args.env) : void 0);
@@ -1957,7 +1973,7 @@ ${releases.join("\n")}`);
 }
 async function toolHealthCheck(args = {}) {
   const project = loadProject();
-  if (!project) return fail("\u9879\u76EE\u672A\u5EFA\u6863\u3002");
+  if (!project) return fail("\u9879\u76EE\u6863\u6848\u7F3A\u5931\u3002");
   let envObj;
   try {
     envObj = resolveEnv(project, args.env ? String(args.env) : void 0);
@@ -1982,7 +1998,7 @@ async function toolHealthCheck(args = {}) {
 }
 async function toolRemoteExec(args = {}) {
   const project = loadProject();
-  if (!project) return fail("\u9879\u76EE\u672A\u5EFA\u6863\u3002");
+  if (!project) return fail("\u9879\u76EE\u6863\u6848\u7F3A\u5931\u3002");
   let envObj;
   try {
     envObj = resolveEnv(project, args.env ? String(args.env) : void 0);
@@ -2022,7 +2038,7 @@ async function toolDoctor(args = {}) {
   const checks = [];
   const add = (name, status, detail) => checks.push({ name, status, detail: String(detail).slice(0, 400) });
   if (!project) {
-    add("\u9879\u76EE\u6863\u6848", "fail", "\u672A\u5EFA\u6863\uFF08.wudi/project.json \u4E0D\u5B58\u5728\uFF09\uFF0C\u5148 wudi_project_init\u3002");
+    add("\u9879\u76EE\u6863\u6848", "fail", ".wudi/project.json \u4E0D\u5B58\u5728\uFF0C\u5148 wudi_project_init\u3002");
     return failReport(checks);
   }
   let envObj;
@@ -2103,7 +2119,7 @@ function failReport(checks) {
 }
 async function toolDeployLogs(args = {}) {
   const project = loadProject();
-  if (!project) return fail("\u9879\u76EE\u672A\u5EFA\u6863\u3002");
+  if (!project) return fail("\u9879\u76EE\u6863\u6848\u7F3A\u5931\u3002");
   let envObj;
   try {
     envObj = resolveEnv(project, args.env ? String(args.env) : void 0);
@@ -2240,6 +2256,7 @@ ${lines}`, { files });
 function toolProjectsList() {
   const root = projectRoot();
   try {
+    ensureProfileAt(root);
     const exists = loadRegistry().some((e) => resolve2(e.path) === resolve2(root));
     if (!exists) registryAdd(root, loadProject()?.name || "");
   } catch {
@@ -2247,7 +2264,7 @@ function toolProjectsList() {
   const projects = registrySummaries(root);
   const lines = projects.map((p) => {
     const last = p.lastDeploy ? `${p.lastDeploy.type === "rollback" ? "\u56DE\u6EDA" : "\u90E8\u7F72"}@${p.lastDeploy.env ?? "default"} ${p.lastDeploy.release}\uFF08${p.lastDeploy.status}\uFF09` : "\u65E0\u90E8\u7F72";
-    return `- ${p.isCurrent ? "\u2605\u5F53\u524D " : ""}${p.name}\uFF5C${p.path}${p.archived ? "" : "\uFF08\u672A\u5EFA\u6863\uFF09"}
+    return `- ${p.isCurrent ? "\u2605\u5F53\u524D " : ""}${p.name}\uFF5C${p.path}
   \u6280\u672F\u6808 ${p.techStack || "?"}\uFF5C\u73AF\u5883 ${(p.envNames || ["\u2014"]).join("\u3001")}\uFF5C${last}\uFF5C\u6587\u6863 ${p.docsCount}\uFF5C\u8BBE\u8BA1\u4EA7\u7269 ${p.designCount}`;
   }).join("\n");
   return ok(`\u2550\u2550\u2550 \u9879\u76EE\u6CE8\u518C\u8868\uFF08${projects.length}\uFF09\u2550\u2550\u2550
@@ -2308,9 +2325,14 @@ function toolProjectsAdd(args) {
   } catch (err) {
     return fail(String(err?.message ?? err));
   }
+  try {
+    ensureProfileAt(res.entry.path, res.entry.name);
+  } catch (err) {
+    return fail(`\u5DF2\u767B\u8BB0\u4F46\u521B\u5EFA .wudi \u5931\u8D25\uFF1A${String(err?.message ?? err)}`);
+  }
   const s = registrySummaries(projectRoot()).find((x) => x.id === res.entry.id);
   return ok(
-    `${res.added ? "\u5DF2\u767B\u8BB0\u9879\u76EE" : "\u9879\u76EE\u5DF2\u5728\u6CE8\u518C\u8868"}\uFF1A${res.entry.name}\uFF08${res.entry.path}\uFF09${s?.archived ? "" : "\n\u6CE8\u610F\uFF1A\u8BE5\u9879\u76EE\u8FD8\u6CA1\u6709 .wudi \u6863\u6848\uFF0C\u53BB\u8BE5\u9879\u76EE\u5DE5\u4F5C\u533A\u8DD1 /wudi \u5EFA\u6863\u3002"}`,
+    `${res.added ? "\u5DF2\u767B\u8BB0\u9879\u76EE" : "\u9879\u76EE\u5DF2\u5728\u6CE8\u518C\u8868"}\uFF1A${res.entry.name}\uFF08${res.entry.path}\uFF09\uFF0C\u5DF2\u521D\u59CB\u5316 .wudi/project.json`,
     { project: s }
   );
 }
@@ -2616,7 +2638,7 @@ function toolDesignTokensExport(args = {}) {
 }
 async function toolNotifyTest(args = {}) {
   const project = loadProject();
-  if (!project) return fail("\u9879\u76EE\u672A\u5EFA\u6863\uFF0C\u5148 wudi_project_init\u3002");
+  if (!project) return fail("\u9879\u76EE\u6863\u6848\u7F3A\u5931\uFF0C\u5148 wudi_project_init\u3002");
   let envObj;
   try {
     envObj = resolveEnv(project, args.env ? String(args.env) : void 0);
@@ -2986,7 +3008,12 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.36.0" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.36.1" };
+try {
+  ensureWudiDir();
+  ensureProfileAt(projectRoot());
+} catch {
+}
 var PANEL_URI = "ui://wudi-coding/panel.html";
 var PANEL_MIME = "text/html;profile=mcp-app";
 var panelPath = resolve4(join4(dirname2(fileURLToPath2(import.meta.url)), "ui", "panel.html"));

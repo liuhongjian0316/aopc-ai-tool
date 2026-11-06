@@ -7,6 +7,7 @@ import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TOOLS, callTool, bridgeConnectDomains, frameDomains, fontCdnDomains } from "./tools";
+import { ensureWudiDir, ensureProfileAt, projectRoot } from "./store";
 
 // 进程级兜底：任何未捕获错误都不能杀掉 server（宿主连接断开的根因）
 process.on("uncaughtException", (err) => console.error("[wudi] uncaught:", err.message));
@@ -21,7 +22,13 @@ let opToolsCache = (() => {
   catch { return []; }
 })(); // 静态工具定义（117 个），后台动态刷新
 
-const SERVER_INFO = { name: "wudi-coding", version: "0.36.0" };
+const SERVER_INFO = { name: "wudi-coding", version: "0.36.1" };
+
+/* 只要插件被使用：自动创建 .wudi/ 与最小项目档案（不再有「未建档」状态） */
+try {
+  ensureWudiDir();
+  ensureProfileAt(projectRoot());
+} catch { /* 只读工作区等场景降级 */ }
 const PANEL_URI = "ui://wudi-coding/panel.html";
 const PANEL_MIME = "text/html;profile=mcp-app";
 const panelPath = resolve(join(dirname(fileURLToPath(import.meta.url)), "ui", "panel.html"));
