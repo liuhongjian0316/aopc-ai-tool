@@ -1,6 +1,6 @@
 {
   "name": "selfaware",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "description": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进",
   "description_i18n": {
     "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",

@@ -1453,6 +1453,17 @@ console.log("\n[T56] self_mission request/decide:B 类请示入队/批复/永久
   fs.rmSync(kb, { recursive: true, force: true });
 }
 
+// ---------- T57 生产管线四步(用户批评驱动) ----------
+
+console.log("\n[T57] autonomous-ops 含生产管线四步与反同质化条款");
+{
+  const skill = fs.readFileSync(path.join(ROOT, "skills", "autonomous-ops", "SKILL.md"), "utf8");
+  check("含发散步骤(≥3 互不雷同候选)", skill.includes("互不雷同"));
+  check("含反同质化禁令(禁止连续换壳)", skill.includes("禁止连续 ≥2 条同一素材的换壳迭代"));
+  check("含发布后 24h 自评", skill.includes("发布后 24h 自评") && skill.includes("观众视角"));
+  check("含只等数字=半个闭环警句", skill.includes("只等数字不做作品自评 = 半个闭环"));
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);

@@ -611,7 +611,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "3.2.0",
+      "version": "3.3.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -626,6 +626,15 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "3.3.0",
+          "date": "2026-11-06",
+          "changes": [
+            "用户批评驱动(你每次发完后自己不分析下吗,而且每次发的作品都一样):生产管线重写为四步——发散(≥3 互不雷同候选,禁止连续换壳)→收敛(hypothesis 必带)→生产+发布→发布后 24h 观众视角自评(只等数字=半个闭环)",
+            "journal user_feedback 首次实战(j005),规则已提炼",
+            "面板进化卡 + 冒烟测试 → 240 项全绿"
+          ]
+        },
         {
           "version": "3.2.0",
           "date": "2026-11-04",
