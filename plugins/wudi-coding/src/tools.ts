@@ -2093,10 +2093,21 @@ function toolTokensCompare(args: any = {}) {
 }
 
 /** 校验并解析 designs/ 目录内的设计稿路径（防路径穿越，仅 .fig/.pen）。 */
+/** 设计稿文件名是否合法：允许中文等 Unicode 字符；拒绝路径穿越、分隔符与控制字符。 */
+function validDesignName(name) {
+  const base = String(name ?? "").trim();
+  if (!base) return false;
+  if (/[/\\]/.test(base)) return false;
+  if (base.includes("..")) return false;
+  if (/^[\x00-\x1f]/.test(base) || /[\x00-\x1f]/.test(base)) return false;
+  if (!/\.(fig|pen)$/i.test(base)) return false;
+  return base.replace(/\.(fig|pen)$/i, "").trim().length > 0;
+}
+
 function resolveDesignFile(p: string, root?: string) {
   const dir = resolve(join(root || store.projectRoot(), "designs"));
   const base = String(p ?? "").trim().replace(/^designs\//i, "");
-  if (!/^[\w.-]+\.(fig|pen)$/i.test(base)) throw new Error(`非法设计稿名：${p}（仅允许 designs/<名称>.fig/.pen）`);
+  if (!validDesignName(base)) throw new Error(`非法设计稿名：${p}（仅允许 designs/<名称>.fig/.pen，支持中文）`);
   const file = resolve(dir, base);
   if (!file.startsWith(dir + "/")) throw new Error(`非法设计稿路径：${p}`);
   return { dir, file, base };
@@ -2126,7 +2137,7 @@ function toolDesignRename(args: any = {}) {
   } catch (err: any) {
     return fail(String(err?.message ?? err));
   }
-  if (!/^[\w.-]+\.(fig|pen)$/i.test(name)) return fail(`非法新文件名：${name}（仅允许 <名称>.fig/.pen）`);
+  if (!validDesignName(name)) return fail(`非法新文件名：${name}（仅允许 <名称>.fig/.pen，支持中文）`);
   if (!existsSync(file)) return fail(`设计稿不存在：${path}`);
   const target = resolve(dir, name);
   if (!target.startsWith(dir + "/")) return fail(`非法目标路径：${name}`);

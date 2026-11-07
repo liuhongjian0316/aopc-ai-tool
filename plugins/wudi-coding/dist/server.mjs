@@ -2852,10 +2852,19 @@ function toolTokensCompare(args = {}) {
   ].filter(Boolean);
   return ok(lines.join("\n").slice(0, 3e4), { added, changed, removed, same });
 }
+function validDesignName(name) {
+  const base = String(name ?? "").trim();
+  if (!base) return false;
+  if (/[/\\]/.test(base)) return false;
+  if (base.includes("..")) return false;
+  if (/^[\x00-\x1f]/.test(base) || /[\x00-\x1f]/.test(base)) return false;
+  if (!/\.(fig|pen)$/i.test(base)) return false;
+  return base.replace(/\.(fig|pen)$/i, "").trim().length > 0;
+}
 function resolveDesignFile(p, root) {
   const dir = resolve2(join2(root || projectRoot(), "designs"));
   const base = String(p ?? "").trim().replace(/^designs\//i, "");
-  if (!/^[\w.-]+\.(fig|pen)$/i.test(base)) throw new Error(`\u975E\u6CD5\u8BBE\u8BA1\u7A3F\u540D\uFF1A${p}\uFF08\u4EC5\u5141\u8BB8 designs/<\u540D\u79F0>.fig/.pen\uFF09`);
+  if (!validDesignName(base)) throw new Error(`\u975E\u6CD5\u8BBE\u8BA1\u7A3F\u540D\uFF1A${p}\uFF08\u4EC5\u5141\u8BB8 designs/<\u540D\u79F0>.fig/.pen\uFF0C\u652F\u6301\u4E2D\u6587\uFF09`);
   const file = resolve2(dir, base);
   if (!file.startsWith(dir + "/")) throw new Error(`\u975E\u6CD5\u8BBE\u8BA1\u7A3F\u8DEF\u5F84\uFF1A${p}`);
   return { dir, file, base };
@@ -2883,7 +2892,7 @@ function toolDesignRename(args = {}) {
   } catch (err) {
     return fail(String(err?.message ?? err));
   }
-  if (!/^[\w.-]+\.(fig|pen)$/i.test(name)) return fail(`\u975E\u6CD5\u65B0\u6587\u4EF6\u540D\uFF1A${name}\uFF08\u4EC5\u5141\u8BB8 <\u540D\u79F0>.fig/.pen\uFF09`);
+  if (!validDesignName(name)) return fail(`\u975E\u6CD5\u65B0\u6587\u4EF6\u540D\uFF1A${name}\uFF08\u4EC5\u5141\u8BB8 <\u540D\u79F0>.fig/.pen\uFF0C\u652F\u6301\u4E2D\u6587\uFF09`);
   if (!existsSync3(file)) return fail(`\u8BBE\u8BA1\u7A3F\u4E0D\u5B58\u5728\uFF1A${path2}`);
   const target = resolve2(dir, name);
   if (!target.startsWith(dir + "/")) return fail(`\u975E\u6CD5\u76EE\u6807\u8DEF\u5F84\uFF1A${name}`);
@@ -3168,7 +3177,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.37.2" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.37.3" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());

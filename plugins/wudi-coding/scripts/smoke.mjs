@@ -443,6 +443,15 @@ async function protocolTests() {
     check("design_rename: 列表包含新名", (r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "RenNew.fig"));
     r = await s.call("tools/call", { name: "wudi_design_rename", arguments: { path: "designs/RenNew.fig", name: "../evil.fig" } });
     check("design_rename: 非法名拒绝", errOf(r));
+    /* 中文名画布：创建 → 重命名 → 删除 全链路 */
+    r = await s.call("tools/call", { name: "new_design", arguments: { path: "designs/全部.fig", __root: sub } });
+    check("design_cjk: 中文名建稿", !errOf(r) && (textOf(r).includes("全部.fig") || textOf(r).includes("已存在")), textOf(r).slice(0, 120));
+    r = await s.call("tools/call", { name: "wudi_designs_list", arguments: { root: sub } });
+    check("design_cjk: 列表包含中文名", (r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "全部.fig"));
+    r = await s.call("tools/call", { name: "wudi_design_rename", arguments: { path: "designs/全部.fig", name: "全部面板.fig", root: sub } });
+    check("design_cjk: 中文名重命名", !errOf(r) && textOf(r).includes("全部面板.fig"), textOf(r).slice(0, 120));
+    r = await s.call("tools/call", { name: "wudi_design_delete", arguments: { path: "designs/全部面板.fig", root: sub } });
+    check("design_cjk: 中文名删除", !errOf(r) && textOf(r).includes("已删除"));
     r = await s.call("tools/call", { name: "wudi_canvas_bridge", arguments: {} });
     const bridgeUrlSc = r?.result?.structuredContent?.url ?? "";
     check("op_embed: 协同桥端点可用", bridgeUrlSc.startsWith("http://127.0.0.1:"));
