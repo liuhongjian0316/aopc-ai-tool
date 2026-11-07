@@ -19,7 +19,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.37.1" },
+    { name: "wudi-coding", version: "0.37.2" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -691,7 +691,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.37.1" },
+              hostInfo: { name: "wudi-workbench", version: "0.37.2" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -1047,6 +1047,24 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
         }
       })
     );
+    /* 创建项目画布：new_design 建稿（经 wudi 代理，按项目根路由）→ 自动进内嵌编辑器 */
+    document.getElementById("btn-op-new")?.addEventListener("click", async () => {
+      const name = String(document.getElementById("op-name")?.value ?? "").trim() || "ui";
+      if (DEMO) { await openOpEmbed(`designs/${name}.fig`); return; }
+      setBusy(true);
+      try {
+        const res = await callTool("new_design", { path: `designs/${name}.fig`, ...(state.projectRoot ? { __root: state.projectRoot } : {}) });
+        state.notice = { kind: "ok", text: res.content?.map((c) => c.text).join("\n") ?? `已创建画布 designs/${name}.fig` };
+        state.canvasCreateOpen = false;
+        setBusy(false);
+        await loadDesign();
+        await openOpEmbed(`designs/${name}.fig`);
+        return;
+      } catch (err) {
+        state.notice = { kind: "err", text: `创建画布失败：${String(err.message ?? err).slice(0, 400)}` };
+      }
+      setBusy(false);
+    });
     document.getElementById("btn-cv-create-toggle")?.addEventListener("click", () => {
       state.canvasCreateOpen = true;
       render();
@@ -1064,39 +1082,6 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
         saveWidgetState();
       })
     );
-    document.getElementById("btn-ex-new")?.addEventListener("click", async () => {
-      try {
-        if (!app.getHostCapabilities()?.message) {
-          state.notice = { kind: "err", text: "宿主不支持从面板发消息；请在会话里说「新建一个 Excalidraw 画板」。" };
-          render();
-          return;
-        }
-        await app.sendMessage({ role: "user", content: { type: "text", text: "请用 Excalidraw 插件新建一个空白设计画板（create_diagram，标题用「设计画布」+日期），打开后告诉我画板 id，我会在里面继续设计。" } });
-      } catch (err) {
-        state.notice = { kind: "err", text: `唤起失败：${String(err.message ?? err).slice(0, 300)}` };
-        render();
-      }
-    });
-    document.getElementById("btn-ex-export")?.addEventListener("click", async () => {
-      const name = String(document.getElementById("cv-name")?.value ?? "").trim() || `canvas-${Date.now().toString(36)}`;
-      setBusy(true);
-      let path = "";
-      try {
-        const res = await callTool("wudi_canvas_export", { name, format: "excalidraw" });
-        path = res.structuredContent?.excalidraw ?? "";
-      } catch (err) {
-        state.notice = { kind: "err", text: String(err.message ?? err).slice(0, 400) };
-        setBusy(false);
-        return;
-      }
-      setBusy(false);
-      try {
-        await app.sendMessage({ role: "user", content: { type: "text", text: `请用 Excalidraw 插件的 open_diagram 打开工作区文件 ${path}（导入并打开画板）。` } });
-      } catch (err) {
-        state.notice = { kind: "err", text: `唤起失败：${String(err.message ?? err).slice(0, 300)}` };
-        render();
-      }
-    });
     document.getElementById("btn-weekly")?.addEventListener("click", async () => {
       setBusy(true);
       try {

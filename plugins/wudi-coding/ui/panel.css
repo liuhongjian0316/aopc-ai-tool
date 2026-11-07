@@ -134,6 +134,12 @@ body {
   margin-left: 6px; transition: color .12s, background .12s;
 }
 .pcard .link-del:hover { color: var(--err); background: var(--err-bg); }
+.pcard .cv-del, .pcard .cv-ren {
+  position: absolute; top: 8px; width: 22px; height: 22px; border-radius: 6px;
+  border: none; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 13px; line-height: 1;
+}
+.pcard .cv-del { right: 8px; } .pcard .cv-del:hover { color: var(--err); background: var(--err-bg); }
+.pcard .cv-ren { right: 34px; } .pcard .cv-ren:hover { color: var(--accent-strong); background: var(--accent); }
 .pcard .pcard-actions { display: flex; justify-content: flex-end; gap: 2px; margin-top: 8px; }
 .pcard .foot { white-space: nowrap; }
 .pcard .link-act {

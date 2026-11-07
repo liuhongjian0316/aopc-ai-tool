@@ -110,6 +110,14 @@ try {
   const checkPanel = spawnSync(process.execPath, ["--check", moduleFile], { encoding: "utf-8" });
   if (checkPanel.status !== 0) throw new Error(`面板拼接产物语法检查失败：\n${checkPanel.stderr}`);
 
+  /* 面板交互门禁：标记里出现的按钮 id 必须有对应绑定（曾有清理误删按钮处理器的回归） */
+  const idRefs = [...panelJs.matchAll(/getElementById\("(btn-[\w-]+)"\)/g)].map((m) => m[1]);
+  const missing = [...new Set(idRefs)].filter((id) => !panelJs.includes(`id="${id}"`));
+  if (missing.length) throw new Error(`绑定引用了不存在的按钮 id：${missing.join(", ")}`);
+  const markupIds = [...panelJs.matchAll(/id="(btn-[\w-]+)"/g)].map((m) => m[1]);
+  const unbound = [...new Set(markupIds)].filter((id) => !panelJs.includes(`getElementById("${id}")`));
+  if (unbound.length) throw new Error(`按钮缺少事件绑定：${unbound.join(", ")}`);
+
   /* prelude 语法门禁：OP_PRELUDE 模板字符串运行时的输出必须是合法 JS（曾因 \/ 被吞成 / 导致整段不执行） */
   const preludeSrc = panelJs.match(/const OP_PRELUDE = `([\s\S]*?)`;/);
   if (preludeSrc) {
