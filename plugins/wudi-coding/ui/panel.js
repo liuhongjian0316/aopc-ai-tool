@@ -19,7 +19,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.37.3" },
+    { name: "wudi-coding", version: "0.37.4" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -199,7 +199,7 @@ const EmptyResultSchema = {
         if (b.dataset.tab === "projects") state.projectRoot = "";
         state.tab = b.dataset.tab === "projects" ? state.tab : b.dataset.tab;
         state.notice = null;
-        if (state.tab === "design" && state.view === "detail") loadDesign({ autoEnter: true });
+        if (state.tab === "design" && state.view === "detail") loadDesign();
         if (state.view === "projects") loadProjects();
         render();
         saveWidgetState();
@@ -691,7 +691,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.37.3" },
+              hostInfo: { name: "wudi-workbench", version: "0.37.4" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -1074,7 +1074,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
       b.addEventListener("click", () => {
         const act = b.dataset.act;
         if (act === "goto-deploys") { state.view = "detail"; state.tab = "deploys"; }
-        else if (act === "goto-design") { state.view = "detail"; state.tab = "design"; loadDesign({ autoEnter: true }); }
+        else if (act === "goto-design") { state.view = "detail"; state.tab = "design"; loadDesign(); }
         else if (act === "goto-docs") { state.view = "detail"; state.tab = "docs"; }
         else return; // hint 类仅提示
         state.notice = null;
@@ -1163,17 +1163,12 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
     if (state.view === "projects" && !state.drill) render();
   }
 
-  async function loadDesign(opts = {}) {
+  async function loadDesign() {
     if (DEMO) return;
     try {
       const ds = await callTool("wudi_designs_list", rootArg());
       state.designs = struct(ds);
     } catch { state.designs = null; }
-    /* 设计页 = 画布：从项目导航进入设计页且只有一个画布时，直接进入编辑器 */
-    if (opts?.autoEnter && state.view === "detail" && state.tab === "design" && !state.opEmbed) {
-      const list = state.designs?.designs ?? [];
-      if (list.length === 1) { await openOpEmbed(list[0].path); return; }
-    }
     if (state.tab === "design" && state.view === "detail") render();
   }
 
