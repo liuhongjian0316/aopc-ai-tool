@@ -2123,7 +2123,11 @@ function resolveDesignFile(p: string, root?: string) {
   const projRoot = resolve(root || store.projectRoot());
   const base = store.projectBaseName(projRoot);
   const dir = store.designsDirFor(projRoot);
-  const clean = String(p ?? "").trim().replace(/^(?:[\w.-]+\/)?designs\//i, "");
+  // 兼容前缀：.wudi/<项目>/designs/（集中式）、.wudi/designs/（v0.38.0）、designs/（旧）
+  const clean = String(p ?? "").trim()
+    .replace(/^\.wudi\/[^/]+\/designs\//i, "")
+    .replace(/^\.wudi\/designs\//i, "")
+    .replace(/^designs\//i, "");
   if (!validDesignName(clean)) throw new Error(`非法设计稿名：${p}（仅允许 designs/<名称>.fig/.pen，支持中文）`);
   const file = resolve(dir, clean);
   if (!file.startsWith(dir + "/")) throw new Error(`非法设计稿路径：${p}`);

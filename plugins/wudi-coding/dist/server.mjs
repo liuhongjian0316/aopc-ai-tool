@@ -3063,7 +3063,7 @@ function resolveDesignFile(p, root) {
   const projRoot = resolve3(root || projectRoot());
   const base = projectBaseName(projRoot);
   const dir = designsDirFor(projRoot);
-  const clean = String(p ?? "").trim().replace(/^(?:[\w.-]+\/)?designs\//i, "");
+  const clean = String(p ?? "").trim().replace(/^\.wudi\/[^/]+\/designs\//i, "").replace(/^\.wudi\/designs\//i, "").replace(/^designs\//i, "");
   if (!validDesignName(clean)) throw new Error(`\u975E\u6CD5\u8BBE\u8BA1\u7A3F\u540D\uFF1A${p}\uFF08\u4EC5\u5141\u8BB8 designs/<\u540D\u79F0>.fig/.pen\uFF0C\u652F\u6301\u4E2D\u6587\uFF09`);
   const file = resolve3(dir, clean);
   if (!file.startsWith(dir + "/")) throw new Error(`\u975E\u6CD5\u8BBE\u8BA1\u7A3F\u8DEF\u5F84\uFF1A${p}`);

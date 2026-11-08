@@ -401,6 +401,10 @@ plugins/wudi-coding/
 - 路径解析兼容 `.wudi/<项目>/designs/`、`designs/`、裸名三种写法（resolveDesignFile 共用）。
 - smoke 断言对齐新布局（130 项全绿）。
 
+## 路径剥离修复（v0.38.3）
+
+- **修复**：`resolveDesignFile` 的路径前缀剥离正则里 `[^/]+` 无法跨两级目录，`.wudi/<项目>/designs/<名>` 的完整路径剥不干净 → 删除/重命名误报「非法设计稿名」。改为显式三段前缀处理（`.wudi/<项目>/designs/`、`.wudi/designs/`、`designs/`）。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。
