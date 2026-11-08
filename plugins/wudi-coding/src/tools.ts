@@ -2191,7 +2191,8 @@ async function toolDesignCreate(args: any = {}) {
   if (existsSync(file)) {
     return ok(`画布已存在：${rel}（直接打开）`, { path: rel });
   }
-  await openpencilCall(root, "new_design", { path: rel });
+  /* 所有画布集中在工作区 .wudi/<项目>/designs/，统一走默认子进程（其工作区根即工作区） */
+  await openpencilCall(undefined, "new_design", { path: rel });
   // openPencil 落盘是异步的：轮询等待文件真正写出（最多 5s），保证后续改名/删除立即可用
   const deadline = Date.now() + 5000;
   while (!existsSync(file) && Date.now() < deadline) {

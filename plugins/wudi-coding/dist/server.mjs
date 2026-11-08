@@ -3126,7 +3126,7 @@ async function toolDesignCreate(args = {}) {
   if (existsSync3(file)) {
     return ok(`\u753B\u5E03\u5DF2\u5B58\u5728\uFF1A${rel}\uFF08\u76F4\u63A5\u6253\u5F00\uFF09`, { path: rel });
   }
-  await openpencilCall(root, "new_design", { path: rel });
+  await openpencilCall(void 0, "new_design", { path: rel });
   const deadline = Date.now() + 5e3;
   while (!existsSync3(file) && Date.now() < deadline) {
     await new Promise((res) => setTimeout(res, 120));

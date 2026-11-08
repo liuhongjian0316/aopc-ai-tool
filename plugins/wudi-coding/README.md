@@ -405,6 +405,12 @@ plugins/wudi-coding/
 
 - **修复**：`resolveDesignFile` 的路径前缀剥离正则里 `[^/]+` 无法跨两级目录，`.wudi/<项目>/designs/<名>` 的完整路径剥不干净 → 删除/重命名误报「非法设计稿名」。改为显式三段前缀处理（`.wudi/<项目>/designs/`、`.wudi/designs/`、`designs/`）。
 
+## 非当前项目画布创建修复（v0.38.4）
+
+- **根因**：非当前项目创建画布时，`new_design` 被 `__root` 路由到该项目自己的 openPencil 子进程——它把路径解析到**子项目目录**，而落盘轮询检查的是工作区 `.wudi/` → 永远等不到 → 「画布创建超时（文件未落盘）」。
+- **修复**：画布统一存储在工作区 `.wudi/<项目>/designs/` 后，创建一律走**工作区根的默认子进程**（路径已带项目目录）；`designsDirFor` 同步锚定工作区根（root 仅决定项目目录名）。列表/改名/删除与创建完全一致。
+- 实测：登记子项目 → 创建画布 → 文件落在 `工作区/.wudi/<子项目>/designs/all.fig`，列表按根可见。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。

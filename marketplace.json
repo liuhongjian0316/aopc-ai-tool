@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.38.3",
+      "version": "0.38.4",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,14 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.38.4",
+          "date": "2026-11-08",
+          "changes": [
+            "修复非当前项目创建画布超时：new_design 曾被 __root 路由到子项目子进程，路径解析到子项目目录与工作区轮询位置不一致；画布集中存储后统一走工作区根默认子进程（路径已带项目目录），designsDirFor 同步锚定工作区根",
+            "实测：登记子项目 → 创建画布 → 文件落在 工作区/.wudi/<子项目>/designs/，列表按根可见"
+          ]
+        },
         {
           "version": "0.38.3",
           "date": "2026-11-08",
