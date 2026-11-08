@@ -380,6 +380,13 @@ plugins/wudi-coding/
 
 - 移除「单画布时点设计 tab 自动进入编辑器」的行为——点「设计」**只显示画布页**（画布卡列表 + 新建入口），想编辑点画布卡的「进入画布 →」或「进入编辑器」。
 
+## 画布存储归位 .wudi（v0.38.0）
+
+- **设计稿存储位置修正**：画布（.fig）从项目根的 `designs/` 迁移到 **`.wudi/designs/`**——与档案、部署记录、文档一样统一收纳在项目的 `.wudi/` 数据中心下。
+- **自动迁移**：server 启动、打开项目列表、登记项目时，旧 `designs/` 里的 .fig/.pen 自动移入 `.wudi/designs/`（旧目录清空后删除）。
+- 路径解析兼容三种写法：`.wudi/designs/<名>.fig` / `designs/<名>.fig`（旧）/ `<名>.fig`；删除与重命名同样按根定位。
+- 列表接口的 path 字段同步为 `.wudi/designs/<名>`；smoke 全量路径断言更新（130 项全绿）。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。

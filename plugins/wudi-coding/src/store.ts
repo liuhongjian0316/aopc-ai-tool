@@ -194,6 +194,34 @@ export function listEnvNames(project) {
 
 /* ---------------- 部署历史 deploys.json ---------------- */
 
+/** 画布设计稿目录：.wudi/designs/（用户指定：设计文件统一放 .wudi 下）。 */
+export function designsDirAt(root) {
+  const dir = join(resolve(root), ".wudi", "designs");
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/** 一次性迁移：旧 designs/（项目根下）的 .fig/.pen 移入 .wudi/designs/。 */
+export function migrateLegacyDesigns(root) {
+  const legacy = join(resolve(root), "designs");
+  if (!existsSync(legacy)) return 0;
+  const target = designsDirAt(root);
+  let moved = 0;
+  for (const f of readdirSync(legacy)) {
+    if (!/\.(fig|pen)$/i.test(f)) continue;
+    const src = join(legacy, f);
+    const dst = join(target, f);
+    if (existsSync(dst)) { rmSync(src); continue; }
+    renameSync(src, dst);
+    moved++;
+  }
+  // 旧目录空了就清掉
+  try {
+    if (readdirSync(legacy).length === 0) rmSync(legacy, { recursive: true });
+  } catch { /* ignore */ }
+  return moved;
+}
+
 /** 读指定项目根的部署历史（只读，不做僵尸清扫）。 */
 export function loadDeploysAt(root) {
   const list = readJSONAt(root, "deploys.json", []);

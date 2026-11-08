@@ -309,13 +309,13 @@ async function protocolTests() {
       /* 多项目内容：按 root 读取与写入（__root 路由 openpencil 子进程） */
       r = await s.call("tools/call", { name: "wudi_status", arguments: { root: sub } });
       check("multi_root: status 按根返回", !errOf(r) && r?.result?.structuredContent?.project?.name === "subproj", textOf(r).slice(0, 120));
-      r = await s.call("tools/call", { name: "new_design", arguments: { path: "designs/sub.fig", __root: sub } });
+      r = await s.call("tools/call", { name: "new_design", arguments: { path: ".wudi/designs/sub.fig", __root: sub } });
       check("multi_root: openpencil 按 __root 建稿", !errOf(r) && (textOf(r).includes("sub.fig") || textOf(r).includes("已存在")), textOf(r).slice(0, 120));
-      check("multi_root: 文件落在对应项目", existsSync(join(sub, "designs", "sub.fig")));
+      check("multi_root: 文件落在对应项目", existsSync(join(sub, ".wudi", "designs", "sub.fig")));
       r = await s.call("tools/call", { name: "wudi_designs_list", arguments: { root: sub } });
-      check("multi_root: designs_list 按根", (r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "sub.fig"));
+      check("multi_root: designs_list 按根", (r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "sub.fig" && d.path.startsWith(".wudi/")));
       r = await s.call("tools/call", { name: "wudi_designs_list", arguments: {} });
-      check("multi_root: 当前根不含他项目设计稿", !(r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "sub.fig"));
+      check("multi_root: 当前根不含他项目设计稿", !(r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "sub.fig" && d.path.startsWith(".wudi/")));
     } finally {
       await rm(outside, { recursive: true, force: true });
     }
@@ -402,7 +402,7 @@ async function protocolTests() {
         const names = (tl?.result?.tools ?? []).map((t) => t.name);
         check(`openpencil: 工具数 ≥ 100（实际 ${names.length}）`, names.length >= 100);
         check("openpencil: 关键工具在列", ["new_design", "open_design", "create_shape", "render", "design_to_tokens", "export_image", "set_layout", "query_nodes"].every((n) => names.includes(n)));
-        const nd = await op.call("tools/call", { name: "new_design", arguments: { path: "designs/smoke.fig" } });
+        const nd = await op.call("tools/call", { name: "new_design", arguments: { path: ".wudi/designs/smoke.fig" } });
         const ndText = nd?.result?.content?.map((c) => c.text).join("\n") ?? "";
         check("openpencil: new_design 建稿", (nd?.result?.isError ?? true) === false || ndText.includes("已存在") || ndText.includes("smoke.fig"));
         const rs = await op.call("resources/list", {});
@@ -422,29 +422,29 @@ async function protocolTests() {
     /* ---- 设计稿清单（OpenPencil 建稿后文件级联动）---- */
     r = await s.call("tools/call", { name: "wudi_designs_list", arguments: {} });
     const designsSc = r?.result?.structuredContent?.designs ?? [];
-    check("designs_list: 发现 openpencil 建的 .fig", !errOf(r) && designsSc.some((d) => d.name === "smoke.fig"), JSON.stringify(designsSc).slice(0, 150));
+    check("designs_list: 发现 openpencil 建的 .fig", !errOf(r) && designsSc.some((d) => d.name === "smoke.fig") && designsSc.some((d) => d.path.startsWith(".wudi/designs/")), JSON.stringify(designsSc).slice(0, 150));
 
     /* ---- 内嵌 OpenPencil 编辑器（协同桥 frame 端点 + 面板 CSP frameDomains）---- */
     r = await s.call("tools/call", { name: "new_design", arguments: { path: "designs/proxy-smoke.fig" } });
     check("op_proxy: new_design 经 wudi 代理建稿", !errOf(r) && textOf(r).includes("proxy-smoke.fig"), textOf(r).slice(0, 160));
     r = await s.call("tools/call", { name: "wudi_designs_list", arguments: {} });
-    check("op_proxy: designs_list 发现代理建的稿", (r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "proxy-smoke.fig"));
+    check("op_proxy: designs_list 发现代理建的稿", (r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "proxy-smoke.fig" && d.path.startsWith(".wudi/")));
     /* 画布 CRUD：删除 / 重命名 / 防路径穿越 */
-    r = await s.call("tools/call", { name: "wudi_design_delete", arguments: { path: "designs/proxy-smoke.fig" } });
+    r = await s.call("tools/call", { name: "wudi_design_delete", arguments: { path: ".wudi/designs/proxy-smoke.fig" } });
     check("design_delete: 删除设计稿", !errOf(r) && textOf(r).includes("已删除"));
     r = await s.call("tools/call", { name: "wudi_designs_list", arguments: {} });
-    check("design_delete: 列表不再包含", !(r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "proxy-smoke.fig"));
-    r = await s.call("tools/call", { name: "wudi_design_rename", arguments: { path: "designs/proxy-smoke.fig", name: "x.fig" } });
+    check("design_delete: 列表不再包含", !(r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "proxy-smoke.fig" && d.path.startsWith(".wudi/")));
+    r = await s.call("tools/call", { name: "wudi_design_rename", arguments: { path: ".wudi/designs/proxy-smoke.fig", name: "x.fig" } });
     check("design_rename: 不存在时拒绝", errOf(r) && textOf(r).includes("不存在"));
-    r = await s.call("tools/call", { name: "new_design", arguments: { path: "designs/RenOld.fig" } });
-    r = await s.call("tools/call", { name: "wudi_design_rename", arguments: { path: "designs/RenOld.fig", name: "RenNew.fig" } });
+    r = await s.call("tools/call", { name: "new_design", arguments: { path: ".wudi/designs/RenOld.fig" } });
+    r = await s.call("tools/call", { name: "wudi_design_rename", arguments: { path: ".wudi/designs/RenOld.fig", name: "RenNew.fig" } });
     check("design_rename: 重命名成功", !errOf(r) && textOf(r).includes("RenNew.fig"));
     r = await s.call("tools/call", { name: "wudi_designs_list", arguments: {} });
-    check("design_rename: 列表包含新名", (r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "RenNew.fig"));
+    check("design_rename: 列表包含新名", (r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "RenNew.fig" && d.path.startsWith(".wudi/")));
     r = await s.call("tools/call", { name: "wudi_design_rename", arguments: { path: "designs/RenNew.fig", name: "../evil.fig" } });
     check("design_rename: 非法名拒绝", errOf(r));
     /* 中文名画布：创建 → 重命名 → 删除 全链路 */
-    r = await s.call("tools/call", { name: "new_design", arguments: { path: "designs/全部.fig", __root: sub } });
+    r = await s.call("tools/call", { name: "new_design", arguments: { path: ".wudi/designs/全部.fig", __root: sub } });
     check("design_cjk: 中文名建稿", !errOf(r) && (textOf(r).includes("全部.fig") || textOf(r).includes("已存在")), textOf(r).slice(0, 120));
     r = await s.call("tools/call", { name: "wudi_designs_list", arguments: { root: sub } });
     check("design_cjk: 列表包含中文名", (r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "全部.fig"));

@@ -19,7 +19,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.37.4" },
+    { name: "wudi-coding", version: "0.38.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -424,7 +424,7 @@ const EmptyResultSchema = {
         <div class="btnrow">
           <input id="op-name" placeholder="画布名称，如 UI / 官网 / App（可留空）" style="width:260px;flex:none">
           <button class="btn primary" id="btn-op-new" ${state.busy ? "disabled" : ""}>创建画布</button>
-          <span class="muted">文件落 designs/&lt;名称&gt;.fig，创建后自动进编辑器</span>
+          <span class="muted">文件存于项目 .wudi/designs/ 下，创建后自动进编辑器</span>
         </div>
       </div>`;
     const canvasSection = canvases.length
@@ -691,7 +691,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.37.4" },
+              hostInfo: { name: "wudi-workbench", version: "0.38.0" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -1050,15 +1050,15 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
     /* 创建项目画布：new_design 建稿（经 wudi 代理，按项目根路由）→ 自动进内嵌编辑器 */
     document.getElementById("btn-op-new")?.addEventListener("click", async () => {
       const name = String(document.getElementById("op-name")?.value ?? "").trim() || "ui";
-      if (DEMO) { await openOpEmbed(`designs/${name}.fig`); return; }
+      if (DEMO) { await openOpEmbed(`.wudi/designs/${name}.fig`); return; }
       setBusy(true);
       try {
-        const res = await callTool("new_design", { path: `designs/${name}.fig`, ...(state.projectRoot ? { __root: state.projectRoot } : {}) });
+        const res = await callTool("new_design", { path: `.wudi/designs/${name}.fig`, ...(state.projectRoot ? { __root: state.projectRoot } : {}) });
         state.notice = { kind: "ok", text: res.content?.map((c) => c.text).join("\n") ?? `已创建画布 designs/${name}.fig` };
         state.canvasCreateOpen = false;
         setBusy(false);
         await loadDesign();
-        await openOpEmbed(`designs/${name}.fig`);
+        await openOpEmbed(`.wudi/designs/${name}.fig`);
         return;
       } catch (err) {
         state.notice = { kind: "err", text: `创建画布失败：${String(err.message ?? err).slice(0, 400)}` };
@@ -1220,8 +1220,8 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
     state.history = { deploys: state.data.deploys };
     state.designs = {
       designs: [
-        { name: "ui.fig", path: "designs/ui.fig", format: "fig（可编辑）", sizeKB: 128.4, updatedAt: iso(30) },
-        { name: "landing.fig", path: "designs/landing.fig", format: "fig（可编辑）", sizeKB: 42.1, updatedAt: iso(1800) },
+        { name: "ui.fig", path: ".wudi/designs/ui.fig", format: "fig（可编辑）", sizeKB: 128.4, updatedAt: iso(30) },
+        { name: "landing.fig", path: ".wudi/designs/landing.fig", format: "fig（可编辑）", sizeKB: 42.1, updatedAt: iso(1800) },
       ],
     };
   }

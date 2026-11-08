@@ -1675,6 +1675,7 @@ function toolProjectsAdd(args) {
   }
   /* 重新登记 → 取消此前的隐藏意图；登记即为项目建档 */
   store.unhideProjectRoot(res.entry.path);
+  try { store.migrateLegacyDesigns(res.entry.path); } catch { /* 迁移失败不阻塞 */ }
   try {
     store.ensureProfileAt(res.entry.path, res.entry.name);
   } catch (err: any) {
@@ -2105,8 +2106,8 @@ function validDesignName(name) {
 }
 
 function resolveDesignFile(p: string, root?: string) {
-  const dir = resolve(join(root || store.projectRoot(), "designs"));
-  const base = String(p ?? "").trim().replace(/^designs\//i, "");
+  const dir = store.designsDirAt(root || store.projectRoot());
+  const base = String(p ?? "").trim().replace(/^(?:\.wudi\/)?designs\//i, "");
   if (!validDesignName(base)) throw new Error(`非法设计稿名：${p}（仅允许 designs/<名称>.fig/.pen，支持中文）`);
   const file = resolve(dir, base);
   if (!file.startsWith(dir + "/")) throw new Error(`非法设计稿路径：${p}`);
@@ -2147,7 +2148,8 @@ function toolDesignRename(args: any = {}) {
 }
 
 function toolDesignsList(args: any = {}) {
-  const dir = join(toolRoot(args), "designs");
+  const dir = store.designsDirAt(toolRoot(args));
+  try { store.migrateLegacyDesigns(toolRoot(args)); } catch { /* 迁移失败不阻塞列表 */ }
   const designs = [];
   try {
     for (const f of readdirSync(dir)) {
@@ -2155,7 +2157,7 @@ function toolDesignsList(args: any = {}) {
       const st = statSync(join(dir, f));
       designs.push({
         name: f,
-        path: `designs/${f}`,
+        path: `.wudi/designs/${f}`,
         format: f.toLowerCase().endsWith(".fig") ? "fig（可编辑）" : "pen（只读导入）",
         sizeKB: Number((st.size / 1024).toFixed(1)),
         updatedAt: st.mtime.toISOString(),

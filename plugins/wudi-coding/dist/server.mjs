@@ -6,7 +6,7 @@ import { dirname as dirname2, join as join4, resolve as resolve4 } from "node:pa
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // src/tools.ts
-import { existsSync as existsSync3, mkdirSync as mkdirSync2, readdirSync as readdirSync2, readFileSync as readFileSync2, renameSync as renameSync2, rmSync, statSync, writeFileSync as writeFileSync2 } from "node:fs";
+import { existsSync as existsSync3, mkdirSync as mkdirSync2, readdirSync as readdirSync2, readFileSync as readFileSync2, renameSync as renameSync2, rmSync as rmSync2, statSync, writeFileSync as writeFileSync2 } from "node:fs";
 import { join as join2, resolve as resolve2 } from "node:path";
 
 // src/store.ts
@@ -159,6 +159,33 @@ function resolveEnv(project, envName) {
 function listEnvNames(project) {
   const envs = Array.isArray(project?.envs) ? project.envs : [];
   return envs.length ? envs.map((e) => e.name) : ["default"];
+}
+function designsDirAt(root) {
+  const dir = join(resolve(root), ".wudi", "designs");
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+function migrateLegacyDesigns(root) {
+  const legacy = join(resolve(root), "designs");
+  if (!existsSync(legacy)) return 0;
+  const target = designsDirAt(root);
+  let moved = 0;
+  for (const f of readdirSync(legacy)) {
+    if (!/\.(fig|pen)$/i.test(f)) continue;
+    const src = join(legacy, f);
+    const dst = join(target, f);
+    if (existsSync(dst)) {
+      rmSync(src);
+      continue;
+    }
+    renameSync(src, dst);
+    moved++;
+  }
+  try {
+    if (readdirSync(legacy).length === 0) rmSync(legacy, { recursive: true });
+  } catch {
+  }
+  return moved;
 }
 function loadDeploysAt(root) {
   const list = readJSONAt(root, "deploys.json", []);
@@ -2458,6 +2485,10 @@ function toolProjectsAdd(args) {
   }
   unhideProjectRoot(res.entry.path);
   try {
+    migrateLegacyDesigns(res.entry.path);
+  } catch {
+  }
+  try {
     ensureProfileAt(res.entry.path, res.entry.name);
   } catch (err) {
     return fail(`\u5DF2\u767B\u8BB0\u4F46\u521B\u5EFA .wudi \u5931\u8D25\uFF1A${String(err?.message ?? err)}`);
@@ -2862,8 +2893,8 @@ function validDesignName(name) {
   return base.replace(/\.(fig|pen)$/i, "").trim().length > 0;
 }
 function resolveDesignFile(p, root) {
-  const dir = resolve2(join2(root || projectRoot(), "designs"));
-  const base = String(p ?? "").trim().replace(/^designs\//i, "");
+  const dir = designsDirAt(root || projectRoot());
+  const base = String(p ?? "").trim().replace(/^(?:\.wudi\/)?designs\//i, "");
   if (!validDesignName(base)) throw new Error(`\u975E\u6CD5\u8BBE\u8BA1\u7A3F\u540D\uFF1A${p}\uFF08\u4EC5\u5141\u8BB8 designs/<\u540D\u79F0>.fig/.pen\uFF0C\u652F\u6301\u4E2D\u6587\uFF09`);
   const file = resolve2(dir, base);
   if (!file.startsWith(dir + "/")) throw new Error(`\u975E\u6CD5\u8BBE\u8BA1\u7A3F\u8DEF\u5F84\uFF1A${p}`);
@@ -2879,7 +2910,7 @@ function toolDesignDelete(args = {}) {
     return fail(String(err?.message ?? err));
   }
   if (!existsSync3(file)) return fail(`\u8BBE\u8BA1\u7A3F\u4E0D\u5B58\u5728\uFF1A${path2}`);
-  rmSync(file);
+  rmSync2(file);
   return ok(`\u5DF2\u5220\u9664\u8BBE\u8BA1\u7A3F\uFF1A${path2}`);
 }
 function toolDesignRename(args = {}) {
@@ -2901,7 +2932,11 @@ function toolDesignRename(args = {}) {
   return ok(`\u5DF2\u91CD\u547D\u540D\uFF1A${base} \u2192 designs/${name}`, { path: `designs/${name}` });
 }
 function toolDesignsList(args = {}) {
-  const dir = join2(toolRoot(args), "designs");
+  const dir = designsDirAt(toolRoot(args));
+  try {
+    migrateLegacyDesigns(toolRoot(args));
+  } catch {
+  }
   const designs = [];
   try {
     for (const f of readdirSync2(dir)) {
@@ -2909,7 +2944,7 @@ function toolDesignsList(args = {}) {
       const st = statSync(join2(dir, f));
       designs.push({
         name: f,
-        path: `designs/${f}`,
+        path: `.wudi/designs/${f}`,
         format: f.toLowerCase().endsWith(".fig") ? "fig\uFF08\u53EF\u7F16\u8F91\uFF09" : "pen\uFF08\u53EA\u8BFB\u5BFC\u5165\uFF09",
         sizeKB: Number((st.size / 1024).toFixed(1)),
         updatedAt: st.mtime.toISOString()
@@ -3177,10 +3212,11 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.37.4" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.38.0" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());
+  migrateLegacyDesigns(projectRoot());
 } catch {
 }
 var PANEL_URI = "ui://wudi-coding/panel.html";

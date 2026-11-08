@@ -149,6 +149,33 @@ function listEnvNames(project) {
   const envs = Array.isArray(project?.envs) ? project.envs : [];
   return envs.length ? envs.map((e) => e.name) : ["default"];
 }
+function designsDirAt(root) {
+  const dir = join(resolve(root), ".wudi", "designs");
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+function migrateLegacyDesigns(root) {
+  const legacy = join(resolve(root), "designs");
+  if (!existsSync(legacy)) return 0;
+  const target = designsDirAt(root);
+  let moved = 0;
+  for (const f of readdirSync(legacy)) {
+    if (!/\.(fig|pen)$/i.test(f)) continue;
+    const src = join(legacy, f);
+    const dst = join(target, f);
+    if (existsSync(dst)) {
+      rmSync(src);
+      continue;
+    }
+    renameSync(src, dst);
+    moved++;
+  }
+  try {
+    if (readdirSync(legacy).length === 0) rmSync(legacy, { recursive: true });
+  } catch {
+  }
+  return moved;
+}
 function loadDeploysAt(root) {
   const list = readJSONAt(root, "deploys.json", []);
   return Array.isArray(list) ? list : [];
@@ -586,6 +613,7 @@ export {
   appendDeploy,
   deleteFrame,
   designDir,
+  designsDirAt,
   ensureProfileAt,
   ensureWudiDir,
   exportCanvasToExcalidraw,
@@ -603,6 +631,7 @@ export {
   loadProjectAt,
   loadRegistry,
   loadTokens,
+  migrateLegacyDesigns,
   pluginDataDir,
   projectRoot,
   registerDoc,
