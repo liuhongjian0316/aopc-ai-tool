@@ -485,7 +485,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.38.0" },
+    { name: "wudi-coding", version: "0.38.1" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -572,7 +572,7 @@ const EmptyResultSchema = {
     try {
       if (!app.getHostCapabilities()?.experimental?.["aopc/widgetState"]) return;
       await app.request(
-        { method: "ui/set-widget-state", params: { widgetState: { view: state.view, tab: state.tab } } },
+        { method: "ui/set-widget-state", params: { widgetState: { view: state.view, tab: state.tab, projectRoot: state.projectRoot } } },
         EmptyResultSchema
       );
     } catch { /* 视图状态失败不阻塞 */ }
@@ -894,7 +894,7 @@ const EmptyResultSchema = {
         </div>
       </div>`;
     const canvasSection = canvases.length
-      ? `<div class="card"><h3 style="color:var(--accent-strong)">项目画布<span class="line"></span><span class="muted" style="text-transform:none;letter-spacing:0">点击进入编辑器 · Agent 实时协同 · 支持重命名/删除</span></h3>
+      ? `<div class="card"><h3 style="color:var(--accent-strong)">项目画布<span class="line"></span><span class="muted" style="text-transform:none;letter-spacing:0">存储于 ${esc(shortPath(state.projectRoot || "当前工作区", 44))}/.wudi/designs/</span></h3>
           <div class="grid">${canvasCards}</div>
           ${state.canvasCreateOpen ? createRow : `<div class="btnrow" style="margin-top:10px"><button class="btn" id="btn-cv-create-toggle">＋ 新建画布</button><span class="muted">一个画布容纳项目的全部 UI 设计：网站 / 移动端 / 平板各建画板</span></div>`}
         </div>`
@@ -1157,7 +1157,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.38.0" },
+              hostInfo: { name: "wudi-workbench", version: "0.38.1" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -1701,6 +1701,11 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
   async function main() {
     applyTheme();
     /* v0.31：打开固定落在项目选择/创建页，不做 widgetState 恢复进项目内容 */
+    /* 恢复上次查看的项目根（面板重挂载后不串到当前工作区，避免画布存错位置） */
+    try {
+      const wsRoot = app.getHostContext()?.widgetState?.projectRoot;
+      if (typeof wsRoot === "string" && wsRoot) state.projectRoot = wsRoot;
+    } catch { /* ignore */ }
     if (DEMO) {
       state.connected = true; // demo 模式不连宿主，但允许 reportSize
       loadDemoData();
