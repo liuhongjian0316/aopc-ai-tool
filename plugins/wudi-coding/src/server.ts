@@ -7,7 +7,7 @@ import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TOOLS, callTool, bridgeConnectDomains, frameDomains, fontCdnDomains, opWsProxyUrl } from "./tools";
-import { ensureWudiDir, ensureProfileAt, migrateLegacyDesigns, projectRoot } from "./store";
+import { ensureWudiDir, ensureProfileAt, migrateDesignsFor, projectRoot } from "./store";
 
 // 进程级兜底：任何未捕获错误都不能杀掉 server（宿主连接断开的根因）
 process.on("uncaughtException", (err) => console.error("[wudi] uncaught:", err.message));
@@ -28,7 +28,7 @@ const SERVER_INFO = { name: "wudi-coding", version: "0.38.1" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());
-  migrateLegacyDesigns(projectRoot()); // 旧 designs/ 画布迁入 .wudi/designs/
+  migrateDesignsFor(projectRoot()); // 旧 designs/ 画布迁入 .wudi/<项目>/designs/
 } catch { /* 只读工作区等场景降级 */ }
 const PANEL_URI = "ui://wudi-coding/panel.html";
 const PANEL_MIME = "text/html;profile=mcp-app";
@@ -227,11 +227,8 @@ function handleMessage(line) {
     const callPromise = isWudiTool
       ? callTool(toolName, params?.arguments ?? {})
       : (() => {
-          // openpencil 工具按项目根路由：面板/Agent 可带 __root（wudi 内部约定，转发前剥离）
-          const rawArgs = { ...(params?.arguments ?? {}) };
-          const rootArg = rawArgs.__root;
-          delete rawArgs.__root;
-          return openpencilCall(rootArg, toolName, rawArgs).then((r) => {
+          // 画布集中存储在工作区 .wudi/<项目>/designs/，openpencil 子进程固定工作区根
+          return openpencilCall(undefined, toolName, params?.arguments ?? {}).then((r) => {
             const sc = r.structuredContent;
             // 编辑器 WS 端点统一改写成 wudi 桥反代（任意项目根的端口都在 CSP 允许的桥 origin 下）
             if (toolName === "get_design_status" && sc?.bridge?.url) {

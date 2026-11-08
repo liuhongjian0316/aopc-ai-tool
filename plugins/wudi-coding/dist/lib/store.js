@@ -149,30 +149,40 @@ function listEnvNames(project) {
   const envs = Array.isArray(project?.envs) ? project.envs : [];
   return envs.length ? envs.map((e) => e.name) : ["default"];
 }
-function designsDirAt(root) {
-  const dir = join(resolve(root), ".wudi", "designs");
+function projectBaseName(root) {
+  return resolve(root).split("/").filter(Boolean).pop() || "project";
+}
+function designsDirFor(root) {
+  const dir = join(wudiDir(), projectBaseName(root), "designs");
   mkdirSync(dir, { recursive: true });
   return dir;
 }
-function migrateLegacyDesigns(root) {
-  const legacy = join(resolve(root), "designs");
-  if (!existsSync(legacy)) return 0;
-  const target = designsDirAt(root);
+function migrateDesignsFor(root) {
+  const absRoot = resolve(root);
+  const wsRoot = projectRoot();
+  const base = projectBaseName(absRoot);
+  const target = join(wsRoot, ".wudi", base, "designs");
+  mkdirSync(target, { recursive: true });
   let moved = 0;
-  for (const f of readdirSync(legacy)) {
-    if (!/\.(fig|pen)$/i.test(f)) continue;
-    const src = join(legacy, f);
-    const dst = join(target, f);
-    if (existsSync(dst)) {
-      rmSync(src);
-      continue;
+  const sources = [join(absRoot, "designs")];
+  if (absRoot === wsRoot) sources.push(join(wsRoot, ".wudi", "designs"));
+  for (const srcDir of sources) {
+    if (!existsSync(srcDir) || resolve(srcDir) === resolve(target)) continue;
+    for (const f of readdirSync(srcDir)) {
+      if (!/\.(fig|pen)$/i.test(f)) continue;
+      const src = join(srcDir, f);
+      const dst = join(target, f);
+      if (existsSync(dst)) {
+        rmSync(src);
+        continue;
+      }
+      renameSync(src, dst);
+      moved++;
     }
-    renameSync(src, dst);
-    moved++;
-  }
-  try {
-    if (readdirSync(legacy).length === 0) rmSync(legacy, { recursive: true });
-  } catch {
+    try {
+      if (readdirSync(srcDir).length === 0) rmSync(srcDir, { recursive: true });
+    } catch {
+    }
   }
   return moved;
 }
@@ -613,7 +623,7 @@ export {
   appendDeploy,
   deleteFrame,
   designDir,
-  designsDirAt,
+  designsDirFor,
   ensureProfileAt,
   ensureWudiDir,
   exportCanvasToExcalidraw,
@@ -631,8 +641,9 @@ export {
   loadProjectAt,
   loadRegistry,
   loadTokens,
-  migrateLegacyDesigns,
+  migrateDesignsFor,
   pluginDataDir,
+  projectBaseName,
   projectRoot,
   registerDoc,
   registryAdd,

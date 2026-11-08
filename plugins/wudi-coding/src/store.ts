@@ -194,35 +194,51 @@ export function listEnvNames(project) {
 
 /* ---------------- 部署历史 deploys.json ---------------- */
 
-/** 画布设计稿目录：.wudi/designs/（用户指定：设计文件统一放 .wudi 下）。 */
-export function designsDirAt(root) {
-  const dir = join(resolve(root), ".wudi", "designs");
+/**
+ * 画布设计稿目录（集中式）：工作区单一 .wudi/ 下按项目分目录 ——
+ * `.wudi/<项目目录名>/designs/`（用户要求：.wudi/ 下面以项目为基准）。
+ */
+export function projectBaseName(root) {
+  return resolve(root).split("/").filter(Boolean).pop() || "project";
+}
+
+export function designsDirFor(root) {
+  const dir = join(wudiDir(), projectBaseName(root), "designs");
   mkdirSync(dir, { recursive: true });
   return dir;
 }
 
-/** 一次性迁移：旧 designs/（项目根下）的 .fig/.pen 移入 .wudi/designs/。 */
-export function migrateLegacyDesigns(root) {
-  const legacy = join(resolve(root), "designs");
-  if (!existsSync(legacy)) return 0;
-  const target = designsDirAt(root);
+/**
+ * 迁移历史遗留的画布到集中式目录（幂等）：
+ * ① v0.38.0 的 .wudi/designs/（未按项目分）② 各项目根下的 designs/（v0.35 旧位置）。
+ */
+export function migrateDesignsFor(root) {
+  const absRoot = resolve(root);
+  const wsRoot = projectRoot();
+  const base = projectBaseName(absRoot);
+  const target = join(wsRoot, ".wudi", base, "designs");
+  mkdirSync(target, { recursive: true });
   let moved = 0;
-  for (const f of readdirSync(legacy)) {
-    if (!/\.(fig|pen)$/i.test(f)) continue;
-    const src = join(legacy, f);
-    const dst = join(target, f);
-    if (existsSync(dst)) { rmSync(src); continue; }
-    renameSync(src, dst);
-    moved++;
+  const sources = [join(absRoot, "designs")]; // 各项目根下的旧位置
+  if (absRoot === wsRoot) sources.push(join(wsRoot, ".wudi", "designs")); // v0.38.0 中央位置仅属于当前工作区项目
+  for (const srcDir of sources) {
+    if (!existsSync(srcDir) || resolve(srcDir) === resolve(target)) continue;
+    for (const f of readdirSync(srcDir)) {
+      if (!/\.(fig|pen)$/i.test(f)) continue;
+      const src = join(srcDir, f);
+      const dst = join(target, f);
+      if (existsSync(dst)) { rmSync(src); continue; }
+      renameSync(src, dst);
+      moved++;
+    }
+    try {
+      if (readdirSync(srcDir).length === 0) rmSync(srcDir, { recursive: true });
+    } catch { /* ignore */ }
   }
-  // 旧目录空了就清掉
-  try {
-    if (readdirSync(legacy).length === 0) rmSync(legacy, { recursive: true });
-  } catch { /* ignore */ }
   return moved;
 }
 
-/** 读指定项目根的部署历史（只读，不做僵尸清扫）。 */
+/** 读指定项目根的部署历史（只读，不做僵尸清扫）。 *//** 读指定项目根的部署历史（只读，不做僵尸清扫）。 */
 export function loadDeploysAt(root) {
   const list = readJSONAt(root, "deploys.json", []);
   return Array.isArray(list) ? list : [];

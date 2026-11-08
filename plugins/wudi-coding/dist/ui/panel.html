@@ -894,7 +894,7 @@ const EmptyResultSchema = {
         </div>
       </div>`;
     const canvasSection = canvases.length
-      ? `<div class="card"><h3 style="color:var(--accent-strong)">项目画布<span class="line"></span><span class="muted" style="text-transform:none;letter-spacing:0">存储于 ${esc(shortPath(state.projectRoot || "当前工作区", 44))}/.wudi/designs/</span></h3>
+      ? `<div class="card"><h3 style="color:var(--accent-strong)">项目画布<span class="line"></span><span class="muted" style="text-transform:none;letter-spacing:0">存储于工作区 .wudi/designs/（按项目分目录）</span></h3>
           <div class="grid">${canvasCards}</div>
           ${state.canvasCreateOpen ? createRow : `<div class="btnrow" style="margin-top:10px"><button class="btn" id="btn-cv-create-toggle">＋ 新建画布</button><span class="muted">一个画布容纳项目的全部 UI 设计：网站 / 移动端 / 平板各建画板</span></div>`}
         </div>`
@@ -1165,14 +1165,8 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
               },
             });
             break;
-          case "tools/call":
-            reply(await callTool(p.name, { ...(p.arguments ?? {}), ...(state.projectRoot ? { __root: state.projectRoot } : {}) }));
-            break;
-          case "resources/read": {
-            const uri = state.projectRoot ? `${p.uri}${String(p.uri).includes("?") ? "&" : "?"}wudiRoot=${encodeURIComponent(state.projectRoot)}` : p.uri;
-            reply(await app.readServerResource({ uri }));
-            break;
-          }
+          case "tools/call": reply(await callTool(p.name, p.arguments ?? {})); break;
+          case "resources/read": reply(await app.readServerResource({ uri: p.uri })); break;
           case "resources/list": reply(await app.listServerResources?.() ?? { resources: [] }); break;
           case "ping": reply({}); break;
           case "ui/open-link": await app.openLink?.({ url: p.url }); reply({}); break;
@@ -1218,7 +1212,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
     }
     if (path) {
       try {
-        await callTool("open_design", { path, ...(state.projectRoot ? { __root: state.projectRoot } : {}) }); // 子进程侧登记活动设计稿（按项目根路由）
+        await callTool("open_design", { path }); // 子进程侧登记活动设计稿，编辑器起来即加载
       } catch (err) {
         state.notice = { kind: "err", text: `登记活动设计稿失败（编辑器内仍可手动打开）：${String(err.message ?? err).slice(0, 200)}` };
       }
@@ -1519,12 +1513,13 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
       if (DEMO) { await openOpEmbed(`.wudi/designs/${name}.fig`); return; }
       setBusy(true);
       try {
-        const res = await callTool("new_design", { path: `.wudi/designs/${name}.fig`, ...(state.projectRoot ? { __root: state.projectRoot } : {}) });
-        state.notice = { kind: "ok", text: res.content?.map((c) => c.text).join("\n") ?? `已创建画布 designs/${name}.fig` };
+        const res = await callTool("wudi_design_create", { name, ...(state.projectRoot ? { root: state.projectRoot } : {}) });
+        const createdPath = res.structuredContent?.path ?? `.wudi/designs/${name}.fig`;
+        state.notice = { kind: "ok", text: res.content?.map((c) => c.text).join("\n") ?? `已创建画布 ${createdPath}` };
         state.canvasCreateOpen = false;
         setBusy(false);
         await loadDesign();
-        await openOpEmbed(`.wudi/designs/${name}.fig`);
+        await openOpEmbed(createdPath);
         return;
       } catch (err) {
         state.notice = { kind: "err", text: `创建画布失败：${String(err.message ?? err).slice(0, 400)}` };

@@ -217,6 +217,18 @@ export const TOOLS = [
     },
   },
   {
+    name: "wudi_design_create",
+    description: "创建画布设计稿（.wudi/<项目>/designs/<名>.fig），返回路径。工作台创建画布用；同名已存在时返回已存在状态（幂等）。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "画布名称（不带扩展名），如 UI / 官网" },
+        root: { type: "string", description: "项目根路径（缺省为当前工作区；工作台多项目内容页传入）" },
+      },
+      required: ["name"],
+    },
+  },
+  {
     name: "wudi_status",
     description: "项目全景：档案摘要（含环境列表与当前环境解析结果）+ 最近部署 + 文档清单 + SSH 配置状态。/wudi 命令与工作台面板的数据源。",
     _meta: UI_META,
@@ -610,6 +622,8 @@ export async function callTool(name, args = {}) {
         return toolDesignDelete(args);
       case "wudi_design_rename":
         return toolDesignRename(args);
+      case "wudi_design_create":
+        return toolDesignCreate(args);
       case "wudi_tokens_compare":
         return toolTokensCompare(args);
       case "wudi_canvas_get":
@@ -1675,7 +1689,7 @@ function toolProjectsAdd(args) {
   }
   /* 重新登记 → 取消此前的隐藏意图；登记即为项目建档 */
   store.unhideProjectRoot(res.entry.path);
-  try { store.migrateLegacyDesigns(res.entry.path); } catch { /* 迁移失败不阻塞 */ }
+  try { store.migrateDesignsFor(res.entry.path); } catch { /* 迁移失败不阻塞 */ }
   try {
     store.ensureProfileAt(res.entry.path, res.entry.name);
   } catch (err: any) {
@@ -2106,15 +2120,17 @@ function validDesignName(name) {
 }
 
 function resolveDesignFile(p: string, root?: string) {
-  const dir = store.designsDirAt(root || store.projectRoot());
-  const base = String(p ?? "").trim().replace(/^(?:\.wudi\/)?designs\//i, "");
-  if (!validDesignName(base)) throw new Error(`非法设计稿名：${p}（仅允许 designs/<名称>.fig/.pen，支持中文）`);
-  const file = resolve(dir, base);
+  const projRoot = resolve(root || store.projectRoot());
+  const base = store.projectBaseName(projRoot);
+  const dir = store.designsDirFor(projRoot);
+  const clean = String(p ?? "").trim().replace(/^(?:[\w.-]+\/)?designs\//i, "");
+  if (!validDesignName(clean)) throw new Error(`非法设计稿名：${p}（仅允许 designs/<名称>.fig/.pen，支持中文）`);
+  const file = resolve(dir, clean);
   if (!file.startsWith(dir + "/")) throw new Error(`非法设计稿路径：${p}`);
-  return { dir, file, base };
+  return { dir, file, base: clean };
 }
 
-function toolDesignDelete(args: any = {}) {
+async function toolDesignDelete(args: any = {}) {
   const path = String(args?.path ?? "").trim();
   if (!path) return fail("缺少 path：要删除的设计稿路径，如 designs/old.fig。");
   let file: string;
@@ -2123,12 +2139,21 @@ function toolDesignDelete(args: any = {}) {
   } catch (err: any) {
     return fail(String(err?.message ?? err));
   }
-  if (!existsSync(file)) return fail(`设计稿不存在：${path}`);
+  if (!(await waitForDesignFile(file, 1500))) return fail(`设计稿不存在：${path}`);
   rmSync(file);
   return ok(`已删除设计稿：${path}`);
 }
 
-function toolDesignRename(args: any = {}) {
+/** openPencil 建稿落盘是异步的：等文件真正写出（最多 3s）。 */
+async function waitForDesignFile(file: string, ms = 3000) {
+  const deadline = Date.now() + ms;
+  while (!existsSync(file) && Date.now() < deadline) {
+    await new Promise((res) => setTimeout(res, 120));
+  }
+  return existsSync(file);
+}
+
+async function toolDesignRename(args: any = {}) {
   const path = String(args?.path ?? "").trim();
   const name = String(args?.name ?? "").trim();
   if (!path || !name) return fail("缺少参数：path（现有设计稿）与 name（新文件名，如 new.fig）。");
@@ -2139,7 +2164,7 @@ function toolDesignRename(args: any = {}) {
     return fail(String(err?.message ?? err));
   }
   if (!validDesignName(name)) return fail(`非法新文件名：${name}（仅允许 <名称>.fig/.pen，支持中文）`);
-  if (!existsSync(file)) return fail(`设计稿不存在：${path}`);
+  if (!(await waitForDesignFile(file))) return fail(`设计稿不存在（可能仍在落盘，稍后重试）：${path}`);
   const target = resolve(dir, name);
   if (!target.startsWith(dir + "/")) return fail(`非法目标路径：${name}`);
   if (existsSync(target)) return fail(`目标已存在：designs/${name}`);
@@ -2147,9 +2172,35 @@ function toolDesignRename(args: any = {}) {
   return ok(`已重命名：${base} → designs/${name}`, { path: `designs/${name}` });
 }
 
+async function toolDesignCreate(args: any = {}) {
+  let root;
+  try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
+  const base = store.projectBaseName(root);
+  const name = String(args?.name ?? "").trim() || "ui";
+  const rel = `.wudi/${base}/designs/${name}.fig`;
+  let file: string;
+  try {
+    file = resolveDesignFile(rel, root).file;
+  } catch (err: any) {
+    return fail(String(err?.message ?? err));
+  }
+  if (existsSync(file)) {
+    return ok(`画布已存在：${rel}（直接打开）`, { path: rel });
+  }
+  await openpencilCall(root, "new_design", { path: rel });
+  // openPencil 落盘是异步的：轮询等待文件真正写出（最多 5s），保证后续改名/删除立即可用
+  const deadline = Date.now() + 5000;
+  while (!existsSync(file) && Date.now() < deadline) {
+    await new Promise((res) => setTimeout(res, 120));
+  }
+  if (!existsSync(file)) return fail(`画布创建超时（文件未落盘）：${rel}`);
+  return ok(`已创建画布：${rel}`, { path: rel });
+}
+
 function toolDesignsList(args: any = {}) {
-  const dir = store.designsDirAt(toolRoot(args));
-  try { store.migrateLegacyDesigns(toolRoot(args)); } catch { /* 迁移失败不阻塞列表 */ }
+  const root = toolRoot(args);
+  const dir = store.designsDirFor(root);
+  try { store.migrateDesignsFor(root); } catch { /* 迁移失败不阻塞列表 */ }
   const designs = [];
   try {
     for (const f of readdirSync(dir)) {
@@ -2157,7 +2208,7 @@ function toolDesignsList(args: any = {}) {
       const st = statSync(join(dir, f));
       designs.push({
         name: f,
-        path: `.wudi/designs/${f}`,
+        path: `.wudi/${store.projectBaseName(root)}/designs/${f}`,
         format: f.toLowerCase().endsWith(".fig") ? "fig（可编辑）" : "pen（只读导入）",
         sizeKB: Number((st.size / 1024).toFixed(1)),
         updatedAt: st.mtime.toISOString(),

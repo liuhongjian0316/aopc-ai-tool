@@ -7,7 +7,7 @@ import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // src/tools.ts
 import { existsSync as existsSync3, mkdirSync as mkdirSync2, readdirSync as readdirSync2, readFileSync as readFileSync2, renameSync as renameSync2, rmSync as rmSync2, statSync, writeFileSync as writeFileSync2 } from "node:fs";
-import { join as join2, resolve as resolve2 } from "node:path";
+import { join as join3, resolve as resolve3 } from "node:path";
 
 // src/store.ts
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -160,30 +160,40 @@ function listEnvNames(project) {
   const envs = Array.isArray(project?.envs) ? project.envs : [];
   return envs.length ? envs.map((e) => e.name) : ["default"];
 }
-function designsDirAt(root) {
-  const dir = join(resolve(root), ".wudi", "designs");
+function projectBaseName(root) {
+  return resolve(root).split("/").filter(Boolean).pop() || "project";
+}
+function designsDirFor(root) {
+  const dir = join(wudiDir(), projectBaseName(root), "designs");
   mkdirSync(dir, { recursive: true });
   return dir;
 }
-function migrateLegacyDesigns(root) {
-  const legacy = join(resolve(root), "designs");
-  if (!existsSync(legacy)) return 0;
-  const target = designsDirAt(root);
+function migrateDesignsFor(root) {
+  const absRoot = resolve(root);
+  const wsRoot = projectRoot();
+  const base = projectBaseName(absRoot);
+  const target = join(wsRoot, ".wudi", base, "designs");
+  mkdirSync(target, { recursive: true });
   let moved = 0;
-  for (const f of readdirSync(legacy)) {
-    if (!/\.(fig|pen)$/i.test(f)) continue;
-    const src = join(legacy, f);
-    const dst = join(target, f);
-    if (existsSync(dst)) {
-      rmSync(src);
-      continue;
+  const sources = [join(absRoot, "designs")];
+  if (absRoot === wsRoot) sources.push(join(wsRoot, ".wudi", "designs"));
+  for (const srcDir of sources) {
+    if (!existsSync(srcDir) || resolve(srcDir) === resolve(target)) continue;
+    for (const f of readdirSync(srcDir)) {
+      if (!/\.(fig|pen)$/i.test(f)) continue;
+      const src = join(srcDir, f);
+      const dst = join(target, f);
+      if (existsSync(dst)) {
+        rmSync(src);
+        continue;
+      }
+      renameSync(src, dst);
+      moved++;
     }
-    renameSync(src, dst);
-    moved++;
-  }
-  try {
-    if (readdirSync(legacy).length === 0) rmSync(legacy, { recursive: true });
-  } catch {
+    try {
+      if (readdirSync(srcDir).length === 0) rmSync(srcDir, { recursive: true });
+    } catch {
+    }
   }
   return moved;
 }
@@ -879,6 +889,149 @@ async function fetchFigmaStructure({ fileKey, nodeId, maxDepth = 6, budgetMax = 
   };
 }
 
+// src/openpencil.ts
+import { spawn } from "node:child_process";
+import { dirname, join as join2, resolve as resolve2 } from "node:path";
+import { fileURLToPath } from "node:url";
+var vendorRoot = resolve2(join2(dirname(fileURLToPath(import.meta.url)), "..", "vendor", "openpencil"));
+var childServerPath = join2(vendorRoot, "dist", "server.mjs");
+function defaultWorkspaceRoot() {
+  return resolve2(process.env.AOPC_PROJECT_DIR || process.env.AOPC_WORKSPACE_ROOT || process.cwd());
+}
+var children = /* @__PURE__ */ new Map();
+function createState(root) {
+  return {
+    root,
+    child: null,
+    pendingId: 0,
+    pending: /* @__PURE__ */ new Map(),
+    stderr: "",
+    buffer: "",
+    initDone: null
+  };
+}
+function ensureChild(root) {
+  const key = resolve2(root || defaultWorkspaceRoot());
+  let st = children.get(key);
+  if (!st) {
+    st = createState(key);
+    children.set(key, st);
+  }
+  if (st.child) return st;
+  try {
+    st.child = spawn(process.execPath, [childServerPath], {
+      env: {
+        ...process.env,
+        ZCODE_WORKSPACE_ROOT: st.root,
+        ZCODE_PLUGIN_ROOT: vendorRoot,
+        ZCODE_WORKSPACE_IDENTITY: st.root
+      },
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+  } catch (err) {
+    console.error("[wudi] OpenPencil spawn \u5931\u8D25:", err.message);
+    st.child = null;
+    return st;
+  }
+  st.child.stdout.setEncoding("utf-8");
+  st.child.stdout.on("data", (chunk) => {
+    st.buffer += chunk;
+    let idx;
+    while ((idx = st.buffer.indexOf("\n")) >= 0) {
+      const line = st.buffer.slice(0, idx).trim();
+      st.buffer = st.buffer.slice(idx + 1);
+      if (!line) continue;
+      try {
+        const msg = JSON.parse(line);
+        if (msg.id !== void 0 && st.pending.has(msg.id)) {
+          const res = st.pending.get(msg.id);
+          st.pending.delete(msg.id);
+          res(msg);
+        }
+      } catch {
+      }
+    }
+  });
+  st.child.stderr.on("data", (d) => {
+    st.stderr += d;
+  });
+  st.child.on("exit", (code) => {
+    console.error(`[wudi] OpenPencil \u5B50\u8FDB\u7A0B\u9000\u51FA root=${st.root} code=` + code);
+    st.child = null;
+    st.initDone = null;
+  });
+  st.initDone = request(st, "initialize", {
+    protocolVersion: "2024-11-05",
+    capabilities: {},
+    clientInfo: { name: "wudi-coding", version: "1.0" }
+  }).then(() => notify(st, "notifications/initialized"));
+  return st;
+}
+function request(st, method, params) {
+  ensureChild(st.root);
+  if (!st.child) return Promise.reject(new Error("OpenPencil \u5B50\u8FDB\u7A0B\u672A\u542F\u52A8"));
+  const id = ++st.pendingId;
+  const p = new Promise((res, rej) => {
+    st.pending.set(id, res);
+    setTimeout(() => {
+      if (st.pending.has(id)) {
+        st.pending.delete(id);
+        rej(new Error(`openpencil \u5B50\u8FDB\u7A0B\u8BF7\u6C42\u8D85\u65F6\uFF1A${method}
+stderr: ${st.stderr.slice(-300)}`));
+      }
+    }, 6e4);
+  });
+  st.child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
+  return p.then((r) => {
+    if (r.error) throw Object.assign(new Error(r.error.message ?? "openpencil error"), { code: r.error.code });
+    return r.result;
+  });
+}
+function notify(st, method, params) {
+  ensureChild(st.root);
+  st.child?.stdin.write(JSON.stringify({ jsonrpc: "2.0", method, params }) + "\n");
+}
+async function openpencilTools(root = void 0) {
+  const st = ensureChild(root);
+  await st.initDone;
+  const r = await request(st, "tools/list", {});
+  return r.tools ?? [];
+}
+async function openpencilCall(root = void 0, name, args = void 0) {
+  const st = ensureChild(root);
+  await st.initDone;
+  return request(st, "tools/call", { name, arguments: args ?? {} });
+}
+async function openpencilReadResource(root = void 0, uri) {
+  const st = ensureChild(root);
+  await st.initDone;
+  return request(st, "resources/read", { uri });
+}
+async function openpencilBridgeEndpoint(root = void 0) {
+  const r = await openpencilCall(root, "get_design_status", {});
+  const sc = r.structuredContent ?? {};
+  return sc.bridge ?? null;
+}
+var _epCache = /* @__PURE__ */ new Map();
+async function openpencilBridgeEndpointCached(root = void 0) {
+  const key = resolve2(root || defaultWorkspaceRoot());
+  const cur = _epCache.get(key);
+  if (cur && Date.now() - cur.at < 3e4) return cur.value;
+  try {
+    const ep = await openpencilBridgeEndpoint(key);
+    _epCache.set(key, { at: Date.now(), value: ep });
+    return ep;
+  } catch {
+    _epCache.set(key, { at: Date.now(), value: null });
+    return null;
+  }
+}
+try {
+  ensureChild(defaultWorkspaceRoot());
+} catch (e) {
+  console.error("[wudi] OpenPencil \u9884\u70ED\u5931\u8D25:", e.message);
+}
+
 // src/notify.ts
 var NOTIFY_TIMEOUT_MS = 5e3;
 function resolveNotify(project, envObj) {
@@ -1113,6 +1266,18 @@ var TOOLS = [
         name: { type: "string", description: "\u65B0\u7684\u9879\u76EE\u663E\u793A\u540D" }
       },
       required: ["id", "name"]
+    }
+  },
+  {
+    name: "wudi_design_create",
+    description: "\u521B\u5EFA\u753B\u5E03\u8BBE\u8BA1\u7A3F\uFF08.wudi/<\u9879\u76EE>/designs/<\u540D>.fig\uFF09\uFF0C\u8FD4\u56DE\u8DEF\u5F84\u3002\u5DE5\u4F5C\u53F0\u521B\u5EFA\u753B\u5E03\u7528\uFF1B\u540C\u540D\u5DF2\u5B58\u5728\u65F6\u8FD4\u56DE\u5DF2\u5B58\u5728\u72B6\u6001\uFF08\u5E42\u7B49\uFF09\u3002",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "\u753B\u5E03\u540D\u79F0\uFF08\u4E0D\u5E26\u6269\u5C55\u540D\uFF09\uFF0C\u5982 UI / \u5B98\u7F51" },
+        root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF1B\u5DE5\u4F5C\u53F0\u591A\u9879\u76EE\u5185\u5BB9\u9875\u4F20\u5165\uFF09" }
+      },
+      required: ["name"]
     }
   },
   {
@@ -1509,6 +1674,8 @@ async function callTool(name, args = {}) {
         return toolDesignDelete(args);
       case "wudi_design_rename":
         return toolDesignRename(args);
+      case "wudi_design_create":
+        return toolDesignCreate(args);
       case "wudi_tokens_compare":
         return toolTokensCompare(args);
       case "wudi_canvas_get":
@@ -1720,7 +1887,7 @@ async function toolSshPing(args = {}) {
   }
 }
 function artifactsDir() {
-  const dir = join2(wudiDir(), "artifacts");
+  const dir = join3(wudiDir(), "artifacts");
   mkdirSync2(dir, { recursive: true });
   return dir;
 }
@@ -1731,13 +1898,13 @@ function artifactName(project, stamp, ext) {
 async function stagePackage(project, stamp) {
   if (project.package.type === "docker-image") {
     if (!project.package.dockerImage) throw new Error("packageType=docker-image \u4F46\u6863\u6848\u672A\u914D\u7F6E dockerImage\uFF08\u672C\u5730\u955C\u50CF\u540D\uFF09\u3002");
-    const file2 = join2(artifactsDir(), artifactName(project, stamp, "tar"));
+    const file2 = join3(artifactsDir(), artifactName(project, stamp, "tar"));
     await localRun(`docker save -o ${q(file2)} ${q(project.package.dockerImage)}`, { cwd: projectRoot() });
     return { file: file2, kind: "docker-image" };
   }
-  const pkgPath = resolve2(projectRoot(), project.package.path || "dist");
+  const pkgPath = resolve3(projectRoot(), project.package.path || "dist");
   if (!existsSync3(pkgPath)) throw new Error(`\u4EA7\u7269\u76EE\u5F55\u4E0D\u5B58\u5728\uFF1A${pkgPath}\uFF08\u68C0\u67E5\u6863\u6848 package.path \u6216\u5148\u5B8C\u6210\u6784\u5EFA\uFF09`);
-  const file = join2(artifactsDir(), artifactName(project, stamp, "tar.gz"));
+  const file = join3(artifactsDir(), artifactName(project, stamp, "tar.gz"));
   await localRun(
     `tar -czf ${q(file)} --exclude='./.wudi' --exclude='./.env' --exclude='./.git' -C ${q(pkgPath)} .`,
     { cwd: projectRoot() }
@@ -1869,7 +2036,7 @@ async function toolDeploy(args = {}) {
     }
     pkg = await stage("package", () => stagePackage(project, stamp));
     await stage("upload", async () => {
-      await sshRun(`mkdir -p ${q(join2(envObj.deployRoot, "releases", stamp).replaceAll("\\", "/"))}`, { timeoutMs: 6e4, overrides: envObj.ssh });
+      await sshRun(`mkdir -p ${q(join3(envObj.deployRoot, "releases", stamp).replaceAll("\\", "/"))}`, { timeoutMs: 6e4, overrides: envObj.ssh });
       const remotePath = `${envObj.deployRoot}/releases/${stamp}/bundle${pkg.kind === "docker-image" ? ".tar" : ".tar.gz"}`;
       await uploadFile(pkg.file, remotePath, { overrides: envObj.ssh });
       const sizeMB = (statSync(pkg.file).size / 1024 / 1024).toFixed(1);
@@ -1882,7 +2049,7 @@ async function toolDeploy(args = {}) {
         await sshRun(`rm -f ${q(`${remoteDir}/bundle.tar`)}`, { overrides: envObj.ssh });
       } else {
         await sshRun(`tar -xzf ${q(`${remoteDir}/bundle.tar.gz`)} -C ${q(remoteDir)} && rm -f ${q(`${remoteDir}/bundle.tar.gz`)}`, { timeoutMs: 12e4, overrides: envObj.ssh });
-        await sshRun(`ln -sfn ${q(join2(envObj.deployRoot, "releases", stamp))} ${q(join2(envObj.deployRoot, "current"))}`, { overrides: envObj.ssh });
+        await sshRun(`ln -sfn ${q(join3(envObj.deployRoot, "releases", stamp))} ${q(join3(envObj.deployRoot, "current"))}`, { overrides: envObj.ssh });
       }
       if (envObj.remoteScript) {
         await sshRun(`cd ${q(envObj.deployRoot)} && ( ${envObj.remoteScript} )`, { timeoutMs: 3e5, overrides: envObj.ssh });
@@ -1986,7 +2153,7 @@ function parseRemoteReleases(stdout) {
   return String(stdout).split("\n").map((s) => s.trim()).filter((s) => /^\d{8}-\d{6}$/.test(s)).sort().reverse();
 }
 async function readCurrentRelease(envObj) {
-  const { stdout } = await sshRun(`readlink ${q(join2(envObj.deployRoot, "current"))}`, { timeoutMs: 3e4, overrides: envObj.ssh });
+  const { stdout } = await sshRun(`readlink ${q(join3(envObj.deployRoot, "current"))}`, { timeoutMs: 3e4, overrides: envObj.ssh });
   const m = String(stdout).trim().match(/(\d{8}-\d{6})$/);
   return m ? m[1] : "";
 }
@@ -2015,7 +2182,7 @@ async function toolRollback(args = {}) {
   const confirm = args.confirm === true;
   let releases;
   try {
-    const { stdout } = await sshRun(`ls -1 ${q(join2(envObj.deployRoot, "releases"))}`, { timeoutMs: 3e4, overrides: envObj.ssh });
+    const { stdout } = await sshRun(`ls -1 ${q(join3(envObj.deployRoot, "releases"))}`, { timeoutMs: 3e4, overrides: envObj.ssh });
     releases = parseRemoteReleases(stdout);
   } catch (err) {
     return fail(`\u65E0\u6CD5\u8BFB\u53D6\u670D\u52A1\u5668\u7248\u672C\u5217\u8868\uFF08SSH \u4E0D\u53EF\u8FBE\u6216 releases \u76EE\u5F55\u7F3A\u5931\uFF09\uFF1A${String(err?.message ?? err).slice(0, 300)}`);
@@ -2062,7 +2229,7 @@ ${releases.join("\n")}`);
   };
   appendDeploy(record);
   try {
-    await sshRun(`ln -sfn ${q(join2(envObj.deployRoot, "releases", target))} ${q(join2(envObj.deployRoot, "current"))}`, { timeoutMs: 6e4, overrides: envObj.ssh });
+    await sshRun(`ln -sfn ${q(join3(envObj.deployRoot, "releases", target))} ${q(join3(envObj.deployRoot, "current"))}`, { timeoutMs: 6e4, overrides: envObj.ssh });
     record.stages.push({ name: "switch", status: "ok", detail: `current \u2192 ${target}`, startedAt: (/* @__PURE__ */ new Date()).toISOString(), durationMs: 0 });
     if (envObj.remoteScript) {
       await sshRun(`cd ${q(envObj.deployRoot)} && ( ${envObj.remoteScript} )`, { timeoutMs: 3e5, overrides: envObj.ssh });
@@ -2227,13 +2394,13 @@ async function toolDoctor(args = {}) {
       add("\u5185\u5B58", "warn", String(err?.message ?? err).slice(0, 200));
     }
     try {
-      const { stdout: lsOut } = await sshRun(`ls -1 ${q(join2(envObj.deployRoot, "releases"))} 2>/dev/null`, { timeoutMs: 3e4, overrides: envObj.ssh });
+      const { stdout: lsOut } = await sshRun(`ls -1 ${q(join3(envObj.deployRoot, "releases"))} 2>/dev/null`, { timeoutMs: 3e4, overrides: envObj.ssh });
       const releases = parseRemoteReleases(lsOut);
       if (!releases.length) add("\u7248\u672C\u76EE\u5F55", "warn", "releases \u4E3A\u7A7A\uFF08\u5C1A\u672A\u90E8\u7F72\u8FC7\uFF09");
       else add("\u7248\u672C\u76EE\u5F55", releases.length > 10 ? "warn" : "pass", `${releases.length} \u4E2A\u7248\u672C${releases.length > 10 ? "\uFF08\u5EFA\u8BAE pruneOld \u6E05\u7406\uFF09" : ""}`);
       if (project.package.type !== "docker-image" && releases.length) {
         const current = await readCurrentRelease(envObj);
-        const { stdout: exists } = await sshRun(`test -e ${q(join2(envObj.deployRoot, "current"))} && echo yes || echo no`, { overrides: envObj.ssh });
+        const { stdout: exists } = await sshRun(`test -e ${q(join3(envObj.deployRoot, "current"))} && echo yes || echo no`, { overrides: envObj.ssh });
         add("current \u8F6F\u94FE", current && String(exists).includes("yes") ? "pass" : "warn", current ? `\u6307\u5411 ${current}\uFF0C\u76EE\u6807\u5B58\u5728` : "\u672A\u8BBE\u7F6E\u6216\u76EE\u6807\u4E0D\u5B58\u5728");
       }
     } catch (err) {
@@ -2384,7 +2551,7 @@ function toolDesignList() {
   const files = [];
   const walk = (d, prefix = "") => {
     for (const entry of readdirSync2(d, { withFileTypes: true })) {
-      const full = join2(d, entry.name);
+      const full = join3(d, entry.name);
       if (entry.isDirectory()) walk(full, `${prefix}${entry.name}/`);
       else {
         const st = statSync(full);
@@ -2407,7 +2574,7 @@ function toolProjectsList() {
   try {
     ensureProfileAt(root);
     if (!isProjectRootHidden(root)) {
-      const exists = loadRegistry().some((e) => resolve2(e.path) === resolve2(root));
+      const exists = loadRegistry().some((e) => resolve3(e.path) === resolve3(root));
       if (!exists) registryAdd(root, loadProject()?.name || "");
     }
   } catch {
@@ -2424,32 +2591,32 @@ ${lines || "\uFF08\u7A7A\uFF09"}`, { projects });
 function toolRoot(args = {}) {
   const raw = String(args?.root ?? "").trim();
   if (!raw) return projectRoot();
-  const abs = resolve2(raw);
+  const abs = resolve3(raw);
   if (!existsSync3(abs) || !statSync(abs).isDirectory()) throw new Error(`\u9879\u76EE\u6839\u4E0D\u5B58\u5728\uFF1A${raw}`);
   return abs;
 }
 function currentProjectRoot() {
-  return resolve2(projectRoot());
+  return resolve3(projectRoot());
 }
 function withinProjectRoot(p) {
   const root = currentProjectRoot();
-  const abs = resolve2(String(p ?? ""));
+  const abs = resolve3(String(p ?? ""));
   return abs === root || abs.startsWith(root + "/");
 }
 function toolFsListDirs(args = {}) {
   const root = currentProjectRoot();
-  const target = args?.path ? resolve2(String(args.path)) : root;
+  const target = args?.path ? resolve3(String(args.path)) : root;
   if (target !== root && !target.startsWith(root + "/")) {
     return fail(`\u53EA\u80FD\u6D4F\u89C8\u5F53\u524D\u9879\u76EE\uFF08${root}\uFF09\u53CA\u5176\u5B50\u6587\u4EF6\u5939\u5185\u7684\u8DEF\u5F84\u3002`);
   }
   if (!existsSync3(target) || !statSync(target).isDirectory()) return fail(`\u76EE\u5F55\u4E0D\u5B58\u5728\uFF1A${target}`);
   let dirs = [];
   try {
-    dirs = readdirSync2(target, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => ({ name: d.name, path: join2(target, d.name) })).sort((a, b) => a.name.localeCompare(b.name));
+    dirs = readdirSync2(target, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => ({ name: d.name, path: join3(target, d.name) })).sort((a, b) => a.name.localeCompare(b.name));
   } catch (err) {
     return fail(`\u8BFB\u53D6\u76EE\u5F55\u5931\u8D25\uFF1A${String(err?.message ?? err)}`);
   }
-  const parent = target !== root ? resolve2(target, "..") : "";
+  const parent = target !== root ? resolve3(target, "..") : "";
   return ok(
     `\u76EE\u5F55\uFF1A${target}
 \u5B50\u6587\u4EF6\u5939\uFF08${dirs.length}\uFF09\uFF1A${dirs.map((d) => d.name).join("\u3001") || "\uFF08\u65E0\uFF09"}`,
@@ -2485,7 +2652,7 @@ function toolProjectsAdd(args) {
   }
   unhideProjectRoot(res.entry.path);
   try {
-    migrateLegacyDesigns(res.entry.path);
+    migrateDesignsFor(res.entry.path);
   } catch {
   }
   try {
@@ -2503,7 +2670,7 @@ function toolProjectsRemove(args) {
   const id = String(args.id ?? "").trim();
   const removed = registryRemove(id);
   if (!removed) return fail(`\u6CE8\u518C\u8868\u4E2D\u627E\u4E0D\u5230 ${id}\uFF08\u7528 wudi_projects_list \u67E5 id\uFF09\u3002`);
-  if (resolve2(removed.path) === resolve2(projectRoot())) {
+  if (resolve3(removed.path) === resolve3(projectRoot())) {
     hideProjectRoot(removed.path);
     return ok(
       `\u5DF2\u4ECE\u5DE5\u4F5C\u53F0\u79FB\u9664\u5F53\u524D\u9879\u76EE\uFF1A${removed.name}\uFF08${removed.path}\uFF09\u3002\u9879\u76EE\u6587\u4EF6\u4E0E .wudi \u672A\u5220\u9664\uFF1B\u91CD\u65B0\u300C\u767B\u8BB0\u9879\u76EE\u300D\u6307\u5411\u8BE5\u76EE\u5F55\u5373\u53EF\u6062\u590D\u3002`,
@@ -2656,7 +2823,7 @@ async function toolDocsWeekly(args = {}) {
   }
   const { year, week } = isoWeek();
   const relPath = `docs/weekly/${year}-W${String(week).padStart(2, "0")}.md`;
-  const absPath = join2(projectRoot(), relPath);
+  const absPath = join3(projectRoot(), relPath);
   const dates = [...byDate.keys()].sort();
   const md = [
     `# \u5468\u62A5 ${year}-W${String(week).padStart(2, "0")}`,
@@ -2682,7 +2849,7 @@ async function toolDocsWeekly(args = {}) {
   ].join("\n");
   try {
     const { mkdirSync: mkdirSync3, writeFileSync: writeFileSync3 } = await import("node:fs");
-    mkdirSync3(join2(projectRoot(), "docs", "weekly"), { recursive: true });
+    mkdirSync3(join3(projectRoot(), "docs", "weekly"), { recursive: true });
     writeFileSync3(absPath, md, "utf-8");
   } catch (err) {
     return fail(`\u5468\u62A5\u5199\u5165\u5931\u8D25\uFF1A${String(err?.message ?? err).slice(0, 300)}`);
@@ -2718,7 +2885,7 @@ async function toolFigmaImages(args = {}) {
   const scale = Math.min(Math.max(Number(args.scale) || 2, 0.01), 4);
   try {
     const images = await fetchFigmaImages({ fileKey: ref.fileKey, nodeIds, scale });
-    const outDir = join2(wudiDir(), "design", "figma");
+    const outDir = join3(wudiDir(), "design", "figma");
     const { mkdirSync: mkdirSync3, writeFileSync: writeFileSync3 } = await import("node:fs");
     mkdirSync3(outDir, { recursive: true });
     const saved = [];
@@ -2730,7 +2897,7 @@ async function toolFigmaImages(args = {}) {
       }
       const fname = `${ref.fileKey}-${nodeId.replace(/[^0-9:]/g, "_")}-x${scale}.png`.replaceAll(":", "-");
       const buf = Buffer.from(await (await fetch(url, { signal: AbortSignal.timeout(6e4) })).arrayBuffer());
-      const abs = join2(outDir, fname);
+      const abs = join3(outDir, fname);
       writeFileSync3(abs, buf);
       saved.push({ nodeId, path: `.wudi/design/figma/${fname}`, sizeKB: Number((buf.length / 1024).toFixed(1)) });
     }
@@ -2791,16 +2958,16 @@ function toolDesignTokensExport(args = {}) {
     fname = "tailwind.theme.js";
   } else {
     try {
-      content = readFileSync2(join2(designDir(), "tokens.css"), "utf-8");
+      content = readFileSync2(join3(designDir(), "tokens.css"), "utf-8");
     } catch {
       content = "";
     }
     if (!content) return fail("tokens.css \u4E0D\u5B58\u5728\uFF08tokens \u53EF\u80FD\u662F\u65E7\u7248\u5199\u5165\uFF09\uFF0C\u91CD\u8DD1\u4E00\u6B21 wudi_design_tokens_set \u751F\u6210\u540E\u518D\u5BFC\u51FA\u3002");
     fname = "tokens.css";
   }
-  const exportsDir = join2(designDir(), "exports");
+  const exportsDir = join3(designDir(), "exports");
   mkdirSync2(exportsDir, { recursive: true });
-  const outPath = join2(exportsDir, fname);
+  const outPath = join3(exportsDir, fname);
   writeFileSync2(outPath, content, "utf-8");
   return ok(
     [`tokens \u5DF2\u5BFC\u51FA\uFF08${format}\uFF09\uFF1A`, `- ${outPath}`, "", "```", clip(content, 1200), "```", "\u8F6C\u7EC4\u4EF6\u4EE3\u7801\u65F6\u5F15\u7528\u8BE5\u6587\u4EF6\uFF0C\u4E0D\u518D\u51FA\u73B0\u9B54\u6CD5\u503C\u3002"].join("\n"),
@@ -2893,14 +3060,16 @@ function validDesignName(name) {
   return base.replace(/\.(fig|pen)$/i, "").trim().length > 0;
 }
 function resolveDesignFile(p, root) {
-  const dir = designsDirAt(root || projectRoot());
-  const base = String(p ?? "").trim().replace(/^(?:\.wudi\/)?designs\//i, "");
-  if (!validDesignName(base)) throw new Error(`\u975E\u6CD5\u8BBE\u8BA1\u7A3F\u540D\uFF1A${p}\uFF08\u4EC5\u5141\u8BB8 designs/<\u540D\u79F0>.fig/.pen\uFF0C\u652F\u6301\u4E2D\u6587\uFF09`);
-  const file = resolve2(dir, base);
+  const projRoot = resolve3(root || projectRoot());
+  const base = projectBaseName(projRoot);
+  const dir = designsDirFor(projRoot);
+  const clean = String(p ?? "").trim().replace(/^(?:[\w.-]+\/)?designs\//i, "");
+  if (!validDesignName(clean)) throw new Error(`\u975E\u6CD5\u8BBE\u8BA1\u7A3F\u540D\uFF1A${p}\uFF08\u4EC5\u5141\u8BB8 designs/<\u540D\u79F0>.fig/.pen\uFF0C\u652F\u6301\u4E2D\u6587\uFF09`);
+  const file = resolve3(dir, clean);
   if (!file.startsWith(dir + "/")) throw new Error(`\u975E\u6CD5\u8BBE\u8BA1\u7A3F\u8DEF\u5F84\uFF1A${p}`);
-  return { dir, file, base };
+  return { dir, file, base: clean };
 }
-function toolDesignDelete(args = {}) {
+async function toolDesignDelete(args = {}) {
   const path2 = String(args?.path ?? "").trim();
   if (!path2) return fail("\u7F3A\u5C11 path\uFF1A\u8981\u5220\u9664\u7684\u8BBE\u8BA1\u7A3F\u8DEF\u5F84\uFF0C\u5982 designs/old.fig\u3002");
   let file;
@@ -2909,11 +3078,18 @@ function toolDesignDelete(args = {}) {
   } catch (err) {
     return fail(String(err?.message ?? err));
   }
-  if (!existsSync3(file)) return fail(`\u8BBE\u8BA1\u7A3F\u4E0D\u5B58\u5728\uFF1A${path2}`);
+  if (!await waitForDesignFile(file, 1500)) return fail(`\u8BBE\u8BA1\u7A3F\u4E0D\u5B58\u5728\uFF1A${path2}`);
   rmSync2(file);
   return ok(`\u5DF2\u5220\u9664\u8BBE\u8BA1\u7A3F\uFF1A${path2}`);
 }
-function toolDesignRename(args = {}) {
+async function waitForDesignFile(file, ms = 3e3) {
+  const deadline = Date.now() + ms;
+  while (!existsSync3(file) && Date.now() < deadline) {
+    await new Promise((res) => setTimeout(res, 120));
+  }
+  return existsSync3(file);
+}
+async function toolDesignRename(args = {}) {
   const path2 = String(args?.path ?? "").trim();
   const name = String(args?.name ?? "").trim();
   if (!path2 || !name) return fail("\u7F3A\u5C11\u53C2\u6570\uFF1Apath\uFF08\u73B0\u6709\u8BBE\u8BA1\u7A3F\uFF09\u4E0E name\uFF08\u65B0\u6587\u4EF6\u540D\uFF0C\u5982 new.fig\uFF09\u3002");
@@ -2924,27 +3100,55 @@ function toolDesignRename(args = {}) {
     return fail(String(err?.message ?? err));
   }
   if (!validDesignName(name)) return fail(`\u975E\u6CD5\u65B0\u6587\u4EF6\u540D\uFF1A${name}\uFF08\u4EC5\u5141\u8BB8 <\u540D\u79F0>.fig/.pen\uFF0C\u652F\u6301\u4E2D\u6587\uFF09`);
-  if (!existsSync3(file)) return fail(`\u8BBE\u8BA1\u7A3F\u4E0D\u5B58\u5728\uFF1A${path2}`);
-  const target = resolve2(dir, name);
+  if (!await waitForDesignFile(file)) return fail(`\u8BBE\u8BA1\u7A3F\u4E0D\u5B58\u5728\uFF08\u53EF\u80FD\u4ECD\u5728\u843D\u76D8\uFF0C\u7A0D\u540E\u91CD\u8BD5\uFF09\uFF1A${path2}`);
+  const target = resolve3(dir, name);
   if (!target.startsWith(dir + "/")) return fail(`\u975E\u6CD5\u76EE\u6807\u8DEF\u5F84\uFF1A${name}`);
   if (existsSync3(target)) return fail(`\u76EE\u6807\u5DF2\u5B58\u5728\uFF1Adesigns/${name}`);
   renameSync2(file, target);
   return ok(`\u5DF2\u91CD\u547D\u540D\uFF1A${base} \u2192 designs/${name}`, { path: `designs/${name}` });
 }
-function toolDesignsList(args = {}) {
-  const dir = designsDirAt(toolRoot(args));
+async function toolDesignCreate(args = {}) {
+  let root;
   try {
-    migrateLegacyDesigns(toolRoot(args));
+    root = toolRoot(args);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  const base = projectBaseName(root);
+  const name = String(args?.name ?? "").trim() || "ui";
+  const rel = `.wudi/${base}/designs/${name}.fig`;
+  let file;
+  try {
+    file = resolveDesignFile(rel, root).file;
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  if (existsSync3(file)) {
+    return ok(`\u753B\u5E03\u5DF2\u5B58\u5728\uFF1A${rel}\uFF08\u76F4\u63A5\u6253\u5F00\uFF09`, { path: rel });
+  }
+  await openpencilCall(root, "new_design", { path: rel });
+  const deadline = Date.now() + 5e3;
+  while (!existsSync3(file) && Date.now() < deadline) {
+    await new Promise((res) => setTimeout(res, 120));
+  }
+  if (!existsSync3(file)) return fail(`\u753B\u5E03\u521B\u5EFA\u8D85\u65F6\uFF08\u6587\u4EF6\u672A\u843D\u76D8\uFF09\uFF1A${rel}`);
+  return ok(`\u5DF2\u521B\u5EFA\u753B\u5E03\uFF1A${rel}`, { path: rel });
+}
+function toolDesignsList(args = {}) {
+  const root = toolRoot(args);
+  const dir = designsDirFor(root);
+  try {
+    migrateDesignsFor(root);
   } catch {
   }
   const designs = [];
   try {
     for (const f of readdirSync2(dir)) {
       if (!/\.(fig|pen)$/i.test(f)) continue;
-      const st = statSync(join2(dir, f));
+      const st = statSync(join3(dir, f));
       designs.push({
         name: f,
-        path: `.wudi/designs/${f}`,
+        path: `.wudi/${projectBaseName(root)}/designs/${f}`,
         format: f.toLowerCase().endsWith(".fig") ? "fig\uFF08\u53EF\u7F16\u8F91\uFF09" : "pen\uFF08\u53EA\u8BFB\u5BFC\u5165\uFF09",
         sizeKB: Number((st.size / 1024).toFixed(1)),
         updatedAt: st.mtime.toISOString()
@@ -3035,167 +3239,24 @@ async function toolFigmaTokensDiff(args = {}) {
   }
 }
 function listLocalArtifacts() {
-  const dir = join2(wudiDir(), "artifacts");
+  const dir = join3(wudiDir(), "artifacts");
   if (!existsSync3(dir)) return [];
   return readdirSync2(dir).filter((f) => /\.(tar|tar\.gz)$/.test(f)).sort().reverse().slice(0, 10).map((name) => {
-    const sizeMB = (statSync(join2(dir, name)).size / 1024 / 1024).toFixed(1);
+    const sizeMB = (statSync(join3(dir, name)).size / 1024 / 1024).toFixed(1);
     return { name, sizeMB: Number(sizeMB) };
   });
 }
 async function pruneReleases(envObj) {
-  const releasesDir = join2(envObj.deployRoot, "releases");
+  const releasesDir = join3(envObj.deployRoot, "releases");
   const { stdout } = await sshRun(`ls -1 ${q(releasesDir)}`, { timeoutMs: 3e4, overrides: envObj.ssh });
   const all = parseRemoteReleases(stdout);
   const keep = all.slice(0, 5);
   const toDelete = all.filter((r) => !keep.includes(r));
   if (!toDelete.length) return "\u65E7\u7248\u672C\u6E05\u7406\uFF1A\u65E0\u9700\u6E05\u7406\uFF08\u5171 " + all.length + " \u4E2A\u7248\u672C\uFF09\u3002";
   for (const r of toDelete) {
-    await sshRun(`rm -rf -- ${q(join2(releasesDir, r))}`, { timeoutMs: 12e4, overrides: envObj.ssh });
+    await sshRun(`rm -rf -- ${q(join3(releasesDir, r))}`, { timeoutMs: 12e4, overrides: envObj.ssh });
   }
   return `\u65E7\u7248\u672C\u6E05\u7406\uFF1A\u5DF2\u5220\u9664 ${toDelete.length} \u4E2A\uFF08${toDelete.join(", ")}\uFF09\uFF0C\u4FDD\u7559\u6700\u8FD1 5 \u4E2A\uFF08${keep.join(", ")}\uFF09\u3002`;
-}
-
-// src/openpencil.ts
-import { spawn } from "node:child_process";
-import { dirname, join as join3, resolve as resolve3 } from "node:path";
-import { fileURLToPath } from "node:url";
-var vendorRoot = resolve3(join3(dirname(fileURLToPath(import.meta.url)), "..", "vendor", "openpencil"));
-var childServerPath = join3(vendorRoot, "dist", "server.mjs");
-function defaultWorkspaceRoot() {
-  return resolve3(process.env.AOPC_PROJECT_DIR || process.env.AOPC_WORKSPACE_ROOT || process.cwd());
-}
-var children = /* @__PURE__ */ new Map();
-function createState(root) {
-  return {
-    root,
-    child: null,
-    pendingId: 0,
-    pending: /* @__PURE__ */ new Map(),
-    stderr: "",
-    buffer: "",
-    initDone: null
-  };
-}
-function ensureChild(root) {
-  const key = resolve3(root || defaultWorkspaceRoot());
-  let st = children.get(key);
-  if (!st) {
-    st = createState(key);
-    children.set(key, st);
-  }
-  if (st.child) return st;
-  try {
-    st.child = spawn(process.execPath, [childServerPath], {
-      env: {
-        ...process.env,
-        ZCODE_WORKSPACE_ROOT: st.root,
-        ZCODE_PLUGIN_ROOT: vendorRoot,
-        ZCODE_WORKSPACE_IDENTITY: st.root
-      },
-      stdio: ["pipe", "pipe", "pipe"]
-    });
-  } catch (err) {
-    console.error("[wudi] OpenPencil spawn \u5931\u8D25:", err.message);
-    st.child = null;
-    return st;
-  }
-  st.child.stdout.setEncoding("utf-8");
-  st.child.stdout.on("data", (chunk) => {
-    st.buffer += chunk;
-    let idx;
-    while ((idx = st.buffer.indexOf("\n")) >= 0) {
-      const line = st.buffer.slice(0, idx).trim();
-      st.buffer = st.buffer.slice(idx + 1);
-      if (!line) continue;
-      try {
-        const msg = JSON.parse(line);
-        if (msg.id !== void 0 && st.pending.has(msg.id)) {
-          const res = st.pending.get(msg.id);
-          st.pending.delete(msg.id);
-          res(msg);
-        }
-      } catch {
-      }
-    }
-  });
-  st.child.stderr.on("data", (d) => {
-    st.stderr += d;
-  });
-  st.child.on("exit", (code) => {
-    console.error(`[wudi] OpenPencil \u5B50\u8FDB\u7A0B\u9000\u51FA root=${st.root} code=` + code);
-    st.child = null;
-    st.initDone = null;
-  });
-  st.initDone = request(st, "initialize", {
-    protocolVersion: "2024-11-05",
-    capabilities: {},
-    clientInfo: { name: "wudi-coding", version: "1.0" }
-  }).then(() => notify(st, "notifications/initialized"));
-  return st;
-}
-function request(st, method, params) {
-  ensureChild(st.root);
-  if (!st.child) return Promise.reject(new Error("OpenPencil \u5B50\u8FDB\u7A0B\u672A\u542F\u52A8"));
-  const id = ++st.pendingId;
-  const p = new Promise((res, rej) => {
-    st.pending.set(id, res);
-    setTimeout(() => {
-      if (st.pending.has(id)) {
-        st.pending.delete(id);
-        rej(new Error(`openpencil \u5B50\u8FDB\u7A0B\u8BF7\u6C42\u8D85\u65F6\uFF1A${method}
-stderr: ${st.stderr.slice(-300)}`));
-      }
-    }, 6e4);
-  });
-  st.child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
-  return p.then((r) => {
-    if (r.error) throw Object.assign(new Error(r.error.message ?? "openpencil error"), { code: r.error.code });
-    return r.result;
-  });
-}
-function notify(st, method, params) {
-  ensureChild(st.root);
-  st.child?.stdin.write(JSON.stringify({ jsonrpc: "2.0", method, params }) + "\n");
-}
-async function openpencilTools(root = void 0) {
-  const st = ensureChild(root);
-  await st.initDone;
-  const r = await request(st, "tools/list", {});
-  return r.tools ?? [];
-}
-async function openpencilCall(root = void 0, name, args = void 0) {
-  const st = ensureChild(root);
-  await st.initDone;
-  return request(st, "tools/call", { name, arguments: args ?? {} });
-}
-async function openpencilReadResource(root = void 0, uri) {
-  const st = ensureChild(root);
-  await st.initDone;
-  return request(st, "resources/read", { uri });
-}
-async function openpencilBridgeEndpoint(root = void 0) {
-  const r = await openpencilCall(root, "get_design_status", {});
-  const sc = r.structuredContent ?? {};
-  return sc.bridge ?? null;
-}
-var _epCache = /* @__PURE__ */ new Map();
-async function openpencilBridgeEndpointCached(root = void 0) {
-  const key = resolve3(root || defaultWorkspaceRoot());
-  const cur = _epCache.get(key);
-  if (cur && Date.now() - cur.at < 3e4) return cur.value;
-  try {
-    const ep = await openpencilBridgeEndpoint(key);
-    _epCache.set(key, { at: Date.now(), value: ep });
-    return ep;
-  } catch {
-    _epCache.set(key, { at: Date.now(), value: null });
-    return null;
-  }
-}
-try {
-  ensureChild(defaultWorkspaceRoot());
-} catch (e) {
-  console.error("[wudi] OpenPencil \u9884\u70ED\u5931\u8D25:", e.message);
 }
 
 // src/server.ts
@@ -3216,7 +3277,7 @@ var SERVER_INFO = { name: "wudi-coding", version: "0.38.1" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());
-  migrateLegacyDesigns(projectRoot());
+  migrateDesignsFor(projectRoot());
 } catch {
 }
 var PANEL_URI = "ui://wudi-coding/panel.html";
@@ -3408,10 +3469,7 @@ function handleMessage(line) {
     const toolName = params?.name ?? "";
     const isWudiTool = TOOLS.some((t) => t.name === toolName);
     const callPromise = isWudiTool ? callTool(toolName, params?.arguments ?? {}) : (() => {
-      const rawArgs = { ...params?.arguments ?? {} };
-      const rootArg = rawArgs.__root;
-      delete rawArgs.__root;
-      return openpencilCall(rootArg, toolName, rawArgs).then((r) => {
+      return openpencilCall(void 0, toolName, params?.arguments ?? {}).then((r) => {
         const sc = r.structuredContent;
         if (toolName === "get_design_status" && sc?.bridge?.url) {
           sc.bridge = { ...sc.bridge, url: opWsProxyUrl(sc.bridge.url) };

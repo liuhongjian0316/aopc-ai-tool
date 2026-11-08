@@ -393,6 +393,14 @@ plugins/wudi-coding/
 - **存储位置可见**：设计页「项目画布」标题栏显示实际存储目录（`<项目>/.wudi/designs/`），每个项目的画布都在该项目自己的 .wudi 下。
 - 提醒：在非当前项目的画布里创建的内容存该项目目录；部署/构建类操作仍需在该项目工作区执行。
 
+## 画布存储按项目分目录（v0.38.2）
+
+- **存储模型修正**：`.wudi/` 下面以项目为基准——每个项目的画布存放在**工作区单一 .wudi 下的 `<项目>/designs/`**（如 `.wudi/zongheng-mini/designs/xx.fig`），而不是各子项目目录里散落各自的 .wudi。
+- 迁移兼容三种历史位置：`.wudi/designs/`（v0.38.0 中央）、各项目根 `designs/`（v0.35 旧位置）、当前 `.wudi/<项目>/designs/`；中央位置的迁移仅归属当前工作区项目（避免被子项目抢走）。
+- 新增 `wudi_design_create {name, root?}`：服务端按项目计算集中路径并建稿（含落盘等待），面板「创建画布」改用该工具。
+- 路径解析兼容 `.wudi/<项目>/designs/`、`designs/`、裸名三种写法（resolveDesignFile 共用）。
+- smoke 断言对齐新布局（130 项全绿）。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。
