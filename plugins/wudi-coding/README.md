@@ -411,6 +411,14 @@ plugins/wudi-coding/
 - **修复**：画布统一存储在工作区 `.wudi/<项目>/designs/` 后，创建一律走**工作区根的默认子进程**（路径已带项目目录）；`designsDirFor` 同步锚定工作区根（root 仅决定项目目录名）。列表/改名/删除与创建完全一致。
 - 实测：登记子项目 → 创建画布 → 文件落在 `工作区/.wudi/<子项目>/designs/all.fig`，列表按根可见。
 
+## Agent 设计工具失败自动打开编辑器（v0.38.5）
+
+- **根因**：Agent 的 openPencil 设计工具（get_node/create_shape/render 等）需要**编辑器面板已连接**——面板没开时每个调用都失败（旧文案还指向已下线的「侧栏面板」，Agent 无从下手）。
+- **修复**：
+  - 文案指向工作台：设计稿编辑器未打开 → 请在工作台「设计」页点击画布打开编辑器后重试；
+  - **面板自动打开编辑器**：检测到 Agent 的设计工具因「编辑器未打开」失败时，自动打开画布编辑器（加载当前画布），Agent 重试即可用；
+  - vendored openPencil 同步更新提示文案（重建 dist）。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。

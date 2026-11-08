@@ -131,6 +131,18 @@ const EmptyResultSchema = {
     if (Array.isArray(sc.deploys)) state.history = { deploys: sc.deploys };
     if (Array.isArray(sc.projects)) state.projects = { projects: sc.projects };
     if (Array.isArray(sc.designs)) state.designs = { designs: sc.designs };
+    /* Agent 的设计工具因编辑器未打开而失败 → 自动打开编辑器（Agent 重试即可用） */
+    try {
+      const errText = (result?.content ?? []).map((c) => c.text ?? "").join("\n");
+      const overlayOn = document.getElementById("op-layer")?.classList.contains("on");
+      if (result?.isError && /设计稿编辑器未打开|设计稿面板未连接/.test(errText) && !overlayOn && !state.opEmbed) {
+        const path = state.designs?.designs?.[0]?.path;
+        if (path) {
+          void openOpEmbed(path);
+          state.notice = { kind: "ok", text: "检测到 Agent 需要编辑画布：已自动打开编辑器，让它重试即可" };
+        }
+      }
+    } catch { /* 自动打开失败不阻塞 */ }
     render();
   };
 

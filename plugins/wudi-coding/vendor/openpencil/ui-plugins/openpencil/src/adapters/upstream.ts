@@ -20,7 +20,7 @@ export interface UpstreamBridgeOptions {
   connectTimeoutMs?: number;
 }
 export const PANEL_NOT_CONNECTED_MESSAGE =
-  "设计稿面板未连接：请在侧栏打开“设计稿”面板（或先调用 open_design 让它自动打开），面板就绪后再重试；不要自动重试。";
+  "设计稿编辑器未打开：请在工作台「设计」页点击画布打开编辑器（或先调用 open_design 打开目标设计稿），就绪后再重试一次。";
 
 /**
  * 进程内启动上游 `@open-pencil/mcp` 的 HTTP + WebSocket 桥（随机回环端口、token 鉴权），

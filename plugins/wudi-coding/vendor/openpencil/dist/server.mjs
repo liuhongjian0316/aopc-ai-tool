@@ -238201,7 +238201,7 @@ function createDesignServer(options) {
 import { randomBytes as randomBytes3 } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join as join5 } from "node:path";
-var PANEL_NOT_CONNECTED_MESSAGE = "\u8BBE\u8BA1\u7A3F\u9762\u677F\u672A\u8FDE\u63A5\uFF1A\u8BF7\u5728\u4FA7\u680F\u6253\u5F00\u201C\u8BBE\u8BA1\u7A3F\u201D\u9762\u677F\uFF08\u6216\u5148\u8C03\u7528 open_design \u8BA9\u5B83\u81EA\u52A8\u6253\u5F00\uFF09\uFF0C\u9762\u677F\u5C31\u7EEA\u540E\u518D\u91CD\u8BD5\uFF1B\u4E0D\u8981\u81EA\u52A8\u91CD\u8BD5\u3002";
+var PANEL_NOT_CONNECTED_MESSAGE = "\u8BBE\u8BA1\u7A3F\u7F16\u8F91\u5668\u672A\u6253\u5F00\uFF1A\u8BF7\u5728\u5DE5\u4F5C\u53F0\u300C\u8BBE\u8BA1\u300D\u9875\u70B9\u51FB\u753B\u5E03\u6253\u5F00\u7F16\u8F91\u5668\uFF08\u6216\u5148\u8C03\u7528 open_design \u6253\u5F00\u76EE\u6807\u8BBE\u8BA1\u7A3F\uFF09\uFF0C\u5C31\u7EEA\u540E\u518D\u91CD\u8BD5\u4E00\u6B21\u3002";
 async function startUpstreamBridge(options) {
   process.env.OPENPENCIL_MCP_DISCOVERY_PATH = join5(options.dataDir, "openpencil-mcp.json");
   process.env.OPENPENCIL_MCP_SOCKET = join5(
