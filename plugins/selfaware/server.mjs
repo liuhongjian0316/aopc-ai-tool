@@ -90,7 +90,7 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["get", "start", "note", "close", "obstacle", "resolve", "publish", "measure", "void", "request", "decide"] },
+        action: { type: "string", enum: ["get", "start", "note", "close", "obstacle", "resolve", "publish", "measure", "void", "request", "decide", "idea", "idea-use"] },
         title: { type: "string", description: "start:使命标题(一句话);resolve:已研究的困难知识标题(将写入知识库);publish:发布的内容标题" },
         goal: { type: "string", description: "start:完成判据/目标(可选)" },
         autonomy: { type: "string", enum: ["supervised", "full"], description: "start:自主等级。full=完全自主(日常发布与数据分析无需逐条请示,红线仍须请示);supervised=受监督(默认)" },
@@ -493,6 +493,7 @@ function selfState() {
     playbookRules,
     playbookFiles,
     knowledge,
+    ideas: (mission.ideas || []).filter((i) => i.status === "open").slice(-5).reverse(),
     journal: { total: journalEntries.length, proposed: proposedEntries.length, staleProposals, landed: journalEntries.filter((e) => e.status === "landed").length },
     journalDiet,
     pluginProposals: journalEntries.filter((e) => e.kind === "plugin_proposal").slice(-5).reverse(),
@@ -982,6 +983,31 @@ function selfMission(args) {
     writeMission(m2);
     return { text: `请示 ${item.id} 已批复:${decision.slice(0, 100)}${ruleLine}`, structured: missionStructured(m2, loadState()) };
   }
+  if (action === "idea") {
+    // 3.4.0:创意收件箱——灵感随时捕获,发散步骤取用
+    const text = String(args.text || "").trim();
+    if (!text) throw new Error("idea 需要 text(灵感内容)");
+    const seq = (m.ideaSeq = (m.ideaSeq || 0) + 1);
+    m.ideas = m.ideas || [];
+    const item = { id: `i${String(seq).padStart(3, "0")}`, t: Date.now(), text: text.slice(0, 300), source: String(args.source || "").slice(0, 60), status: "open" };
+    m.ideas.push(item);
+    writeMission(m);
+    const openN = (m.ideas || []).filter((i) => i.status === "open").length;
+    return { text: `灵感已入收件箱(${item.id},open ${openN} 条):${text.slice(0, 80)}\n发散选题时优先取用;采纳转成 hypothesis 的记得回来标 used。`, structured: missionStructured(m, loadState()) };
+  }
+  if (action === "idea-use") {
+    const id = String(args.id || "");
+    const outcome = String(args.outcome || "").trim();
+    if (!id) throw new Error("idea-use 需要 id");
+    const m2 = readMission();
+    const item = (m2.ideas || []).find((i) => i.id === id);
+    if (!item) throw new Error(`未找到灵感:${id}`);
+    item.status = "used";
+    item.usedAt = Date.now();
+    if (outcome) item.outcome = outcome.slice(0, 200);
+    writeMission(m2);
+    return { text: `灵感 ${id} 已标记使用${outcome ? `:${outcome.slice(0, 80)}` : ""}。`, structured: missionStructured(m2, loadState()) };
+  }
   if (action === "void") {
     // 2.2.0:假阳性账目作废——账要平,更要真实(v002 首发时发现 v001 的"已发布"是假阳性,当时无状态可标)
     const item = (m.ledger || []).find((l) => l.id === String(args.id || "") && l.status !== "void");
@@ -1010,6 +1036,12 @@ function missionText(m) {
   if (pendingReq.length) {
     lines.push(`【待用户决策】${pendingReq.length} 条请示(批复经面板或直接回复;decide 可 makeRule 固化永久规则):`);
     for (const r of pendingReq.slice(-3)) lines.push(`- [${r.id}/${r.type}] ${r.question.slice(0, 80)}`);
+  }
+  // 3.4.0:创意收件箱——灵感也是待消化的产出
+  const openIdeas = (m.ideas || []).filter((i) => i.status === "open");
+  if (openIdeas.length) {
+    lines.push(`创意收件箱(${openIdeas.length} 条,发散选题时优先取用):`);
+    for (const i of openIdeas.slice(-5)) lines.push(`- [${i.id}] ${i.text.slice(0, 80)}${i.source ? `(${i.source})` : ""}`);
   }
   const openDiff = (m.open || []).filter((d) => d.status === "open");
   if (openDiff.length) {
@@ -1051,6 +1083,7 @@ function missionStructured(m, st) {
       openDifficulties: openD,
       difficultyAgingDays: agingD,
       pendingRequests: pendingReq,
+      ideas: (m.ideas || []).filter((i) => i.status === "open").slice(-5).reverse(),
       ledger: {
         awaiting: ledger.filter((l) => l.status === "awaiting").length,
         due: ledger.filter((l) => l.status === "awaiting" && now - l.t >= 48 * 3600000).map((l) => ({ id: l.id, title: l.title, t: l.t })),
@@ -1222,6 +1255,31 @@ function selfRecall(args) {
         name: `journal(${jEntries.length} 条)`,
         path: null,
         content: jEntries.map((e) => `${e.title}\n${e.lesson || ""}`).join("\n"),
+      });
+    }
+  } catch {}
+  // 3.4.0:创意收件箱与自造脚本注册表入召回源
+  try {
+    const missionForIdeas = readMission();
+    const ideas = (missionForIdeas.ideas || []).filter((i) => i.status === "open");
+    if (ideas.length) {
+      docs.push({
+        source: "创意收件箱",
+        name: `ideas(${ideas.length} 条)`,
+        path: null,
+        content: ideas.map((i) => `${i.text}\n${i.source || ""}`).join("\n"),
+      });
+    }
+  } catch {}
+  try {
+    const regPath = path.join(selfDir(), "ops", "ops-scripts.json");
+    const reg = JSON.parse(fs.readFileSync(regPath, "utf8"));
+    if (Array.isArray(reg) && reg.length) {
+      docs.push({
+        source: "自造脚本",
+        name: `ops-scripts(${reg.length} 个)`,
+        path: null,
+        content: reg.map((r) => `${r.name}\n${r.desc || ""}\n${r.usage || ""}`).join("\n"),
       });
     }
   } catch {}

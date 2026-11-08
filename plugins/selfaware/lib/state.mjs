@@ -170,14 +170,16 @@ export function readMission() {
         open: Array.isArray(j.open) ? j.open : [], // 1.5.0:待研究困难队列
         ledger: Array.isArray(j.ledger) ? j.ledger : [], // 1.8.0:内容实验台账
         requests: Array.isArray(j.requests) ? j.requests : [], // 3.1.0:待用户决策请示队列
+        ideas: Array.isArray(j.ideas) ? j.ideas : [], // 3.4.0:创意收件箱
         // 1.8.0 事故教训:readMission 必须透传序号字段,否则每次读取后 seq 从 1 重新计数,
         // 第二条 publish/obstacle 会顶掉第一条(T43 抓出)
         ledgerSeq: Number.isFinite(j.ledgerSeq) ? j.ledgerSeq : 0,
         openSeq: Number.isFinite(j.openSeq) ? j.openSeq : 0,
         requestSeq: Number.isFinite(j.requestSeq) ? j.requestSeq : 0,
+        ideaSeq: Number.isFinite(j.ideaSeq) ? j.ideaSeq : 0,
       };
   } catch {}
-  return { active: null, log: [], open: [], ledger: [], requests: [], ledgerSeq: 0, openSeq: 0, requestSeq: 0 };
+  return { active: null, log: [], open: [], ledger: [], requests: [], ideas: [], ledgerSeq: 0, openSeq: 0, requestSeq: 0, ideaSeq: 0 };
 }
 
 export function writeMission(m) {
@@ -195,6 +197,11 @@ export function writeMission(m) {
   const reqPending = (m.requests || []).filter((r) => r.status === "pending").slice(-MISSION_REQUESTS_PENDING_CAP);
   const reqDecided = (m.requests || []).filter((r) => r.status === "decided").slice(-MISSION_REQUESTS_DECIDED_KEEP);
   m.requests = [...reqPending, ...reqDecided];
+  // 创意收件箱:open 封顶 50,used/retired 留 15
+  const ideas = m.ideas || [];
+  const ideasOpen = ideas.filter((i) => i.status === "open").slice(-50);
+  const ideasDone = ideas.filter((i) => i.status !== "open").slice(-15);
+  m.ideas = [...ideasDone, ...ideasOpen];
   const tmp = missionPath() + ".tmp-" + process.pid;
   fs.writeFileSync(tmp, JSON.stringify(m, null, 2) + "\n");
   fs.renameSync(tmp, missionPath());

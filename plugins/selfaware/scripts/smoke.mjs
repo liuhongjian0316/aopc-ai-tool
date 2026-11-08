@@ -1464,6 +1464,36 @@ console.log("\n[T57] autonomous-ops 含生产管线四步与反同质化条款")
   check("含只等数字=半个闭环警句", skill.includes("只等数字不做作品自评 = 半个闭环"));
 }
 
+// ---------- T58 创意收件箱 ----------
+
+console.log("\n[T58] self_mission idea/idea-use:灵感捕获/取用标记/结构化暴露");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    return { text: m?.result?.content?.[0]?.text || "", sc: m?.result?.structuredContent, isError: !!m?.result?.isError };
+  };
+  call("self_mission", { action: "start", title: "测试使命", autonomy: "full" });
+  const r1 = call("self_mission", { action: "idea", text: "给 Codex 生态做个『一句话生成 CI 流水线』的演示视频", source: "晨间灵感" });
+  check("灵感捕获得 i001", !r1.isError && r1.text.includes("i001"), r1.text.slice(0, 150));
+  const g = call("self_mission", { action: "get" });
+  check("get 收件箱区可见", g.text.includes("i001") && g.text.includes("晨间灵感"), g.text.slice(0, 300));
+  check("structured 带 open ideas", g.sc?.mission?.ideas?.length === 1 && g.sc.mission.ideas[0].status === "open");
+  const r2 = call("self_recall", { query: "CI 流水线" });
+  check("灵感可被召回", r2.text.includes("CI 流水线"), r2.text.slice(0, 250));
+  const u = call("self_mission", { action: "idea-use", id: "i001", outcome: "已作为 v006 选题" });
+  check("取用标记成功", !u.isError && u.text.includes("已标记使用"), u.text.slice(0, 150));
+  const st = call("self_state", {});
+  check("self_state 收件箱已清空(取用后 open 过滤)", st.sc?.ideas?.length === 0, JSON.stringify(st.sc?.ideas || null));
+  const e1 = call("self_mission", { action: "idea", text: "" });
+  check("空 text 拒绝", e1.isError && e1.text.includes("text"), e1.text.slice(0, 150));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);
