@@ -44,7 +44,8 @@ export async function startUpstreamBridge(options: UpstreamBridgeOptions): Promi
   });
   const base = `http://127.0.0.1:${handle.httpPort}`;
   const endpoint: BridgeEndpoint = { url: `ws://127.0.0.1:${handle.httpPort}`, token };
-  const connectTimeoutMs = options.connectTimeoutMs ?? 30_000;
+  // 面板未连接时快速失败（2.5s），避免每个设计工具挂 30s 才报错（wudi 调整）
+  const connectTimeoutMs = options.connectTimeoutMs ?? 2_500;
 
   async function isConnected(): Promise<boolean> {
     try {

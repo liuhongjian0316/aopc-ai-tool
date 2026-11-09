@@ -419,6 +419,14 @@ plugins/wudi-coding/
   - **面板自动打开编辑器**：检测到 Agent 的设计工具因「编辑器未打开」失败时，自动打开画布编辑器（加载当前画布），Agent 重试即可用；
   - vendored openPencil 同步更新提示文案（重建 dist）。
 
+## 设计工具快速失败 + 编辑器自动打开（v0.38.6）
+
+- **根因**：openPencil upstream 的 `/health` 只在**编辑器面板 WS 已连接**时返回 ok，而工具调用的 `waitForConnection` 默认**等 30 秒**——面板没开时每个设计工具（render/get_node/create_shape/…）都挂 30s 才报错，Agent 连试多次全超时。
+- **修复**：
+  - 等待上限 30s → **2.5s**（源码 `src/adapters/upstream.ts` 与 vendored dist 同步），设计工具未连接时快速失败并给出「编辑器未打开」指引；
+  - 面板**主动打开编辑器**：收到 `get_design_status` 的 `live:false` 或「编辑器未打开」失败结果时，自动打开该画布编辑器——Agent 稍后重试即可写入了。
+- 注意：本机 homebrew Node 24 依赖损坏（libsimdjson 缺失），openpencil 的 web 构建暂不可用；本次服务端补丁直接应用于 vendored dist（与源码补丁一致）。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。

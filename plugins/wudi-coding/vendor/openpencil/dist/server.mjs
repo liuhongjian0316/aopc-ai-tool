@@ -238218,7 +238218,7 @@ async function startUpstreamBridge(options) {
   });
   const base = `http://127.0.0.1:${handle.httpPort}`;
   const endpoint = { url: `ws://127.0.0.1:${handle.httpPort}`, token };
-  const connectTimeoutMs = options.connectTimeoutMs ?? 3e4;
+  const connectTimeoutMs = options.connectTimeoutMs ?? 2.5e3;
   async function isConnected() {
     try {
       const res = await fetch(`${base}/health`);
