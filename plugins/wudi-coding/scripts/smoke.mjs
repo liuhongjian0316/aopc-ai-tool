@@ -8,6 +8,8 @@
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import net from "node:net";
+import crypto from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -462,6 +464,40 @@ async function protocolTests() {
       check("op_embed: /openpencil/frame 返回编辑器 loader",
         frameRes?.status === 200 && frameHtml.length > 500 && frameHtml.includes("正在加载设计稿编辑器"),
         `HTTP ${frameRes?.status ?? "?"} · ${frameHtml.length}B`);
+
+      /* /op-ws 透明代理：最小 WS 握手桩当目标，验证 101 透传与升级后字节直通 */
+      const fakeWs = net.createServer((sock) => {
+        let buf = "";
+        let handshaked = false;
+        sock.on("data", (chunk) => {
+          buf += chunk.toString("latin1");
+          if (handshaked) return;
+          const end = buf.indexOf("\r\n\r\n");
+          if (end < 0) return;
+          handshaked = true;
+          const key = /sec-websocket-key:\s*([^\r\n]+)/i.exec(buf)?.[1]?.trim() ?? "";
+          const accept = crypto.createHash("sha1").update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest("base64");
+          sock.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+          sock.write("PROXY-OK");
+        });
+      });
+      const fakeWsPort = await new Promise((r2) => fakeWs.listen(0, "127.0.0.1", () => r2(fakeWs.address().port)));
+      const proxyOk = await new Promise((r2) => {
+        const key = crypto.randomBytes(16).toString("base64");
+        const sock = net.connect(Number(new URL(bridgeUrlSc).port), "127.0.0.1", () => {
+          const target = encodeURIComponent(`ws://127.0.0.1:${fakeWsPort}`);
+          sock.write(`GET /op-ws?target=${target} HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: ${key}\r\nSec-WebSocket-Version: 13\r\n\r\n`);
+        });
+        let out = "";
+        const timer = setTimeout(() => { sock.destroy(); r2(false); }, 4000);
+        sock.on("data", (c) => {
+          out += c.toString("latin1");
+          if (out.includes("101") && out.includes("PROXY-OK")) { clearTimeout(timer); sock.destroy(); r2(true); }
+        });
+        sock.on("error", () => { clearTimeout(timer); r2(false); });
+      });
+      fakeWs.close();
+      check("op_embed: /op-ws 代理握手 + 字节直通", proxyOk);
     }
     r = await s.call("resources/read", { uri: "ui://wudi-coding/panel.html" });
     // 宿主读内容项级 _meta（规范）；结果级仅兼容兜底
@@ -471,6 +507,11 @@ async function protocolTests() {
       JSON.stringify(cspMeta).slice(0, 180));
     check("op_embed: 面板资源项 _meta 声明 connectDomains",
       Array.isArray(cspMeta.connectDomains) && cspMeta.connectDomains.length > 0);
+    /* 编辑器 WS 走 /op-ws 代理回连协同桥；CSP scheme 精确匹配，缺 ws:// 会一直卡「连接中」 */
+    const bridgePortSc = bridgeUrlSc ? new URL(bridgeUrlSc).port : "";
+    check("op_embed: connectDomains 放行 ws 代理 origin（编辑器 WS 回连）",
+      !!bridgePortSc && (cspMeta.connectDomains ?? []).includes(`ws://127.0.0.1:${bridgePortSc}`),
+      JSON.stringify(cspMeta.connectDomains ?? []));
     const relaxMeta = r?.result?.contents?.[0]?._meta?.["aopc/csp"] ?? {};
     check("op_embed: 资源项声明 wasm/eval 放宽（CanvasKit/kiwi）",
       relaxMeta.wasmUnsafeEval === true && relaxMeta.unsafeEval === true, JSON.stringify(relaxMeta));
@@ -478,6 +519,9 @@ async function protocolTests() {
     const listMeta = (r?.result?.resources ?? []).find((x) => x.uri === "ui://wudi-coding/panel.html")?._meta?.ui?.csp ?? {};
     check("op_embed: resources/list 兜底声明 frameDomains",
       Array.isArray(listMeta.frameDomains) && listMeta.frameDomains.length > 0);
+    check("op_embed: resources/list 兜底放行 ws 代理 origin",
+      !!bridgePortSc && (listMeta.connectDomains ?? []).includes(`ws://127.0.0.1:${bridgePortSc}`),
+      JSON.stringify(listMeta.connectDomains ?? []));
 
     r = await s.call("tools/call", { name: "wudi_doctor", arguments: { env: "staging" } });
     // 无真实 SSH（TEST-NET 地址 2s 超时）：SSH/远端/健康检查应失败或跳过，但档案项应 PASS

@@ -117,9 +117,13 @@ function broadcastCanvasChanged() {
   }
 }
 
-/** 面板资源 CSP：放行本机协同桥连接与内嵌编辑器 iframe（同一 origin）。 */
+/**
+ * 面板资源 CSP：放行本机协同桥连接与内嵌编辑器 iframe（同一 origin）。
+ * 编辑器 WS 走 /op-ws 代理回连桥（ws://127.0.0.1:<bridgePort>），CSP 的 scheme 精确匹配：
+ * 只声明 http:// 不放行 ws://（Chrome 报 connect-src 违规），编辑器会一直卡在「连接中」。
+ */
 export function bridgeConnectDomains() {
-  return bridgePort ? [`http://127.0.0.1:${bridgePort}`] : [];
+  return bridgePort ? [`http://127.0.0.1:${bridgePort}`, `ws://127.0.0.1:${bridgePort}`] : [];
 }
 
 export function frameDomains() {

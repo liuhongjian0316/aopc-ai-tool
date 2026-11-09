@@ -427,6 +427,13 @@ plugins/wudi-coding/
   - 面板**主动打开编辑器**：收到 `get_design_status` 的 `live:false` 或「编辑器未打开」失败结果时，自动打开该画布编辑器——Agent 稍后重试即可写入了。
 - 注意：本机 homebrew Node 24 依赖损坏（libsimdjson 缺失），openpencil 的 web 构建暂不可用；本次服务端补丁直接应用于 vendored dist（与源码补丁一致）。
 
+## 编辑器已打开仍报「未打开」（v0.38.7）
+
+- **现象**：编辑器明明已打开（面板状态「已连接 · 已自动适应视图」），Agent 的设计工具仍报「设计稿编辑器未打开」；编辑器自己的 HostBar 一直显示「连接中」。
+- **根因**：v0.37.0 起编辑器的 WebSocket 改走协同桥透明代理 `ws://127.0.0.1:<桥端口>/op-ws?target=…`，但面板资源 CSP 的 `connectDomains` 只声明了 `http://127.0.0.1:<桥端口>`。CSP 的 scheme 是**精确匹配**（Chrome 实测：`connect-src http://host:port` 不放行 `ws://host:port`，报 connect-src 违规）→ 编辑器 WS 被拦 → 上游 `/health` 永远 `no_app` → 所有需要编辑器的设计工具都报「未打开」。
+- **修复**：`bridgeConnectDomains()` 同时返回 `http://` 与 `ws://` 的桥 origin，内容项 `_meta.ui.csp` 与 `resources/list` 兜底两处一致放行；编辑器 WS 立即连上，Agent 设计工具恢复。
+- **回归**：smoke 133 项全绿，新增 3 项——内容项/列表项 CSP 均含 `ws://` 桥 origin；起最小 WS 握手桩实测 `/op-ws` 代理返回 101 且升级后字节直通（证明代理本身没问题，问题只在 CSP）。
+
 ## 版本
 
 见 `.claude-plugin/marketplace.json` 中本插件条目的 changelog。

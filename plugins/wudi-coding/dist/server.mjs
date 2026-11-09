@@ -1179,7 +1179,7 @@ function broadcastCanvasChanged() {
   }
 }
 function bridgeConnectDomains() {
-  return bridgePort ? [`http://127.0.0.1:${bridgePort}`] : [];
+  return bridgePort ? [`http://127.0.0.1:${bridgePort}`, `ws://127.0.0.1:${bridgePort}`] : [];
 }
 function frameDomains() {
   return bridgePort ? [`http://127.0.0.1:${bridgePort}`] : [];
@@ -3273,7 +3273,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.38.1" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.38.7" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());
