@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.40.2",
+      "version": "0.41.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,17 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.41.0",
+          "date": "2026-11-11",
+          "changes": [
+            "架构目录化：方案与文档统一存到 <工作区>/.wudi/<项目名>/architecture/ —— plan.json（完整方案）、architecture.json（机器模型/状态）、ARCHITECTURE.md（人读总览）、diagrams.md（模块分层图）、decisions/0001-tech-stack.md 与 0002-directory-layout.md（ADR）",
+            "预设扩展到 19 个框架：Web（Vue+Vite / React+Vite / Next.js / Nuxt / SvelteKit / 原生 HTML）、小程序（Taro / uni-app / 微信原生）、移动（Flutter / SwiftUI / Expo）、后端（NestJS / Go+Gin / Express / FastAPI / Spring Boot）、Monorepo（pnpm workspace / Turborepo）",
+            "技术栈组合 options：styling（css/tailwind/scss）、ui（element-plus/naive-ui/antd）、state（pinia/zustand）、router（vue-router/react-router-dom）、test（vitest/jest）——按框架校验取值，自动合并依赖、脚本与初始化文件（tailwind 配置、router、store、示例单测）",
+            "架构页方案视图展示完整技术栈 chips 与架构文档清单；架构探测结果返回 architecture 目录/状态/文档；scaffold 写入后更新 architecture.json 为 scaffolded 并记录探测到的语言与模块",
+            "smoke 160 全绿（+7）：架构目录与 6 份文档落盘、组合依赖/脚本、非法组合拒绝、组合骨架落地、默认组合不列「无」、架构页返回文档、旧位置迁移"
+          ]
+        },
         {
           "version": "0.40.2",
           "date": "2026-11-11",

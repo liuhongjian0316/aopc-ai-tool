@@ -160,18 +160,29 @@ function designsDirFor(root) {
 function projectDataDirFor(root) {
   return join(wudiDir(), projectBaseName(root));
 }
+function architectureDirFor(root) {
+  return join(projectDataDirFor(root), "architecture");
+}
 function archPlanPathFor(root) {
-  return join(projectDataDirFor(root), "architecture.json");
+  return join(architectureDirFor(root), "plan.json");
+}
+function archModelPathFor(root) {
+  return join(architectureDirFor(root), "architecture.json");
 }
 function migrateArchPlanFor(root) {
   const abs = resolve(root);
   const target = archPlanPathFor(abs);
   if (existsSync(target)) return target;
-  const legacy = join(abs, ".wudi", "architecture.json");
-  if (legacy !== target && existsSync(legacy)) {
+  const legacyList = [
+    join(wudiDir(), projectBaseName(abs), "architecture.json"),
+    join(abs, ".wudi", "architecture.json")
+  ];
+  for (const legacy of legacyList) {
+    if (legacy === target || !existsSync(legacy)) continue;
     try {
-      mkdirSync(join(wudiDir(), projectBaseName(abs)), { recursive: true });
+      mkdirSync(architectureDirFor(abs), { recursive: true });
       renameSync(legacy, target);
+      return target;
     } catch {
     }
   }
@@ -692,7 +703,9 @@ export {
   CANVAS_SHAPE_TYPES,
   PROJECT_TEMPLATE,
   appendDeploy,
+  archModelPathFor,
   archPlanPathFor,
+  architectureDirFor,
   deleteFrame,
   designDir,
   designsDirFor,

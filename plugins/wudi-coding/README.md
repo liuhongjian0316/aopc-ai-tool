@@ -427,6 +427,30 @@ plugins/wudi-coding/
   - 面板**主动打开编辑器**：收到 `get_design_status` 的 `live:false` 或「编辑器未打开」失败结果时，自动打开该画布编辑器——Agent 稍后重试即可写入了。
 - 注意：本机 homebrew Node 24 依赖损坏（libsimdjson 缺失），openpencil 的 web 构建暂不可用；本次服务端补丁直接应用于 vendored dist（与源码补丁一致）。
 
+## 架构目录 + 技术栈组合（v0.41.0）
+
+- **架构目录**：方案与文档统一存到 `<工作区>/.wudi/<项目名>/architecture/`：
+  - `plan.json` 完整方案（含每个文件的初始内容）
+  - `architecture.json` 机器模型（状态 planned/scaffolded、技术栈、命令、探测到的语言与模块）
+  - `ARCHITECTURE.md` 人读总览（状态 / 目录树 / 命令 / 组合 / 决策链接 / 约定）
+  - `diagrams.md` 模块与分层图（mermaid + 顶层目录）
+  - `decisions/0001-tech-stack.md`、`0002-directory-layout.md`（ADR）
+- **19 个框架预设**：
+  - Web：Vue 3 + Vite、React + Vite、Next.js App Router、Nuxt 3、SvelteKit、原生 HTML/CSS/JS
+  - 小程序：Taro（React）、uni-app（Vue 3）、微信原生
+  - 移动：Flutter、SwiftUI、React Native（Expo）
+  - 后端：NestJS、Go + Gin、Express + TS、Python FastAPI、Spring Boot
+  - Monorepo：pnpm workspace、Turborepo
+- **技术栈组合**（自动合并依赖/脚本/初始化文件）：
+  - `styling`：css / tailwind / scss
+  - `ui`：element-plus / naive-ui / antd
+  - `state`：pinia / zustand
+  - `router`：vue-router / react-router-dom
+  - `test`：vitest / jest
+  - 按框架校验取值，非法组合直接拒绝；例如 Vue 方案选 Tailwind + Element Plus + Pinia + Vue Router + Vitest，会生成对应依赖、`tailwind.config.js`、`src/router/index.ts`、`src/stores/counter.ts`、示例单测。
+- **面板**：向导支持类型 → 框架 → 5 项组合选择；方案页展示完整技术栈 chips 与架构文档清单；扫描页展示架构目录与状态。
+- smoke **160 项全绿**（+7）。
+
 ## 架构方案存储位置修正（v0.40.2）
 
 - **问题**：架构方案曾写到 `<项目根>/.wudi/architecture.json`，不符合「`.wudi/` 下以项目为基准」的约定。

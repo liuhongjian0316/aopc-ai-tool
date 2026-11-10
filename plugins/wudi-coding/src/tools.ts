@@ -255,13 +255,14 @@ export const TOOLS = [
   },
   {
     name: "wudi_arch_plan",
-    description: "为空项目设计架构方案（web / miniprogram / mobile / backend / monorepo 预设）：输出技术选型、目录与文件清单、常用命令、注意事项，并保存到 <工作区>/.wudi/<项目名>/architecture.json。配合 wudi_arch_scaffold 写入骨架，再由 Agent 实现各模块。",
+    description: "为空项目设计架构方案 + 技术栈组合（web / miniprogram / mobile / backend / monorepo）：输出技术选型、目录与文件清单、命令、注意事项，并在 <工作区>/.wudi/<项目名>/architecture/ 下生成 plan.json、architecture.json、ARCHITECTURE.md、diagrams.md、decisions/（ADR）。配合 wudi_arch_scaffold 写入骨架，再由 Agent 实现各模块。",
     _meta: UI_META,
     inputSchema: {
       type: "object",
       properties: {
         kind: { type: "string", enum: ["web", "miniprogram", "mobile", "backend", "monorepo"], description: "项目类型，缺省 web" },
-        framework: { type: "string", description: "框架：web[vue-vite|react-vite]、miniprogram[taro|native-wechat]、mobile[flutter|swiftui]、backend[nest|go-gin]、monorepo[pnpm-workspace]" },
+        framework: { type: "string", description: "框架：web[vue-vite|react-vite|next-app|nuxt|svelte-kit|static]、miniprogram[taro|uni-app|native-wechat]、mobile[flutter|swiftui|expo]、backend[nest|go-gin|express|fastapi|spring-boot]、monorepo[pnpm-workspace|turbo]" },
+        options: { type: "object", description: "技术栈组合（按框架支持）：styling(css|tailwind|scss)、ui(none|element-plus|naive-ui|antd)、state(none|pinia|zustand)、router(none|vue-router|react-router-dom)、test(none|vitest|jest)" },
         name: { type: "string", description: "项目显示名（缺省用档案名/目录名）" },
         root: { type: "string", description: "项目根路径（缺省为当前工作区）" },
       },
@@ -269,12 +270,12 @@ export const TOOLS = [
   },
   {
     name: "wudi_arch_scaffold",
-    description: "按架构方案写入项目骨架：创建目录与初始文件，绝不覆盖已有文件。plan 缺省读取 <工作区>/.wudi/<项目名>/architecture.json；必须传 confirm: true。",
+    description: "按架构方案写入项目骨架：创建目录与初始文件，绝不覆盖已有文件。plan 缺省读取 <工作区>/.wudi/<项目名>/architecture/plan.json；写入后更新 architecture.json 状态与探测结果，必须传 confirm: true。",
     _meta: UI_META,
     inputSchema: {
       type: "object",
       properties: {
-        plan: { type: "object", description: "wudi_arch_plan 返回的方案对象（缺省读 .wudi/<项目名>/architecture.json）" },
+        plan: { type: "object", description: "wudi_arch_plan 返回的方案对象（缺省读 .wudi/<项目名>/architecture/plan.json）" },
         confirm: { type: "boolean", description: "必须为 true 才写入（安全闸）" },
         root: { type: "string", description: "项目根路径（缺省为当前工作区）" },
       },
@@ -1860,6 +1861,30 @@ function toolArchitecture(args: any = {}) {
     deployRoot: project?.deployRoot ?? "",
     healthCheck: project?.healthCheck?.url ?? "",
   };
+  /* 架构目录：已生成方案/文档时一并返回（面板展示与 Agent 读取入口） */
+  let architecture = null;
+  try {
+    const modelPath = store.archModelPathFor(root);
+    if (existsSync(modelPath)) {
+      const model = JSON.parse(readFileSync(modelPath, "utf-8"));
+      const archDir = store.architectureDirFor(root);
+      const archFiles = [];
+      const walkArch = (dir, prefix) => {
+        for (const e of readdirSync(dir, { withFileTypes: true })) {
+          const rel = prefix ? `${prefix}/${e.name}` : e.name;
+          if (e.isDirectory()) walkArch(join(dir, e.name), rel);
+          else archFiles.push(rel);
+        }
+      };
+      try { walkArch(archDir, ""); } catch { /* 目录读取失败忽略 */ }
+      architecture = {
+        dir: `.wudi/${store.projectBaseName(root)}/architecture`,
+        status: model.status ?? "",
+        stack: model.stack ?? [],
+        docs: archFiles.sort(),
+      };
+    }
+  } catch { /* 架构目录不存在或损坏则忽略 */ }
   const structured = {
     root,
     name,
@@ -1874,6 +1899,7 @@ function toolArchitecture(args: any = {}) {
     workspaces: pkg?.workspaces ?? [],
     compose,
     related,
+    architecture,
     generatedAt: new Date().toISOString(),
   };
   const stack = frameworks.length ? frameworks.join(" / ") : project?.techStack || "（未识别）";
@@ -1894,14 +1920,26 @@ function toolArchitecture(args: any = {}) {
   if (pkg?.scripts?.length) lines.push(`脚本：${pkg.scripts.map((s) => s.name).join("、")}`);
   if (pkg?.workspaces?.length) lines.push(`Monorepo workspaces：${pkg.workspaces.join("、")}`);
   lines.push(`关联：画布 ${related.designs}｜文档 ${related.docs}｜环境 ${related.envs.join("、") || "未配置"}`);
+  if (architecture) {
+    lines.push(`架构方案：${architecture.status}｜${architecture.stack.join(" · ") || "（无）"}`);
+    lines.push(`架构目录：${architecture.dir}（${architecture.docs.length} 个文档）`);
+  }
   if (scan.truncated) lines.push(`（扫描达到 4000 文件上限，统计为依据样本的下限）`);
   return ok(lines.join("\n"), structured);
 }
 
-/* ---------- 架构方案预设（空项目脚手架） ---------- */
+/* ---------- 架构方案预设（空项目脚手架 + 技术栈组合） ---------- */
 
 const archJson = (obj) => JSON.stringify(obj, null, 2) + "\n";
 const archSlug = (name) => String(name || "app").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") || "app";
+const archPkg = (name, { type = "module", scripts = {}, deps = {}, devDeps = {} } = {}) => archJson({
+  name: archSlug(name), private: true, version: "0.1.0", ...(type ? { type } : {}), scripts, dependencies: deps, devDependencies: devDeps,
+});
+const archMainCss = `:root { color-scheme: light dark; font-family: system-ui, sans-serif; }\nbody { margin: 0; }\n.app { max-width: 960px; margin: 64px auto; padding: 0 24px; }\n`;
+const archTailwindCss = `@tailwind base;\n@tailwind components;\n@tailwind utilities;\n`;
+const archTailwindConfig = `/** @type {import('tailwindcss').Config} */\nexport default {\n  content: ["./index.html", "./src/**/*.{ts,tsx,vue,svelte}", "./app/**/*.{ts,tsx}"],\n  theme: { extend: {} },\n  plugins: [],\n};\n`;
+const archPostcss = `export default { plugins: { tailwindcss: {}, autoprefixer: {} } };\n`;
+const archReadme = (name, stack, dev) => `# ${name}\n\n${stack}。\n\n\`\`\`bash\n${dev}\n\`\`\`\n`;
 
 const ARCH_PRESETS = {
   web: {
@@ -1909,65 +1947,289 @@ const ARCH_PRESETS = {
     frameworks: {
       "vue-vite": {
         label: "Vue 3 + Vite",
-        summary: "Vue 3 + TypeScript + Vite 单页应用：组件 / 视图 / 样式分层，安装后可直接启动开发服务器。",
+        summary: "Vue 3 + TypeScript + Vite 单页应用：组件 / 视图 / 样式分层，可选组件库、状态、路由与测试。",
         dirs: ["public", "src/components", "src/views", "src/styles"],
         commands: { install: "npm install", dev: "npm run dev", build: "npm run build" },
-        notes: ["路由按需引入 vue-router，状态按需引入 pinia", "全局样式入口 src/styles/main.css"],
-        files: (name) => {
-          const slug = archSlug(name);
+        options: {
+          styling: [["css", "原生 CSS"], ["tailwind", "Tailwind CSS"], ["scss", "SCSS"]],
+          ui: [["none", "无组件库"], ["element-plus", "Element Plus"], ["naive-ui", "Naive UI"]],
+          state: [["none", "无状态库"], ["pinia", "Pinia"]],
+          router: [["none", "无路由"], ["vue-router", "Vue Router"]],
+          test: [["none", "无测试"], ["vitest", "Vitest"]],
+        },
+        defaults: { styling: "css", ui: "none", state: "none", router: "none", test: "none" },
+        files: (name, o) => {
+          const deps = { vue: "^3.5.0" };
+          const devDeps = { "@vitejs/plugin-vue": "^5.2.0", typescript: "^5.7.0", vite: "^6.0.0", "vue-tsc": "^2.2.0" };
+          const scripts = { dev: "vite", build: "vue-tsc -b && vite build", preview: "vite preview" };
+          const imports = [`import { createApp } from "vue";`, `import App from "./App.vue";`];
+          const calls = [];
+          const extra = [];
+          if (o.styling === "tailwind") {
+            devDeps.tailwindcss = "^3.4.0"; devDeps.postcss = "^8.4.0"; devDeps.autoprefixer = "^10.4.0";
+            extra.push(["tailwind.config.js", "Tailwind 配置", archTailwindConfig], ["postcss.config.js", "PostCSS 配置", archPostcss]);
+          }
+          if (o.styling === "scss") devDeps.sass = "^1.80.0";
+          if (o.ui === "element-plus") {
+            deps["element-plus"] = "^2.8.0";
+            imports.push(`import ElementPlus from "element-plus";`, `import "element-plus/dist/index.css";`);
+            calls.push("app.use(ElementPlus);");
+          }
+          if (o.ui === "naive-ui") deps["naive-ui"] = "^2.40.0";
+          if (o.state === "pinia") {
+            deps.pinia = "^2.2.0";
+            imports.push(`import { createPinia } from "pinia";`);
+            calls.push("app.use(createPinia());");
+            extra.push(["src/stores/counter.ts", "示例状态（Pinia）", `import { defineStore } from "pinia";\n\nexport const useCounter = defineStore("counter", {\n  state: () => ({ count: 0 }),\n  actions: { inc() { this.count += 1; } },\n});\n`]);
+          }
+          if (o.router === "vue-router") {
+            deps["vue-router"] = "^4.4.0";
+            imports.push(`import router from "./router";`);
+            calls.push("app.use(router);");
+            extra.push(
+              ["src/router/index.ts", "路由表", `import { createRouter, createWebHistory } from "vue-router";\nimport Home from "../views/Home.vue";\n\nexport default createRouter({\n  history: createWebHistory(),\n  routes: [{ path: "/", name: "home", component: Home }],\n});\n`],
+              ["src/views/Home.vue", "首页视图", `<script setup lang="ts">\nconst title = "${name}";\n</script>\n\n<template>\n  <main class="app">\n    <h1>{{ title }}</h1>\n    <p>Home 视图：在 src/router/index.ts 添加路由。</p>\n  </main>\n</template>\n`],
+            );
+          }
+          if (o.test === "vitest") {
+            devDeps.vitest = "^2.1.0";
+            scripts.test = "vitest run";
+            extra.push(["src/__tests__/app.test.ts", "最小单测", `import { describe, expect, it } from "vitest";\n\ndescribe("app", () => {\n  it("runs", () => expect(1 + 1).toBe(2));\n});\n`]);
+          }
+          const styleFile = o.styling === "scss" ? "src/styles/main.scss" : "src/styles/main.css";
+          const styleContent = o.styling === "tailwind" ? archTailwindCss : archMainCss;
+          const appVue = o.router === "vue-router"
+            ? `<template>\n  <router-view />\n</template>\n`
+            : `<script setup lang="ts">\nconst title = "${name}";\n</script>\n\n<template>\n  <main class="app">\n    <h1>{{ title }}</h1>\n    <p>开始实现页面：在 src/views 添加视图，在 src/components 添加组件。</p>\n  </main>\n</template>\n`;
+          const main = [...imports, `import "./styles/${o.styling === "scss" ? "main.scss" : "main.css"}";`, "", "const app = createApp(App);", ...calls, 'app.mount("#app");', ""].join("\n");
           return [
-            ["package.json", "依赖与脚本", archJson({
-              name: slug, private: true, version: "0.1.0", type: "module",
-              scripts: { dev: "vite", build: "vue-tsc -b && vite build", preview: "vite preview" },
-              dependencies: { vue: "^3.5.0" },
-              devDependencies: { "@vitejs/plugin-vue": "^5.2.0", typescript: "^5.7.0", vite: "^6.0.0", "vue-tsc": "^2.2.0" },
-            })],
+            ["package.json", "依赖与脚本", archPkg(name, { scripts, deps, devDeps })],
             ["index.html", "应用入口 HTML", `<!doctype html>\n<html lang="zh-CN">\n  <head>\n    <meta charset="UTF-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n    <title>${name}</title>\n  </head>\n  <body>\n    <div id="app"></div>\n    <script type="module" src="/src/main.ts"></script>\n  </body>\n</html>\n`],
             ["vite.config.ts", "Vite 配置", `import { defineConfig } from "vite";\nimport vue from "@vitejs/plugin-vue";\n\nexport default defineConfig({ plugins: [vue()] });\n`],
-            ["tsconfig.json", "TypeScript 配置", archJson({
-              compilerOptions: { target: "ES2022", module: "ESNext", moduleResolution: "Bundler", strict: true, skipLibCheck: true, jsx: "preserve" },
-              include: ["src/**/*.ts", "src/**/*.vue"],
-            })],
-            ["src/main.ts", "应用引导", `import { createApp } from "vue";\nimport App from "./App.vue";\nimport "./styles/main.css";\n\ncreateApp(App).mount("#app");\n`],
-            ["src/App.vue", "根组件", `<script setup lang="ts">\nimport { ref } from "vue";\n\nconst title = ref("${name}");\n</script>\n\n<template>\n  <main class="app">\n    <h1>{{ title }}</h1>\n    <p>开始实现页面：在 src/views 添加视图，在 src/components 添加组件。</p>\n  </main>\n</template>\n`],
-            ["src/styles/main.css", "全局样式", `:root { color-scheme: light dark; font-family: system-ui, sans-serif; }\nbody { margin: 0; }\n.app { max-width: 960px; margin: 64px auto; padding: 0 24px; }\n`],
+            ["tsconfig.json", "TypeScript 配置", archJson({ compilerOptions: { target: "ES2022", module: "ESNext", moduleResolution: "Bundler", strict: true, skipLibCheck: true, jsx: "preserve" }, include: ["src/**/*.ts", "src/**/*.vue"] })],
+            ["src/main.ts", "应用引导", main],
+            ["src/App.vue", "根组件", appVue],
+            [styleFile, "全局样式", styleContent],
             ["src/components/.gitkeep", "组件目录", ""],
             ["src/views/.gitkeep", "页面目录", ""],
             ["public/.gitkeep", "静态资源目录", ""],
-            ["README.md", "项目说明", `# ${name}\n\nVue 3 + Vite + TypeScript。\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`],
+            ...extra,
+            ["README.md", "项目说明", archReadme(name, "Vue 3 + Vite + TypeScript", "npm install\nnpm run dev")],
           ];
         },
       },
       "react-vite": {
         label: "React + Vite",
-        summary: "React 18 + TypeScript + Vite 单页应用：页面 / 组件 / 样式分层，安装后可直接启动。",
+        summary: "React 18 + TypeScript + Vite 单页应用：页面 / 组件 / 样式分层，可选组件库、状态、路由与测试。",
         dirs: ["public", "src/components", "src/pages", "src/styles"],
         commands: { install: "npm install", dev: "npm run dev", build: "npm run build" },
-        notes: ["路由按需引入 react-router-dom", "全局样式入口 src/styles/main.css"],
-        files: (name) => {
-          const slug = archSlug(name);
+        options: {
+          styling: [["css", "原生 CSS"], ["tailwind", "Tailwind CSS"], ["scss", "SCSS"]],
+          ui: [["none", "无组件库"], ["antd", "Ant Design"]],
+          state: [["none", "无状态库"], ["zustand", "Zustand"]],
+          router: [["none", "无路由"], ["react-router-dom", "React Router"]],
+          test: [["none", "无测试"], ["vitest", "Vitest"]],
+        },
+        defaults: { styling: "css", ui: "none", state: "none", router: "none", test: "none" },
+        files: (name, o) => {
+          const deps = { react: "^18.3.0", "react-dom": "^18.3.0" };
+          const devDeps = { "@types/react": "^18.3.0", "@types/react-dom": "^18.3.0", "@vitejs/plugin-react": "^4.3.0", typescript: "^5.7.0", vite: "^6.0.0" };
+          const scripts = { dev: "vite", build: "tsc -b && vite build", preview: "vite preview" };
+          const extra = [];
+          const imports = [];
+          if (o.styling === "tailwind") {
+            devDeps.tailwindcss = "^3.4.0"; devDeps.postcss = "^8.4.0"; devDeps.autoprefixer = "^10.4.0";
+            extra.push(["tailwind.config.js", "Tailwind 配置", archTailwindConfig], ["postcss.config.js", "PostCSS 配置", archPostcss]);
+          }
+          if (o.styling === "scss") devDeps.sass = "^1.80.0";
+          if (o.ui === "antd") {
+            deps.antd = "^5.21.0";
+            imports.push(`import "antd/dist/reset.css";`);
+          }
+          if (o.state === "zustand") {
+            deps.zustand = "^5.0.0";
+            extra.push(["src/stores/counter.ts", "示例状态（Zustand）", `import { create } from "zustand";\n\ntype Counter = { count: number; inc: () => void };\n\nexport const useCounter = create<Counter>((set) => ({\n  count: 0,\n  inc: () => set((s) => ({ count: s.count + 1 })),\n}));\n`]);
+          }
+          if (o.router === "react-router-dom") {
+            deps["react-router-dom"] = "^6.26.0";
+            extra.push(["src/pages/Home.tsx", "首页页面", `export default function Home() {\n  return (\n    <main className="app">\n      <h1>${name}</h1>\n      <p>Home 页面：在 src/App.tsx 添加路由。</p>\n    </main>\n  );\n}\n`]);
+          }
+          if (o.test === "vitest") {
+            devDeps.vitest = "^2.1.0";
+            scripts.test = "vitest run";
+            extra.push(["src/__tests__/app.test.ts", "最小单测", `import { describe, expect, it } from "vitest";\n\ndescribe("app", () => {\n  it("runs", () => expect(1 + 1).toBe(2));\n});\n`]);
+          }
+          const appTsx = o.router === "react-router-dom"
+            ? `import { BrowserRouter, Route, Routes } from "react-router-dom";\nimport Home from "./pages/Home";\n\nexport default function App() {\n  return (\n    <BrowserRouter>\n      <Routes>\n        <Route path="/" element={<Home />} />\n      </Routes>\n    </BrowserRouter>\n  );\n}\n`
+            : `export default function App() {\n  return (\n    <main className="app">\n      <h1>${name}</h1>\n      <p>开始实现页面：在 src/pages 添加页面，在 src/components 添加组件。</p>\n    </main>\n  );\n}\n`;
+          const main = [
+            `import React from "react";`,
+            `import ReactDOM from "react-dom/client";`,
+            ...imports,
+            `import App from "./App";`,
+            `import "./styles/${o.styling === "scss" ? "main.scss" : "main.css"}";`,
+            "",
+            `ReactDOM.createRoot(document.getElementById("root")!).render(`,
+            `  <React.StrictMode>`,
+            `    <App />`,
+            `  </React.StrictMode>`,
+            ");",
+            "",
+          ].join("\n");
+          const styleFile = o.styling === "scss" ? "src/styles/main.scss" : "src/styles/main.css";
           return [
-            ["package.json", "依赖与脚本", archJson({
-              name: slug, private: true, version: "0.1.0", type: "module",
-              scripts: { dev: "vite", build: "tsc -b && vite build", preview: "vite preview" },
-              dependencies: { react: "^18.3.0", "react-dom": "^18.3.0" },
-              devDependencies: { "@types/react": "^18.3.0", "@types/react-dom": "^18.3.0", "@vitejs/plugin-react": "^4.3.0", typescript: "^5.7.0", vite: "^6.0.0" },
-            })],
+            ["package.json", "依赖与脚本", archPkg(name, { scripts, deps, devDeps })],
             ["index.html", "应用入口 HTML", `<!doctype html>\n<html lang="zh-CN">\n  <head>\n    <meta charset="UTF-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n    <title>${name}</title>\n  </head>\n  <body>\n    <div id="root"></div>\n    <script type="module" src="/src/main.tsx"></script>\n  </body>\n</html>\n`],
             ["vite.config.ts", "Vite 配置", `import { defineConfig } from "vite";\nimport react from "@vitejs/plugin-react";\n\nexport default defineConfig({ plugins: [react()] });\n`],
-            ["tsconfig.json", "TypeScript 配置", archJson({
-              compilerOptions: { target: "ES2022", module: "ESNext", moduleResolution: "Bundler", jsx: "react-jsx", strict: true, skipLibCheck: true },
-              include: ["src"],
-            })],
-            ["src/main.tsx", "应用引导", `import React from "react";\nimport ReactDOM from "react-dom/client";\nimport App from "./App";\nimport "./styles/main.css";\n\nReactDOM.createRoot(document.getElementById("root")!).render(\n  <React.StrictMode>\n    <App />\n  </React.StrictMode>\n);\n`],
-            ["src/App.tsx", "根组件", `export default function App() {\n  return (\n    <main className="app">\n      <h1>${name}</h1>\n      <p>开始实现页面：在 src/pages 添加页面，在 src/components 添加组件。</p>\n    </main>\n  );\n}\n`],
-            ["src/styles/main.css", "全局样式", `:root { color-scheme: light dark; font-family: system-ui, sans-serif; }\nbody { margin: 0; }\n.app { max-width: 960px; margin: 64px auto; padding: 0 24px; }\n`],
+            ["tsconfig.json", "TypeScript 配置", archJson({ compilerOptions: { target: "ES2022", module: "ESNext", moduleResolution: "Bundler", jsx: "react-jsx", strict: true, skipLibCheck: true }, include: ["src"] })],
+            ["src/main.tsx", "应用引导", main],
+            ["src/App.tsx", "根组件", appTsx],
+            [styleFile, "全局样式", o.styling === "tailwind" ? archTailwindCss : archMainCss],
             ["src/components/.gitkeep", "组件目录", ""],
             ["src/pages/.gitkeep", "页面目录", ""],
             ["public/.gitkeep", "静态资源目录", ""],
-            ["README.md", "项目说明", `# ${name}\n\nReact + Vite + TypeScript。\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`],
+            ...extra,
+            ["README.md", "项目说明", archReadme(name, "React + Vite + TypeScript", "npm install\nnpm run dev")],
           ];
         },
+      },
+      "next-app": {
+        label: "Next.js App Router",
+        summary: "Next.js 14 App Router + TypeScript：app/ 路由目录即页面结构，内置 SSR/SSG 能力。",
+        dirs: ["app", "public", "components"],
+        commands: { install: "npm install", dev: "npm run dev", build: "npm run build" },
+        options: {
+          styling: [["css", "原生 CSS"], ["tailwind", "Tailwind CSS"]],
+          test: [["none", "无测试"], ["vitest", "Vitest"]],
+        },
+        defaults: { styling: "css", test: "none" },
+        files: (name, o) => {
+          const deps = { next: "^14.2.0", react: "^18.3.0", "react-dom": "^18.3.0" };
+          const devDeps = { typescript: "^5.7.0", "@types/node": "^22.10.0", "@types/react": "^18.3.0", "@types/react-dom": "^18.3.0" };
+          const scripts = { dev: "next dev", build: "next build", start: "next start" };
+          const extra = [];
+          let globals = archMainCss;
+          if (o.styling === "tailwind") {
+            devDeps.tailwindcss = "^3.4.0"; devDeps.postcss = "^8.4.0"; devDeps.autoprefixer = "^10.4.0";
+            globals = archTailwindCss;
+            extra.push(["tailwind.config.js", "Tailwind 配置", archTailwindConfig], ["postcss.config.js", "PostCSS 配置", archPostcss]);
+          }
+          if (o.test === "vitest") {
+            devDeps.vitest = "^2.1.0";
+            scripts.test = "vitest run";
+            extra.push(["app/__tests__/app.test.ts", "最小单测", `import { describe, expect, it } from "vitest";\n\ndescribe("app", () => {\n  it("runs", () => expect(1 + 1).toBe(2));\n});\n`]);
+          }
+          return [
+            ["package.json", "依赖与脚本", archPkg(name, { scripts, deps, devDeps })],
+            ["tsconfig.json", "TypeScript 配置", archJson({ compilerOptions: { target: "ES2017", lib: ["dom", "dom.iterable", "esnext"], allowJs: true, skipLibCheck: true, strict: true, noEmit: true, esModuleInterop: true, module: "esnext", moduleResolution: "bundler", resolveJsonModule: true, isolatedModules: true, jsx: "preserve", incremental: true, plugins: [{ name: "next" }], paths: { "@/*": ["./*"] } }, include: ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"], exclude: ["node_modules"] })],
+            ["next-env.d.ts", "Next 类型引用", `/// <reference types="next" />\n/// <reference types="next/image-types/global" />\n`],
+            ["app/layout.tsx", "根布局", `import type { Metadata } from "next";\nimport "./globals.css";\n\nexport const metadata: Metadata = { title: "${name}" };\n\nexport default function RootLayout({ children }: { children: React.ReactNode }) {\n  return (\n    <html lang="zh-CN">\n      <body>{children}</body>\n    </html>\n  );\n}\n`],
+            ["app/page.tsx", "首页路由", `export default function HomePage() {\n  return (\n    <main className="app">\n      <h1>${name}</h1>\n      <p>开始实现页面：在 app/ 下新增路由目录（如 app/about/page.tsx）。</p>\n    </main>\n  );\n}\n`],
+            ["app/globals.css", "全局样式", globals],
+            ["public/.gitkeep", "静态资源目录", ""],
+            ["components/.gitkeep", "组件目录", ""],
+            ...extra,
+            ["README.md", "项目说明", archReadme(name, "Next.js App Router + TypeScript", "npm install\nnpm run dev")],
+          ];
+        },
+      },
+      nuxt: {
+        label: "Nuxt 3",
+        summary: "Nuxt 3 + Vue 3 + TypeScript：文件路由（pages/）与自动导入，适合内容型站点与 SSR 应用。",
+        dirs: ["pages", "components", "public"],
+        commands: { install: "npm install", dev: "npm run dev", build: "npm run build" },
+        options: {
+          styling: [["css", "原生 CSS"], ["tailwind", "Tailwind CSS"]],
+          test: [["none", "无测试"], ["vitest", "Vitest"]],
+        },
+        defaults: { styling: "css", test: "none" },
+        files: (name, o) => {
+          const deps = { nuxt: "^3.13.0", vue: "^3.5.0" };
+          const devDeps = { typescript: "^5.7.0" };
+          const scripts = { dev: "nuxt dev", build: "nuxt build", generate: "nuxt generate", preview: "nuxt preview" };
+          const modules = [];
+          const extra = [];
+          if (o.styling === "tailwind") {
+            deps["@nuxtjs/tailwindcss"] = "^6.12.0";
+            modules.push("@nuxtjs/tailwindcss");
+            extra.push(["assets/css/main.css", "全局样式", archTailwindCss]);
+          } else {
+            extra.push(["assets/css/main.css", "全局样式", archMainCss]);
+          }
+          if (o.test === "vitest") {
+            devDeps.vitest = "^2.1.0";
+            scripts.test = "vitest run";
+            extra.push(["tests/app.test.ts", "最小单测", `import { describe, expect, it } from "vitest";\n\ndescribe("app", () => {\n  it("runs", () => expect(1 + 1).toBe(2));\n});\n`]);
+          }
+          return [
+            ["package.json", "依赖与脚本", archPkg(name, { scripts, deps, devDeps })],
+            ["nuxt.config.ts", "Nuxt 配置", `export default defineNuxtConfig({\n  devtools: { enabled: true },\n  css: ["~/assets/css/main.css"],\n  modules: ${JSON.stringify(modules)},\n});\n`],
+            ["tsconfig.json", "TypeScript 配置", archJson({ extends: "./.nuxt/tsconfig.json" })],
+            ["app.vue", "根组件", `<template>\n  <NuxtPage />\n</template>\n`],
+            ["pages/index.vue", "首页路由", `<script setup lang="ts">\nconst title = "${name}";\n</script>\n\n<template>\n  <main class="app">\n    <h1>{{ title }}</h1>\n    <p>开始实现页面：在 pages/ 下新增 .vue 文件即可生成路由。</p>\n  </main>\n</template>\n`],
+            ...extra,
+            ["public/.gitkeep", "静态资源目录", ""],
+            ["components/.gitkeep", "组件目录", ""],
+            ["README.md", "项目说明", archReadme(name, "Nuxt 3 + Vue 3 + TypeScript", "npm install\nnpm run dev")],
+          ];
+        },
+      },
+      "svelte-kit": {
+        label: "SvelteKit",
+        summary: "SvelteKit + TypeScript：src/routes 文件路由，SSR/静态适配器可切换。",
+        dirs: ["src/routes", "src/lib", "static"],
+        commands: { install: "npm install", dev: "npm run dev", build: "npm run build" },
+        options: {
+          styling: [["css", "原生 CSS"], ["tailwind", "Tailwind CSS"]],
+          test: [["none", "无测试"], ["vitest", "Vitest"]],
+        },
+        defaults: { styling: "css", test: "none" },
+        files: (name, o) => {
+          const devDeps = { "@sveltejs/adapter-auto": "^3.2.0", "@sveltejs/kit": "^2.6.0", "@sveltejs/vite-plugin-svelte": "^4.0.0", svelte: "^5.0.0", typescript: "^5.7.0", vite: "^6.0.0" };
+          const scripts = { dev: "vite dev", build: "vite build", preview: "vite preview" };
+          const extra = [];
+          let layoutImport = "";
+          if (o.styling === "tailwind") {
+            devDeps.tailwindcss = "^3.4.0"; devDeps.postcss = "^8.4.0"; devDeps.autoprefixer = "^10.4.0";
+            extra.push(["tailwind.config.js", "Tailwind 配置", archTailwindConfig], ["postcss.config.js", "PostCSS 配置", archPostcss], ["src/app.css", "全局样式", archTailwindCss]);
+            layoutImport = `import "../app.css";\n`;
+          } else {
+            extra.push(["src/app.css", "全局样式", archMainCss]);
+            layoutImport = `import "../app.css";\n`;
+          }
+          if (o.test === "vitest") {
+            devDeps.vitest = "^2.1.0";
+            scripts.test = "vitest run";
+            extra.push(["src/lib/app.test.ts", "最小单测", `import { describe, expect, it } from "vitest";\n\ndescribe("app", () => {\n  it("runs", () => expect(1 + 1).toBe(2));\n});\n`]);
+          }
+          return [
+            ["package.json", "依赖与脚本", archPkg(name, { scripts, devDeps })],
+            ["svelte.config.js", "SvelteKit 配置", `import adapter from "@sveltejs/adapter-auto";\n\nexport default { kit: { adapter: adapter() } };\n`],
+            ["vite.config.ts", "Vite 配置", `import { sveltekit } from "@sveltejs/kit/vite";\nimport { defineConfig } from "vite";\n\nexport default defineConfig({ plugins: [sveltekit()] });\n`],
+            ["tsconfig.json", "TypeScript 配置", archJson({ extends: "./.svelte-kit/tsconfig.json", compilerOptions: { allowJs: true, checkJs: true, esModuleInterop: true, forceConsistentCasingInFileNames: true, resolveJsonModule: true, skipLibCheck: true, sourceMap: true, strict: true, moduleResolution: "bundler" } })],
+            ["src/app.html", "应用 HTML 模板", `<!doctype html>\n<html lang="zh-CN">\n  <head>\n    <meta charset="utf-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1" />\n    %sveltekit.head%\n  </head>\n  <body data-sveltekit-preload-data="hover">\n    <div style="display: contents">%sveltekit.body%</div>\n  </body>\n</html>\n`],
+            ["src/routes/+layout.svelte", "全局布局", `<script lang="ts">\n  ${layoutImport}\n</script>\n\n<slot />\n`],
+            ["src/routes/+page.svelte", "首页路由", `<script lang="ts">\n  const title = "${name}";\n</script>\n\n<main class="app">\n  <h1>{title}</h1>\n  <p>开始实现页面：在 src/routes 下新增 +page.svelte。</p>\n</main>\n`],
+            ...extra,
+            ["static/.gitkeep", "静态资源目录", ""],
+            ["README.md", "项目说明", archReadme(name, "SvelteKit + TypeScript", "npm install\nnpm run dev")],
+          ];
+        },
+      },
+      static: {
+        label: "原生 HTML/CSS/JS",
+        summary: "零依赖静态站点：index.html + styles.css + app.js，可直接双击或任意静态服务器托管。",
+        dirs: ["assets"],
+        commands: { install: "无需安装", dev: "任意静态服务器（如 npx serve .）", build: "无需构建，直接部署目录" },
+        options: {},
+        defaults: {},
+        files: (name) => [
+          ["index.html", "页面入口", `<!doctype html>\n<html lang="zh-CN">\n  <head>\n    <meta charset="UTF-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n    <title>${name}</title>\n    <link rel="stylesheet" href="./styles.css" />\n  </head>\n  <body>\n    <main class="app">\n      <h1>${name}</h1>\n      <p id="tip">开始实现页面：编辑 index.html / styles.css / app.js。</p>\n      <button id="cta">点我</button>\n    </main>\n    <script src="./app.js"></script>\n  </body>\n</html>\n`],
+          ["styles.css", "全局样式", `:root { color-scheme: light dark; font-family: system-ui, sans-serif; }\nbody { margin: 0; }\n.app { max-width: 960px; margin: 64px auto; padding: 0 24px; }\nbutton { margin-top: 16px; padding: 8px 14px; }\n`],
+          ["app.js", "页面脚本", `document.getElementById("cta")?.addEventListener("click", () => {\n  const tip = document.getElementById("tip");\n  if (tip) tip.textContent = "你好，${name}！";\n});\n`],
+          ["assets/.gitkeep", "静态资源目录", ""],
+          ["README.md", "项目说明", archReadme(name, "原生 HTML/CSS/JS", "npx serve .")],
+        ],
       },
     },
   },
@@ -1979,7 +2241,8 @@ const ARCH_PRESETS = {
         summary: "Taro 4 + React + TypeScript 跨端小程序：配置 / 应用 / 页面分层，可编译到微信小程序。",
         dirs: ["config", "src/pages/index"],
         commands: { install: "npm install", dev: "npm run dev:weapp", build: "npm run build:weapp" },
-        notes: ["project.config.json 里的 appid 需替换为你的小程序 AppID", "页面注册在 src/app.config.ts 的 pages 数组"],
+        options: {},
+        defaults: {},
         files: (name) => {
           const slug = archSlug(name);
           return [
@@ -2002,12 +2265,40 @@ const ARCH_PRESETS = {
           ];
         },
       },
+      "uni-app": {
+        label: "uni-app（Vue 3）",
+        summary: "uni-app + Vue 3 + Vite：一套代码编译到微信小程序/H5/App。",
+        dirs: ["src/pages/index"],
+        commands: { install: "npm install", dev: "npm run dev:mp-weixin", build: "npm run build:mp-weixin" },
+        options: {},
+        defaults: {},
+        files: (name) => {
+          const slug = archSlug(name);
+          return [
+            ["package.json", "依赖与脚本", archJson({
+              name: slug, private: true, version: "0.1.0",
+              scripts: { "dev:mp-weixin": "uni -p mp-weixin", "build:mp-weixin": "uni build -p mp-weixin", "dev:h5": "uni", "build:h5": "uni build" },
+              dependencies: { "@dcloudio/uni-app": "^3.0.0", "@dcloudio/uni-mp-weixin": "^3.0.0", vue: "^3.4.0" },
+              devDependencies: { "@dcloudio/types": "^3.4.0", "@dcloudio/vite-plugin-uni": "^3.0.0", typescript: "^5.4.0", vite: "^5.2.0" },
+            })],
+            ["vite.config.ts", "Vite 配置", `import uni from "@dcloudio/vite-plugin-uni";\n\nexport default { plugins: [uni()] };\n`],
+            ["index.html", "H5 入口", `<!doctype html>\n<html lang="zh-CN">\n  <head>\n    <meta charset="UTF-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n    <title>${name}</title>\n  </head>\n  <body>\n    <div id="app"></div>\n    <script type="module" src="/src/main.ts"></script>\n  </body>\n</html>\n`],
+            ["src/main.ts", "应用引导", `import { createSSRApp } from "vue";\nimport App from "./App.vue";\n\nexport function createApp() {\n  const app = createSSRApp(App);\n  return { app };\n}\n`],
+            ["src/App.vue", "根组件", `<script setup lang="ts"></script>\n\n<template>\n  <slot />\n</template>\n`],
+            ["src/pages.json", "页面注册", archJson({ pages: [{ path: "pages/index/index", style: { navigationBarTitleText: name } }], globalStyle: { navigationBarTitleText: name } })],
+            ["src/pages/index/index.vue", "首页", `<script setup lang="ts">\nconst title = "${name}";\n</script>\n\n<template>\n  <view class="page">\n    <text class="title">{{ title }}</text>\n    <text>开始实现页面：在 src/pages 下新增页面并注册到 pages.json。</text>\n  </view>\n</template>\n\n<style>\n.page { padding: 24rpx; }\n.title { display: block; font-size: 40rpx; font-weight: 700; margin-bottom: 16rpx; }\n</style>\n`],
+            ["tsconfig.json", "TypeScript 配置", archJson({ compilerOptions: { target: "ES2020", module: "ESNext", moduleResolution: "Node", strict: true, skipLibCheck: true, types: ["@dcloudio/types"] } })],
+            ["README.md", "项目说明", `# ${name}\n\nuni-app + Vue 3 小程序。\n\n\`\`\`bash\nnpm install\nnpm run dev:mp-weixin\n\`\`\`\n\n用微信开发者工具打开 dist/dev/mp-weixin。\n`],
+          ];
+        },
+      },
       "native-wechat": {
         label: "微信原生",
         summary: "微信原生小程序：app 全局 + pages 页面四件套，无构建依赖。",
         dirs: ["pages/index"],
         commands: { install: "无需安装", dev: "微信开发者工具打开项目目录", build: "微信开发者工具上传" },
-        notes: ["project.config.json 的 appid 需替换为你的小程序 AppID"],
+        options: {},
+        defaults: {},
         files: (name) => {
           const slug = archSlug(name);
           return [
@@ -2034,7 +2325,8 @@ const ARCH_PRESETS = {
         summary: "Flutter 跨端 App：lib/pages + lib/widgets 分层，可直接 flutter run。",
         dirs: ["lib/pages", "lib/widgets"],
         commands: { install: "flutter pub get", dev: "flutter run", build: "flutter build apk --release" },
-        notes: ["若缺少 ios/android 平台目录，先执行 flutter create ."],
+        options: {},
+        defaults: {},
         files: (name) => {
           const slug = archSlug(name).replace(/-/g, "_");
           return [
@@ -2043,7 +2335,7 @@ const ARCH_PRESETS = {
             ["lib/main.dart", "应用入口", `import "package:flutter/material.dart";\n\nvoid main() => runApp(const App());\n\nclass App extends StatelessWidget {\n  const App({super.key});\n\n  @override\n  Widget build(BuildContext context) {\n    return MaterialApp(\n      title: "${name}",\n      home: const HomePage(),\n    );\n  }\n}\n\nclass HomePage extends StatelessWidget {\n  const HomePage({super.key});\n\n  @override\n  Widget build(BuildContext context) {\n    return Scaffold(\n      appBar: AppBar(title: const Text("${name}")),\n      body: const Center(child: Text("开始实现页面：在 lib/pages 添加页面")),\n    );\n  }\n}\n`],
             ["lib/pages/.gitkeep", "页面目录", ""],
             ["lib/widgets/.gitkeep", "组件目录", ""],
-            ["README.md", "项目说明", `# ${name}\n\nFlutter App。\n\n\`\`\`bash\nflutter pub get\nflutter run\n\`\`\`\n`],
+            ["README.md", "项目说明", archReadme(name, "Flutter App", "flutter pub get\nflutter run")],
           ];
         },
       },
@@ -2052,7 +2344,8 @@ const ARCH_PRESETS = {
         summary: "SwiftUI App 代码骨架（App / Views / Features 分层）。",
         dirs: ["App/Views", "App/Features", "App/Resources"],
         commands: { install: "Xcode 打开工程", dev: "Xcode Run", build: "Xcode Archive" },
-        notes: ["先用 Xcode 新建同名 iOS App 工程，再把本骨架文件加入工程", "需要可直接运行的首版可改用 Flutter 方案"],
+        options: {},
+        defaults: {},
         files: (name) => [
           ["App/AppApp.swift", "应用入口", `import SwiftUI\n\n@main\nstruct ${String(name).replace(/[^A-Za-z0-9]/g, "") || "App"}App: App {\n    var body: some Scene {\n        WindowGroup {\n            ContentView()\n        }\n    }\n}\n`],
           ["App/Views/ContentView.swift", "根视图", `import SwiftUI\n\nstruct ContentView: View {\n    var body: some View {\n        VStack(spacing: 12) {\n            Text("${name}").font(.title.bold())\n            Text("开始实现页面：在 App/Features 添加功能模块")\n                .foregroundStyle(.secondary)\n        }\n        .padding()\n    }\n}\n`],
@@ -2060,6 +2353,33 @@ const ARCH_PRESETS = {
           ["App/Resources/.gitkeep", "资源目录", ""],
           ["README.md", "项目说明", `# ${name}\n\nSwiftUI App 骨架。用 Xcode 新建工程后把 App/ 下的文件加入工程。\n`],
         ],
+      },
+      expo: {
+        label: "React Native（Expo）",
+        summary: "Expo + React Native + TypeScript：无需 Xcode/Android Studio 即可 npx expo start 预览。",
+        dirs: ["src/screens", "src/components", "assets"],
+        commands: { install: "npm install", dev: "npx expo start", build: "npx expo export" },
+        options: {},
+        defaults: {},
+        files: (name) => {
+          const slug = archSlug(name);
+          return [
+            ["package.json", "依赖与脚本", archJson({
+              name: slug, private: true, version: "0.1.0", main: "node_modules/expo/AppEntry.js",
+              scripts: { start: "expo start", android: "expo start --android", ios: "expo start --ios", web: "expo start --web" },
+              dependencies: { expo: "^52.0.0", react: "^18.3.0", "react-native": "^0.76.0", "expo-status-bar": "^2.0.0" },
+              devDependencies: { "@types/react": "^18.3.0", typescript: "^5.7.0" },
+            })],
+            ["app.json", "Expo 配置", archJson({ expo: { name, slug, version: "0.1.0", orientation: "portrait", userInterfaceStyle: "automatic", newArchEnabled: true } })],
+            ["tsconfig.json", "TypeScript 配置", archJson({ extends: "expo/tsconfig.base", compilerOptions: { strict: true } })],
+            ["babel.config.js", "Babel 配置", `module.exports = function (api) {\n  api.cache(true);\n  return { presets: ["babel-preset-expo"] };\n};\n`],
+            ["App.tsx", "应用入口", `import { StatusBar } from "expo-status-bar";\nimport { StyleSheet, Text, View } from "react-native";\n\nexport default function App() {\n  return (\n    <View style={styles.container}>\n      <Text style={styles.title}>${name}</Text>\n      <Text>开始实现页面：在 src/screens 添加屏幕。</Text>\n      <StatusBar style="auto" />\n    </View>\n  );\n}\n\nconst styles = StyleSheet.create({\n  container: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8, padding: 24 },\n  title: { fontSize: 22, fontWeight: "700" },\n});\n`],
+            ["src/screens/.gitkeep", "屏幕目录", ""],
+            ["src/components/.gitkeep", "组件目录", ""],
+            ["assets/.gitkeep", "资源目录", ""],
+            ["README.md", "项目说明", archReadme(name, "Expo + React Native + TypeScript", "npm install\nnpx expo start")],
+          ];
+        },
       },
     },
   },
@@ -2071,16 +2391,22 @@ const ARCH_PRESETS = {
         summary: "NestJS + TypeScript 服务：模块 / 控制器 / 服务分层，默认监听 3000。",
         dirs: ["src/common", "src/modules"],
         commands: { install: "npm install", dev: "npm run start:dev", build: "npm run build" },
-        notes: ["新增业务模块放到 src/modules/<name>，在 AppModule 注册", "环境变量参考 .env.example"],
-        files: (name) => {
-          const slug = archSlug(name);
+        options: {
+          test: [["none", "无测试"], ["jest", "Jest"]],
+        },
+        defaults: { test: "none" },
+        files: (name, o) => {
+          const deps = { "@nestjs/common": "^10.4.0", "@nestjs/core": "^10.4.0", "@nestjs/platform-express": "^10.4.0", "reflect-metadata": "^0.2.2", rxjs: "^7.8.1" };
+          const devDeps = { "@nestjs/cli": "^10.4.0", "@types/node": "^22.10.0", "ts-node": "^10.9.2", typescript: "^5.7.0" };
+          const scripts = { "start:dev": "nest start --watch", build: "nest build", start: "node dist/main.js" };
+          const extra = [];
+          if (o.test === "jest") {
+            devDeps.jest = "^29.7.0"; devDeps["ts-jest"] = "^29.2.0"; devDeps["@types/jest"] = "^29.5.0";
+            scripts.test = "jest";
+            extra.push(["src/app.service.spec.ts", "示例单测", `import { AppService } from "./app.service";\n\ndescribe("AppService", () => {\n  it("health ok", () => {\n    const svc = new AppService();\n    expect(svc.health().ok).toBe(true);\n  });\n});\n`]);
+          }
           return [
-            ["package.json", "依赖与脚本", archJson({
-              name: slug, private: true, version: "0.1.0",
-              scripts: { "start:dev": "nest start --watch", build: "nest build", start: "node dist/main.js" },
-              dependencies: { "@nestjs/common": "^10.4.0", "@nestjs/core": "^10.4.0", "@nestjs/platform-express": "^10.4.0", "reflect-metadata": "^0.2.2", rxjs: "^7.8.1" },
-              devDependencies: { "@nestjs/cli": "^10.4.0", "@types/node": "^22.10.0", "ts-node": "^10.9.2", typescript: "^5.7.0" },
-            })],
+            ["package.json", "依赖与脚本", archPkg(name, { type: "", scripts, deps, devDeps })],
             ["tsconfig.json", "TypeScript 配置", archJson({ compilerOptions: { target: "ES2022", module: "commonjs", moduleResolution: "node", experimentalDecorators: true, emitDecoratorMetadata: true, outDir: "dist", strict: true, skipLibCheck: true }, include: ["src/**/*.ts"] })],
             ["nest-cli.json", "Nest CLI 配置", archJson({ collection: "@nestjs/schematics", sourceRoot: "src" })],
             ["src/main.ts", "服务入口", `import { NestFactory } from "@nestjs/core";\nimport { AppModule } from "./app.module";\n\nasync function bootstrap() {\n  const app = await NestFactory.create(AppModule);\n  await app.listen(process.env.PORT ?? 3000);\n}\nbootstrap();\n`],
@@ -2090,6 +2416,7 @@ const ARCH_PRESETS = {
             [".env.example", "环境变量样例", `PORT=3000\n`],
             ["src/common/.gitkeep", "公共组件目录", ""],
             ["src/modules/.gitkeep", "业务模块目录", ""],
+            ...extra,
             ["README.md", "项目说明", `# ${name}\n\nNestJS 服务。\n\n\`\`\`bash\nnpm install\nnpm run start:dev\ncurl http://127.0.0.1:3000/healthz\n\`\`\`\n`],
           ];
         },
@@ -2099,7 +2426,8 @@ const ARCH_PRESETS = {
         summary: "Go + Gin HTTP 服务：cmd / internal 分层，默认监听 8080。",
         dirs: ["cmd/server", "internal/handler", "internal/service", "internal/store"],
         commands: { install: "go mod tidy", dev: "go run ./cmd/server", build: "go build -o bin/server ./cmd/server" },
-        notes: ["业务按 internal/{handler,service,store} 分层", "Go 版本要求 1.22+"],
+        options: {},
+        defaults: {},
         files: (name) => {
           const mod = archSlug(name);
           return [
@@ -2113,6 +2441,61 @@ const ARCH_PRESETS = {
           ];
         },
       },
+      express: {
+        label: "Express + TS",
+        summary: "Express + TypeScript 轻量服务：src/routes 分层，默认监听 3000，tsx 热更新。",
+        dirs: ["src/routes", "src/middleware"],
+        commands: { install: "npm install", dev: "npm run dev", build: "npm run build" },
+        options: {},
+        defaults: {},
+        files: (name) => [
+          ["package.json", "依赖与脚本", archPkg(name, {
+            scripts: { dev: "tsx watch src/main.ts", build: "tsc -p tsconfig.json", start: "node dist/main.js" },
+            deps: { express: "^4.21.0", cors: "^2.8.5" },
+            devDeps: { "@types/express": "^5.0.0", "@types/cors": "^2.8.17", "@types/node": "^22.10.0", tsx: "^4.19.0", typescript: "^5.7.0" },
+          })],
+          ["tsconfig.json", "TypeScript 配置", archJson({ compilerOptions: { target: "ES2022", module: "NodeNext", moduleResolution: "NodeNext", outDir: "dist", strict: true, skipLibCheck: true, esModuleInterop: true }, include: ["src"] })],
+          ["src/main.ts", "服务入口", `import express from "express";\nimport cors from "cors";\nimport { healthRouter } from "./routes/health.js";\n\nconst app = express();\napp.use(cors());\napp.use(express.json());\napp.use(healthRouter);\n\nconst port = Number(process.env.PORT ?? 3000);\napp.listen(port, () => console.log("${name} api on :" + port));\n`],
+          ["src/routes/health.ts", "健康检查路由", `import { Router } from "express";\n\nexport const healthRouter = Router();\n\nhealthRouter.get("/healthz", (_req, res) => {\n  res.json({ ok: true, service: "${name}" });\n});\n`],
+          ["src/middleware/.gitkeep", "中间件目录", ""],
+          [".env.example", "环境变量样例", `PORT=3000\n`],
+          ["README.md", "项目说明", `# ${name}\n\nExpress + TypeScript 服务。\n\n\`\`\`bash\nnpm install\nnpm run dev\ncurl http://127.0.0.1:3000/healthz\n\`\`\`\n`],
+        ],
+      },
+      fastapi: {
+        label: "Python FastAPI",
+        summary: "FastAPI + Uvicorn：app/routers 分层，自带 OpenAPI 文档（/docs）。",
+        dirs: ["app/routers", "app/models", "tests"],
+        commands: { install: "pip install -r requirements.txt", dev: "uvicorn app.main:app --reload", build: "无需构建（源码部署）" },
+        options: {},
+        defaults: {},
+        files: (name) => [
+          ["requirements.txt", "Python 依赖", `fastapi>=0.115.0\nuvicorn[standard]>=0.32.0\npydantic>=2.9.0\n`],
+          ["app/__init__.py", "包标记", ""],
+          ["app/main.py", "服务入口", `from fastapi import FastAPI\n\nfrom app.routers import health\n\napp = FastAPI(title="${name}")\napp.include_router(health.router)\n`],
+          ["app/routers/__init__.py", "路由包", ""],
+          ["app/routers/health.py", "健康检查路由", `from fastapi import APIRouter\n\nrouter = APIRouter()\n\n\n@router.get("/healthz")\ndef healthz():\n    return {"ok": True, "service": "${name}"}\n`],
+          ["app/models/__init__.py", "数据模型包", ""],
+          ["tests/__init__.py", "测试包", ""],
+          [".env.example", "环境变量样例", `PORT=8000\n`],
+          ["README.md", "项目说明", `# ${name}\n\nFastAPI 服务。\n\n\`\`\`bash\npip install -r requirements.txt\nuvicorn app.main:app --reload\n# http://127.0.0.1:8000/docs\n\`\`\`\n`],
+        ],
+      },
+      "spring-boot": {
+        label: "Spring Boot",
+        summary: "Spring Boot 3 + Java 21：Maven 构建，controller 分层，默认监听 8080。",
+        dirs: ["src/main/java/com/example/demo", "src/main/resources"],
+        commands: { install: "mvn -q dependency:resolve", dev: "mvn spring-boot:run", build: "mvn -q package" },
+        options: {},
+        defaults: {},
+        files: (name) => [
+          ["pom.xml", "Maven 依赖", `<?xml version="1.0" encoding="UTF-8"?>\n<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">\n  <modelVersion>4.0.0</modelVersion>\n  <parent>\n    <groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-starter-parent</artifactId>\n    <version>3.3.4</version>\n    <relativePath/>\n  </parent>\n  <groupId>com.example</groupId>\n  <artifactId>${archSlug(name)}</artifactId>\n  <version>0.1.0</version>\n  <properties><java.version>21</java.version></properties>\n  <dependencies>\n    <dependency>\n      <groupId>org.springframework.boot</groupId>\n      <artifactId>spring-boot-starter-web</artifactId>\n    </dependency>\n  </dependencies>\n  <build>\n    <plugins>\n      <plugin>\n        <groupId>org.springframework.boot</groupId>\n        <artifactId>spring-boot-maven-plugin</artifactId>\n      </plugin>\n    </plugins>\n  </build>\n</project>\n`],
+          ["src/main/java/com/example/demo/DemoApplication.java", "应用入口", `package com.example.demo;\n\nimport org.springframework.boot.SpringApplication;\nimport org.springframework.boot.autoconfigure.SpringBootApplication;\n\n@SpringBootApplication\npublic class DemoApplication {\n    public static void main(String[] args) {\n        SpringApplication.run(DemoApplication.class, args);\n    }\n}\n`],
+          ["src/main/java/com/example/demo/HealthController.java", "健康检查接口", `package com.example.demo;\n\nimport java.util.Map;\n\nimport org.springframework.web.bind.annotation.GetMapping;\nimport org.springframework.web.bind.annotation.RestController;\n\n@RestController\npublic class HealthController {\n    @GetMapping("/healthz")\n    public Map<String, Object> health() {\n        return Map.of("ok", true, "service", "${name}");\n    }\n}\n`],
+          ["src/main/resources/application.yml", "应用配置", `server:\n  port: 8080\n`],
+          ["README.md", "项目说明", `# ${name}\n\nSpring Boot 3 服务。\n\n\`\`\`bash\nmvn spring-boot:run\ncurl http://127.0.0.1:8080/healthz\n\`\`\`\n`],
+        ],
+      },
     },
   },
   monorepo: {
@@ -2123,7 +2506,8 @@ const ARCH_PRESETS = {
         summary: "pnpm monorepo：apps/web + apps/api + packages/ui 三包结构，共享依赖与脚本。",
         dirs: ["apps/web", "apps/api", "packages/ui"],
         commands: { install: "pnpm install", dev: "pnpm -r dev", build: "pnpm -r build" },
-        notes: ["各子包可继续调用 wudi_arch_plan（kind=web/backend）细化骨架", "子包 package.json 名称按 @<scope>/<name> 约定"],
+        options: {},
+        defaults: {},
         files: (name) => {
           const scope = archSlug(name);
           return [
@@ -2140,9 +2524,64 @@ const ARCH_PRESETS = {
           ];
         },
       },
+      turbo: {
+        label: "Turborepo",
+        summary: "Turborepo + pnpm：带任务缓存与依赖拓扑的 monorepo，适合多应用/多包协作。",
+        dirs: ["apps/web", "apps/api", "packages/ui"],
+        commands: { install: "pnpm install", dev: "pnpm dev", build: "pnpm build" },
+        options: {},
+        defaults: {},
+        files: (name) => {
+          const scope = archSlug(name);
+          return [
+            ["package.json", "根依赖与脚本", archJson({ name: scope, private: true, version: "0.1.0", packageManager: "pnpm@9.12.0", scripts: { dev: "turbo dev", build: "turbo build", lint: "turbo lint" }, devDependencies: { turbo: "^2.1.0" } })],
+            ["turbo.json", "Turbo 任务配置", archJson({ $schema: "https://turbo.build/schema.json", tasks: { build: { dependsOn: ["^build"], outputs: ["dist/**"] }, dev: { cache: false, persistent: true }, lint: {} } })],
+            ["pnpm-workspace.yaml", "workspace 声明", `packages:\n  - "apps/*"\n  - "packages/*"\n`],
+            ["apps/web/package.json", "Web 应用包", archJson({ name: `@${scope}/web`, private: true, version: "0.1.0", scripts: { dev: "vite", build: "vite build" }, dependencies: { react: "^18.3.0", "react-dom": "^18.3.0" }, devDependencies: { vite: "^6.0.0", "@vitejs/plugin-react": "^4.3.0" } })],
+            ["apps/web/index.html", "Web 入口 HTML", `<!doctype html>\n<html lang="zh-CN"><head><meta charset="UTF-8" /><title>${name}</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>\n`],
+            ["apps/web/src/main.tsx", "Web 入口", `import React from "react";\nimport ReactDOM from "react-dom/client";\n\nReactDOM.createRoot(document.getElementById("root")!).render(<h1>${name}</h1>);\n`],
+            ["apps/api/package.json", "API 应用包", archJson({ name: `@${scope}/api`, private: true, version: "0.1.0", scripts: { dev: "tsx watch src/main.ts", build: "tsc -p tsconfig.json" }, dependencies: { express: "^4.21.0" }, devDependencies: { "@types/express": "^5.0.0", "@types/node": "^22.10.0", tsx: "^4.19.0", typescript: "^5.7.0" } })],
+            ["apps/api/src/main.ts", "API 入口", `import express from "express";\n\nconst app = express();\napp.get("/healthz", (_req, res) => res.json({ ok: true }));\napp.listen(3000, () => console.log("api on :3000"));\n`],
+            ["packages/ui/package.json", "共享 UI 包", archJson({ name: `@${scope}/ui`, private: true, version: "0.1.0", main: "src/index.ts" })],
+            ["packages/ui/src/index.ts", "共享组件出口", `export const version = "0.1.0";\n`],
+            ["README.md", "项目说明", `# ${name}\n\nTurborepo + pnpm monorepo。\n\n\`\`\`bash\npnpm install\npnpm dev\n\`\`\`\n`],
+          ];
+        },
+      },
     },
   },
 };
+
+/* ---------- 选项解析 / 组合标签 ---------- */
+
+function resolveArchOptions(fwPreset, input = {}) {
+  const supported = fwPreset.options ?? {};
+  const out = { ...(fwPreset.defaults ?? {}) };
+  for (const key of Object.keys(input ?? {})) {
+    if (!supported[key]) throw new Error(`该框架不支持选项 ${key}（支持：${Object.keys(supported).join("、") || "无"}）`);
+  }
+  for (const key of Object.keys(supported)) {
+    const val = input?.[key];
+    if (val === undefined || val === null || val === "") continue;
+    if (!supported[key].some(([id]) => id === val)) {
+      throw new Error(`选项 ${key} 不支持取值 ${val}（可选：${supported[key].map(([id]) => id).join("、")}）`);
+    }
+    out[key] = val;
+  }
+  return out;
+}
+
+function archStackLabels(fwPreset, options) {
+  const labels = [fwPreset.label];
+  for (const [key, choices] of Object.entries(fwPreset.options ?? {})) {
+    const val = options?.[key];
+    const found = choices.find(([id]) => id === val);
+    if (found && found[1] && !String(found[1]).startsWith("无") && found[1] !== "none") labels.push(found[1]);
+  }
+  return labels;
+}
+
+/* ---------- 架构文档生成（ARCHITECTURE.md / ADR / 图） ---------- */
 
 /** 方案里的目录/文件清单 → 缩进树文本（自动补全隐式父目录）。 */
 function archTreeText(dirs, filePaths) {
@@ -2158,48 +2597,105 @@ function archTreeText(dirs, filePaths) {
   }).join("\n");
 }
 
+function archDocMd(plan) {
+  const cmd = plan.commands ?? {};
+  return `# ${plan.name} · 架构说明\n\n> 状态：${plan.status === "scaffolded" ? "骨架已写入" : "已规划（尚未写入骨架）"}\n> 技术栈：${(plan.stack ?? []).join(" · ")}\n> 生成时间：${plan.generatedAt}\n\n## 目录结构\n\n\`\`\`\n${archTreeText(plan.dirs ?? [], (plan.files ?? []).map((f) => f.path))}\n\`\`\`\n\n## 常用命令\n\n| 用途 | 命令 |\n| --- | --- |\n| 安装 | \`${cmd.install ?? "-"}\` |\n| 开发 | \`${cmd.dev ?? "-"}\` |\n| 构建 | \`${cmd.build ?? "-"}\` |\n\n## 技术栈组合\n\n${(plan.stack ?? []).map((s) => `- ${s}`).join("\n")}\n\n## 决策记录\n\n- [技术栈选型](decisions/0001-tech-stack.md)\n- [目录结构](decisions/0002-directory-layout.md)\n\n## 约定\n\n- 新模块遵循上面的分层与目录职责；\n- 修改架构时同步更新本文件，并追加新的 ADR；\n- 骨架写入后可用 \`wudi_architecture\` 复核结构与技术栈。\n`;
+}
+
+function archAdrStackMd(plan) {
+  const opts = Object.entries(plan.options ?? {})
+    .filter(([, v]) => v && v !== "none")
+    .map(([k, v]) => `- ${k}：${v}`);
+  return `# ADR 0001：技术栈选型\n\n- 状态：已接受\n- 日期：${String(plan.generatedAt ?? "").slice(0, 10)}\n- 决策：${(plan.stack ?? []).join(" · ")}\n\n## 背景\n\n项目初始为空，需要一套可直接启动、便于扩展的技术栈。\n\n## 决策\n\n- 项目类型：${plan.kindLabel}\n- 框架：${plan.frameworkLabel}\n${opts.length ? opts.join("\n") : "- 未启用额外组合项"}\n\n## 影响\n\n- 依赖与脚本写入 package.json（如适用）；\n- 目录按 ${plan.kindLabel} 约定分层；\n- 替换任一组件需追加新的 ADR。\n`;
+}
+
+function archAdrLayoutMd(plan) {
+  return `# ADR 0002：目录结构\n\n- 状态：已接受\n- 日期：${String(plan.generatedAt ?? "").slice(0, 10)}\n- 决策：采用以下顶层目录与分层\n\n## 目录\n\n${(plan.dirs ?? []).map((d) => `- \`${d}/\``).join("\n") || "- （无额外目录）"}\n\n## 文件职责\n\n${(plan.files ?? []).map((f) => `- \`${f.path}\` — ${f.purpose || "初始文件"}`).join("\n")}\n\n## 影响\n\n- 新增代码应放入对应目录，避免在根目录堆文件；\n- 公共能力放公共目录，业务放模块目录。\n`;
+}
+
+function archDiagramsMd(plan) {
+  const mods = (plan.dirs ?? []).filter((d) => !d.includes("/")).slice(0, 6);
+  const edges = mods.map((m, i) => `  App --> M${i}[${m}/]`).join("\n");
+  return `# 模块与分层\n\n\`\`\`mermaid\nflowchart LR\n  Entry[入口] --> App[应用层]\n${edges}\n${mods.length ? "  M0 --> Shared[公共/组件]" : "  App --> Shared[公共/组件]"}\n\`\`\`\n\n## 顶层目录\n\n${(plan.dirs ?? []).map((d) => `- \`${d}/\``).join("\n") || "- （无）"}\n`;
+}
+
+function archModel(plan, relDir, status, extra = {}) {
+  return {
+    version: 1,
+    name: plan.name,
+    kind: plan.kind,
+    kindLabel: plan.kindLabel,
+    framework: plan.framework,
+    frameworkLabel: plan.frameworkLabel,
+    stack: plan.stack ?? [],
+    options: plan.options ?? {},
+    status,
+    summary: plan.summary ?? "",
+    commands: plan.commands ?? {},
+    dirs: plan.dirs ?? [],
+    planFile: `${relDir}/plan.json`,
+    docs: plan.docs ?? [],
+    ...extra,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 function toolArchPlan(args: any = {}) {
   let root;
   try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
   const kind = String(args.kind ?? "web").trim();
   const preset = ARCH_PRESETS[kind];
   if (!preset) return fail(`不支持的 kind：${kind}（可选：${Object.keys(ARCH_PRESETS).join("、")}）`);
-  const fw = String(args.framework ?? "").trim() || Object.keys(preset.frameworks)[0];
-  const fwPreset = preset.frameworks[fw];
-  if (!fwPreset) return fail(`不支持的 framework：${fw}（${preset.label} 可选：${Object.keys(preset.frameworks).join("、")}）`);
+  const fwId = String(args.framework ?? "").trim() || Object.keys(preset.frameworks)[0];
+  const fwPreset = preset.frameworks[fwId];
+  if (!fwPreset) return fail(`不支持的 framework：${fwId}（${preset.label} 可选：${Object.keys(preset.frameworks).join("、")}）`);
+  let options;
+  try { options = resolveArchOptions(fwPreset, args.options ?? {}); } catch (err: any) { return fail(String(err?.message ?? err)); }
   const name = String(args.name ?? "").trim() || store.loadProjectAt(root)?.name || store.projectBaseName(root);
-  const files = fwPreset.files(name).map(([path, purpose, content]) => ({ path, purpose, content }));
+  const files = fwPreset.files(name, options).map(([path, purpose, content]) => ({ path, purpose, content }));
   const plan = {
     kind,
     kindLabel: preset.label,
-    framework: fw,
+    framework: fwId,
     frameworkLabel: fwPreset.label,
     name,
     summary: fwPreset.summary,
-    dirs: fwPreset.dirs,
+    options,
+    stack: archStackLabels(fwPreset, options),
+    dirs: fwPreset.dirs ?? [],
     files,
     commands: fwPreset.commands,
     notes: fwPreset.notes ?? [],
+    status: "planned",
     generatedAt: new Date().toISOString(),
   };
-  const planFile = store.archPlanPathFor(root);
-  const relPlanPath = `.wudi/${store.projectBaseName(root)}/architecture.json`;
-  plan.savedPath = relPlanPath;
+  const relDir = `.wudi/${store.projectBaseName(root)}/architecture`;
+  const archDir = store.architectureDirFor(root);
+  plan.savedPath = `${relDir}/plan.json`;
+  plan.architectureDir = relDir;
+  plan.docs = ["plan.json", "architecture.json", "ARCHITECTURE.md", "diagrams.md", "decisions/0001-tech-stack.md", "decisions/0002-directory-layout.md"].map((f) => `${relDir}/${f}`);
   try {
     store.migrateArchPlanFor(root);
-    mkdirSync(_dirname(planFile), { recursive: true });
-    writeFileSync(planFile, JSON.stringify(plan, null, 2));
+    mkdirSync(join(archDir, "decisions"), { recursive: true });
+    writeFileSync(join(archDir, "plan.json"), JSON.stringify(plan, null, 2));
+    writeFileSync(join(archDir, "architecture.json"), JSON.stringify(archModel(plan, relDir, "planned"), null, 2));
+    writeFileSync(join(archDir, "ARCHITECTURE.md"), archDocMd(plan));
+    writeFileSync(join(archDir, "diagrams.md"), archDiagramsMd(plan));
+    writeFileSync(join(archDir, "decisions", "0001-tech-stack.md"), archAdrStackMd(plan));
+    writeFileSync(join(archDir, "decisions", "0002-directory-layout.md"), archAdrLayoutMd(plan));
   } catch (err: any) {
     return fail(`架构方案已生成但保存失败：${String(err?.message ?? err)}`);
   }
   const text = [
-    `═══ 架构方案：${preset.label} · ${fwPreset.label}（${name}）═══`,
+    `═══ 架构方案：${preset.label} · ${plan.stack.join(" · ")}（${name}）═══`,
     fwPreset.summary,
+    `技术栈组合：${plan.stack.join(" · ")}`,
     `目录与文件（${plan.files.length} 个文件）：`,
     archTreeText(plan.dirs, plan.files.map((f) => f.path)),
     `命令：安装 ${plan.commands.install}｜开发 ${plan.commands.dev}｜构建 ${plan.commands.build}`,
     plan.notes.length ? `注意：\n- ${plan.notes.join("\n- ")}` : "",
-    `已保存：${relPlanPath}（Agent 可读取）。下一步：点「写入骨架」创建目录与初始文件，或让 Agent 按方案搭建并实现各模块。`,
+    `架构目录：${relDir}/（ARCHITECTURE.md、architecture.json、plan.json、decisions/、diagrams.md）`,
+    "下一步：点「写入骨架」创建目录与初始文件，或让 Agent 按方案搭建并实现各模块。",
   ].filter(Boolean).join("\n");
   return ok(text, plan);
 }
@@ -2215,7 +2711,7 @@ function toolArchScaffold(args: any = {}) {
     try {
       plan = JSON.parse(readFileSync(store.migrateArchPlanFor(root), "utf-8"));
     } catch {
-      return fail(`没有架构方案：先调用 wudi_arch_plan 生成方案（会保存到 .wudi/${store.projectBaseName(root)}/architecture.json），或在 plan 参数里传方案对象。`);
+      return fail(`没有架构方案：先调用 wudi_arch_plan 生成方案（会保存到 .wudi/${store.projectBaseName(root)}/architecture/plan.json），或在 plan 参数里传方案对象。`);
     }
   }
   const files = Array.isArray(plan.files) ? plan.files : [];
@@ -2242,18 +2738,37 @@ function toolArchScaffold(args: any = {}) {
       failed.push(rel);
     }
   }
-  const planRelPath = `.wudi/${store.projectBaseName(root)}/architecture.json`;
+  const relDir = `.wudi/${store.projectBaseName(root)}/architecture`;
+  const archDir = store.architectureDirFor(root);
+  let detected = { languages: [], modules: [] };
   try {
-    const planFile = store.archPlanPathFor(root);
-    mkdirSync(_dirname(planFile), { recursive: true });
-    writeFileSync(planFile, JSON.stringify(plan, null, 2));
-  } catch { /* 方案落盘失败不阻塞骨架 */ }
+    const scan = archScan(root);
+    const total = [...scan.languages.values()].reduce((a, b) => a + b, 0) || 1;
+    detected.languages = [...scan.languages.entries()]
+      .map(([n, c]) => ({ name: n, files: c, pct: Math.round((c / total) * 100) }))
+      .sort((a, b) => b.files - a.files)
+      .slice(0, 8);
+    detected.modules = scan.modules
+      .map((m) => ({ name: m.name, files: m.files }))
+      .sort((a, b) => b.files - a.files)
+      .slice(0, 12);
+  } catch { /* 探测失败不影响写入结果 */ }
+  try {
+    mkdirSync(join(archDir, "decisions"), { recursive: true });
+    plan.status = "scaffolded";
+    plan.stack = plan.stack ?? [];
+    writeFileSync(join(archDir, "architecture.json"), JSON.stringify(archModel(plan, relDir, "scaffolded", detected), null, 2));
+    if (Array.isArray(plan.files) && plan.files.length) writeFileSync(join(archDir, "plan.json"), JSON.stringify(plan, null, 2));
+    writeFileSync(join(archDir, "ARCHITECTURE.md"), archDocMd(plan));
+  } catch { /* 文档更新失败不阻塞骨架 */ }
   const summary = {
     root,
     name: plan.name ?? "",
     framework: plan.framework ?? "",
     frameworkLabel: plan.frameworkLabel ?? "",
-    planPath: planRelPath,
+    planPath: `${relDir}/plan.json`,
+    architectureDir: relDir,
+    docs: plan.docs ?? [],
     created,
     skipped,
     failed,
@@ -2261,10 +2776,12 @@ function toolArchScaffold(args: any = {}) {
   };
   const lines = [
     `═══ 骨架已写入：${plan.frameworkLabel ?? plan.framework ?? "?"}（${plan.name ?? ""}）═══`,
+    `技术栈：${(plan.stack ?? []).join(" · ") || "（未记录）"}`,
     `新建 ${created.length} 个文件${skipped.length ? `，跳过已存在 ${skipped.length} 个` : ""}${failed.length ? `，失败 ${failed.length} 个` : ""}`,
     created.length ? `新建：\n- ${created.slice(0, 40).join("\n- ")}${created.length > 40 ? `\n- …（共 ${created.length} 个）` : ""}` : "",
     skipped.length ? `跳过（已存在，未覆盖）：\n- ${skipped.slice(0, 20).join("\n- ")}${skipped.length > 20 ? "\n- …" : ""}` : "",
     failed.length ? `失败：\n- ${failed.join("\n- ")}` : "",
+    `架构目录：${relDir}/（架构模型与文档已更新为 scaffolded）`,
     plan.commands?.install ? `下一步：\n1. ${plan.commands.install}\n2. ${plan.commands.dev}` : "下一步：安装依赖并启动项目。",
     "Agent 可继续按方案实现页面/模块，并用 wudi_architecture 复查结构。",
   ].filter(Boolean).join("\n");

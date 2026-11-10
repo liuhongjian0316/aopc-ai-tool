@@ -362,7 +362,35 @@ async function protocolTests() {
       r = await s.call("tools/call", { name: "wudi_arch_plan", arguments: { kind: "web", framework: "vue-vite", name: "blank", root: blank } });
       const planSc = r?.result?.structuredContent ?? {};
       check("arch_plan: 生成 Vue 方案", !errOf(r) && planSc.framework === "vue-vite" && (planSc.files ?? []).length >= 8, textOf(r).slice(0, 160));
-      check("arch_plan: 方案落盘 .wudi/<项目>/architecture.json", existsSync(join(workdir, ".wudi", "blankproj", "architecture.json")));
+      check("arch_plan: 架构目录与文档落盘",
+        existsSync(join(workdir, ".wudi", "blankproj", "architecture", "plan.json"))
+        && existsSync(join(workdir, ".wudi", "blankproj", "architecture", "architecture.json"))
+        && existsSync(join(workdir, ".wudi", "blankproj", "architecture", "ARCHITECTURE.md"))
+        && existsSync(join(workdir, ".wudi", "blankproj", "architecture", "diagrams.md"))
+        && existsSync(join(workdir, ".wudi", "blankproj", "architecture", "decisions", "0001-tech-stack.md"))
+        && existsSync(join(workdir, ".wudi", "blankproj", "architecture", "decisions", "0002-directory-layout.md")));
+      check("arch_plan: 方案返回架构目录与文档清单",
+        planSc.architectureDir === ".wudi/blankproj/architecture" && (planSc.docs ?? []).length === 6,
+        JSON.stringify(planSc.architectureDir));
+      // 技术栈组合（React + Tailwind + AntD + Zustand + Router + Vitest）
+      const combo = join(workdir, "comboproj");
+      await mkdir(combo, { recursive: true });
+      r = await s.call("tools/call", { name: "wudi_arch_plan", arguments: { kind: "web", framework: "react-vite", name: "combo", options: { styling: "tailwind", ui: "antd", state: "zustand", router: "react-router-dom", test: "vitest" }, root: combo } });
+      const comboPlan = r?.result?.structuredContent ?? {};
+      check("arch_plan: 默认组合只含框架（不列「无」）", !planSc.stack?.some((x) => String(x).startsWith("无")), JSON.stringify(planSc.stack));
+      check("arch_plan: 技术栈组合返回", !errOf(r)
+        && (comboPlan.stack ?? []).includes("Tailwind CSS")
+        && (comboPlan.stack ?? []).includes("Ant Design")
+        && (comboPlan.stack ?? []).includes("Zustand")
+        && (comboPlan.stack ?? []).includes("React Router")
+        && (comboPlan.stack ?? []).includes("Vitest"), JSON.stringify(comboPlan.stack));
+      const comboPkg = JSON.parse((comboPlan.files ?? []).find((f) => f.path === "package.json")?.content ?? "{}");
+      check("arch_plan: 组合写入依赖与脚本",
+        !!(comboPkg.dependencies?.antd) && !!(comboPkg.dependencies?.zustand)
+        && !!(comboPkg.dependencies?.["react-router-dom"]) && !!(comboPkg.devDependencies?.tailwindcss)
+        && !!(comboPkg.devDependencies?.vitest) && comboPkg.scripts?.test === "vitest run", JSON.stringify(Object.keys(comboPkg.dependencies ?? {})));
+      r = await s.call("tools/call", { name: "wudi_arch_plan", arguments: { kind: "web", framework: "vue-vite", options: { styling: "bogus" }, root: combo } });
+      check("arch_plan: 非法组合值拒绝", errOf(r) && textOf(r).includes("不支持取值"));
       r = await s.call("tools/call", { name: "wudi_arch_scaffold", arguments: { plan: planSc, root: blank } });
       check("arch_scaffold: 未确认拒绝", errOf(r) && textOf(r).includes("confirm"));
       r = await s.call("tools/call", { name: "wudi_arch_scaffold", arguments: { plan: planSc, confirm: true, root: blank } });
@@ -373,10 +401,20 @@ async function protocolTests() {
       check("arch_scaffold: 幂等（读方案且不覆盖）", !errOf(r)
         && (r?.result?.structuredContent?.skipped ?? []).length >= 8
         && (r?.result?.structuredContent?.created ?? []).length === 0);
+      r = await s.call("tools/call", { name: "wudi_arch_scaffold", arguments: { plan: comboPlan, confirm: true, root: combo } });
+      check("arch_scaffold: 组合骨架落地（tailwind/router/store）", !errOf(r)
+        && existsSync(join(combo, "tailwind.config.js"))
+        && existsSync(join(combo, "src", "pages", "Home.tsx"))
+        && existsSync(join(combo, "src", "stores", "counter.ts"))
+        && existsSync(join(combo, "src", "__tests__", "app.test.ts")), textOf(r).slice(0, 160));
       r = await s.call("tools/call", { name: "wudi_architecture", arguments: { root: blank } });
-      const fwAfter = r?.result?.structuredContent?.frameworks ?? [];
+      const archAfter = r?.result?.structuredContent ?? {};
+      const fwAfter = archAfter.frameworks ?? [];
       check("arch_plan: 骨架写入后可识别技术栈", fwAfter.includes("Vue") && fwAfter.includes("Vite"), JSON.stringify(fwAfter));
-      /* 旧位置 <项目>/.wudi/architecture.json 自动迁移到 <工作区>/.wudi/<项目名>/ */
+      check("arch_plan: 架构页返回架构目录与文档", archAfter.architecture?.status === "scaffolded"
+        && (archAfter.architecture?.docs ?? []).includes("ARCHITECTURE.md")
+        && (archAfter.architecture?.docs ?? []).includes("decisions/0001-tech-stack.md"), JSON.stringify(archAfter.architecture));
+      /* 旧位置 <项目>/.wudi/architecture.json 自动迁移到 architecture/plan.json */
       const legacyProj = join(workdir, "legacyproj");
       await mkdir(join(legacyProj, ".wudi"), { recursive: true });
       await writeFile(join(legacyProj, ".wudi", "architecture.json"),
@@ -384,7 +422,7 @@ async function protocolTests() {
       r = await s.call("tools/call", { name: "wudi_arch_scaffold", arguments: { confirm: true, root: legacyProj } });
       check("arch_scaffold: 旧位置方案自动迁移", !errOf(r)
         && existsSync(join(legacyProj, "keep.txt"))
-        && existsSync(join(workdir, ".wudi", "legacyproj", "architecture.json")));
+        && existsSync(join(workdir, ".wudi", "legacyproj", "architecture", "plan.json")));
     } finally {
       await rm(outside, { recursive: true, force: true });
     }

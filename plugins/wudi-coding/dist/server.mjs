@@ -171,18 +171,29 @@ function designsDirFor(root) {
 function projectDataDirFor(root) {
   return join(wudiDir(), projectBaseName(root));
 }
+function architectureDirFor(root) {
+  return join(projectDataDirFor(root), "architecture");
+}
 function archPlanPathFor(root) {
-  return join(projectDataDirFor(root), "architecture.json");
+  return join(architectureDirFor(root), "plan.json");
+}
+function archModelPathFor(root) {
+  return join(architectureDirFor(root), "architecture.json");
 }
 function migrateArchPlanFor(root) {
   const abs = resolve(root);
   const target = archPlanPathFor(abs);
   if (existsSync(target)) return target;
-  const legacy = join(abs, ".wudi", "architecture.json");
-  if (legacy !== target && existsSync(legacy)) {
+  const legacyList = [
+    join(wudiDir(), projectBaseName(abs), "architecture.json"),
+    join(abs, ".wudi", "architecture.json")
+  ];
+  for (const legacy of legacyList) {
+    if (legacy === target || !existsSync(legacy)) continue;
     try {
-      mkdirSync(join(wudiDir(), projectBaseName(abs)), { recursive: true });
+      mkdirSync(architectureDirFor(abs), { recursive: true });
       renameSync(legacy, target);
+      return target;
     } catch {
     }
   }
@@ -1375,13 +1386,14 @@ var TOOLS = [
   },
   {
     name: "wudi_arch_plan",
-    description: "\u4E3A\u7A7A\u9879\u76EE\u8BBE\u8BA1\u67B6\u6784\u65B9\u6848\uFF08web / miniprogram / mobile / backend / monorepo \u9884\u8BBE\uFF09\uFF1A\u8F93\u51FA\u6280\u672F\u9009\u578B\u3001\u76EE\u5F55\u4E0E\u6587\u4EF6\u6E05\u5355\u3001\u5E38\u7528\u547D\u4EE4\u3001\u6CE8\u610F\u4E8B\u9879\uFF0C\u5E76\u4FDD\u5B58\u5230 <\u5DE5\u4F5C\u533A>/.wudi/<\u9879\u76EE\u540D>/architecture.json\u3002\u914D\u5408 wudi_arch_scaffold \u5199\u5165\u9AA8\u67B6\uFF0C\u518D\u7531 Agent \u5B9E\u73B0\u5404\u6A21\u5757\u3002",
+    description: "\u4E3A\u7A7A\u9879\u76EE\u8BBE\u8BA1\u67B6\u6784\u65B9\u6848 + \u6280\u672F\u6808\u7EC4\u5408\uFF08web / miniprogram / mobile / backend / monorepo\uFF09\uFF1A\u8F93\u51FA\u6280\u672F\u9009\u578B\u3001\u76EE\u5F55\u4E0E\u6587\u4EF6\u6E05\u5355\u3001\u547D\u4EE4\u3001\u6CE8\u610F\u4E8B\u9879\uFF0C\u5E76\u5728 <\u5DE5\u4F5C\u533A>/.wudi/<\u9879\u76EE\u540D>/architecture/ \u4E0B\u751F\u6210 plan.json\u3001architecture.json\u3001ARCHITECTURE.md\u3001diagrams.md\u3001decisions/\uFF08ADR\uFF09\u3002\u914D\u5408 wudi_arch_scaffold \u5199\u5165\u9AA8\u67B6\uFF0C\u518D\u7531 Agent \u5B9E\u73B0\u5404\u6A21\u5757\u3002",
     _meta: UI_META,
     inputSchema: {
       type: "object",
       properties: {
         kind: { type: "string", enum: ["web", "miniprogram", "mobile", "backend", "monorepo"], description: "\u9879\u76EE\u7C7B\u578B\uFF0C\u7F3A\u7701 web" },
-        framework: { type: "string", description: "\u6846\u67B6\uFF1Aweb[vue-vite|react-vite]\u3001miniprogram[taro|native-wechat]\u3001mobile[flutter|swiftui]\u3001backend[nest|go-gin]\u3001monorepo[pnpm-workspace]" },
+        framework: { type: "string", description: "\u6846\u67B6\uFF1Aweb[vue-vite|react-vite|next-app|nuxt|svelte-kit|static]\u3001miniprogram[taro|uni-app|native-wechat]\u3001mobile[flutter|swiftui|expo]\u3001backend[nest|go-gin|express|fastapi|spring-boot]\u3001monorepo[pnpm-workspace|turbo]" },
+        options: { type: "object", description: "\u6280\u672F\u6808\u7EC4\u5408\uFF08\u6309\u6846\u67B6\u652F\u6301\uFF09\uFF1Astyling(css|tailwind|scss)\u3001ui(none|element-plus|naive-ui|antd)\u3001state(none|pinia|zustand)\u3001router(none|vue-router|react-router-dom)\u3001test(none|vitest|jest)" },
         name: { type: "string", description: "\u9879\u76EE\u663E\u793A\u540D\uFF08\u7F3A\u7701\u7528\u6863\u6848\u540D/\u76EE\u5F55\u540D\uFF09" },
         root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF09" }
       }
@@ -1389,12 +1401,12 @@ var TOOLS = [
   },
   {
     name: "wudi_arch_scaffold",
-    description: "\u6309\u67B6\u6784\u65B9\u6848\u5199\u5165\u9879\u76EE\u9AA8\u67B6\uFF1A\u521B\u5EFA\u76EE\u5F55\u4E0E\u521D\u59CB\u6587\u4EF6\uFF0C\u7EDD\u4E0D\u8986\u76D6\u5DF2\u6709\u6587\u4EF6\u3002plan \u7F3A\u7701\u8BFB\u53D6 <\u5DE5\u4F5C\u533A>/.wudi/<\u9879\u76EE\u540D>/architecture.json\uFF1B\u5FC5\u987B\u4F20 confirm: true\u3002",
+    description: "\u6309\u67B6\u6784\u65B9\u6848\u5199\u5165\u9879\u76EE\u9AA8\u67B6\uFF1A\u521B\u5EFA\u76EE\u5F55\u4E0E\u521D\u59CB\u6587\u4EF6\uFF0C\u7EDD\u4E0D\u8986\u76D6\u5DF2\u6709\u6587\u4EF6\u3002plan \u7F3A\u7701\u8BFB\u53D6 <\u5DE5\u4F5C\u533A>/.wudi/<\u9879\u76EE\u540D>/architecture/plan.json\uFF1B\u5199\u5165\u540E\u66F4\u65B0 architecture.json \u72B6\u6001\u4E0E\u63A2\u6D4B\u7ED3\u679C\uFF0C\u5FC5\u987B\u4F20 confirm: true\u3002",
     _meta: UI_META,
     inputSchema: {
       type: "object",
       properties: {
-        plan: { type: "object", description: "wudi_arch_plan \u8FD4\u56DE\u7684\u65B9\u6848\u5BF9\u8C61\uFF08\u7F3A\u7701\u8BFB .wudi/<\u9879\u76EE\u540D>/architecture.json\uFF09" },
+        plan: { type: "object", description: "wudi_arch_plan \u8FD4\u56DE\u7684\u65B9\u6848\u5BF9\u8C61\uFF08\u7F3A\u7701\u8BFB .wudi/<\u9879\u76EE\u540D>/architecture/plan.json\uFF09" },
         confirm: { type: "boolean", description: "\u5FC5\u987B\u4E3A true \u624D\u5199\u5165\uFF08\u5B89\u5168\u95F8\uFF09" },
         root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF09" }
       },
@@ -3026,6 +3038,33 @@ function toolArchitecture(args = {}) {
     deployRoot: project?.deployRoot ?? "",
     healthCheck: project?.healthCheck?.url ?? ""
   };
+  let architecture = null;
+  try {
+    const modelPath = archModelPathFor(root);
+    if (existsSync3(modelPath)) {
+      const model = JSON.parse(readFileSync2(modelPath, "utf-8"));
+      const archDir = architectureDirFor(root);
+      const archFiles = [];
+      const walkArch = (dir, prefix) => {
+        for (const e of readdirSync2(dir, { withFileTypes: true })) {
+          const rel = prefix ? `${prefix}/${e.name}` : e.name;
+          if (e.isDirectory()) walkArch(join3(dir, e.name), rel);
+          else archFiles.push(rel);
+        }
+      };
+      try {
+        walkArch(archDir, "");
+      } catch {
+      }
+      architecture = {
+        dir: `.wudi/${projectBaseName(root)}/architecture`,
+        status: model.status ?? "",
+        stack: model.stack ?? [],
+        docs: archFiles.sort()
+      };
+    }
+  } catch {
+  }
   const structured = {
     root,
     name,
@@ -3040,6 +3079,7 @@ function toolArchitecture(args = {}) {
     workspaces: pkg?.workspaces ?? [],
     compose,
     related,
+    architecture,
     generatedAt: (/* @__PURE__ */ new Date()).toISOString()
   };
   const stack = frameworks.length ? frameworks.join(" / ") : project?.techStack || "\uFF08\u672A\u8BC6\u522B\uFF09";
@@ -3058,33 +3098,153 @@ function toolArchitecture(args = {}) {
   if (pkg?.scripts?.length) lines.push(`\u811A\u672C\uFF1A${pkg.scripts.map((s) => s.name).join("\u3001")}`);
   if (pkg?.workspaces?.length) lines.push(`Monorepo workspaces\uFF1A${pkg.workspaces.join("\u3001")}`);
   lines.push(`\u5173\u8054\uFF1A\u753B\u5E03 ${related.designs}\uFF5C\u6587\u6863 ${related.docs}\uFF5C\u73AF\u5883 ${related.envs.join("\u3001") || "\u672A\u914D\u7F6E"}`);
+  if (architecture) {
+    lines.push(`\u67B6\u6784\u65B9\u6848\uFF1A${architecture.status}\uFF5C${architecture.stack.join(" \xB7 ") || "\uFF08\u65E0\uFF09"}`);
+    lines.push(`\u67B6\u6784\u76EE\u5F55\uFF1A${architecture.dir}\uFF08${architecture.docs.length} \u4E2A\u6587\u6863\uFF09`);
+  }
   if (scan.truncated) lines.push(`\uFF08\u626B\u63CF\u8FBE\u5230 4000 \u6587\u4EF6\u4E0A\u9650\uFF0C\u7EDF\u8BA1\u4E3A\u4F9D\u636E\u6837\u672C\u7684\u4E0B\u9650\uFF09`);
   return ok(lines.join("\n"), structured);
 }
 var archJson = (obj) => JSON.stringify(obj, null, 2) + "\n";
 var archSlug = (name) => String(name || "app").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") || "app";
+var archPkg = (name, { type = "module", scripts = {}, deps = {}, devDeps = {} } = {}) => archJson({
+  name: archSlug(name),
+  private: true,
+  version: "0.1.0",
+  ...type ? { type } : {},
+  scripts,
+  dependencies: deps,
+  devDependencies: devDeps
+});
+var archMainCss = `:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { margin: 0; }
+.app { max-width: 960px; margin: 64px auto; padding: 0 24px; }
+`;
+var archTailwindCss = `@tailwind base;
+@tailwind components;
+@tailwind utilities;
+`;
+var archTailwindConfig = `/** @type {import('tailwindcss').Config} */
+export default {
+  content: ["./index.html", "./src/**/*.{ts,tsx,vue,svelte}", "./app/**/*.{ts,tsx}"],
+  theme: { extend: {} },
+  plugins: [],
+};
+`;
+var archPostcss = `export default { plugins: { tailwindcss: {}, autoprefixer: {} } };
+`;
+var archReadme = (name, stack, dev) => `# ${name}
+
+${stack}\u3002
+
+\`\`\`bash
+${dev}
+\`\`\`
+`;
 var ARCH_PRESETS = {
   web: {
     label: "Web \u524D\u7AEF",
     frameworks: {
       "vue-vite": {
         label: "Vue 3 + Vite",
-        summary: "Vue 3 + TypeScript + Vite \u5355\u9875\u5E94\u7528\uFF1A\u7EC4\u4EF6 / \u89C6\u56FE / \u6837\u5F0F\u5206\u5C42\uFF0C\u5B89\u88C5\u540E\u53EF\u76F4\u63A5\u542F\u52A8\u5F00\u53D1\u670D\u52A1\u5668\u3002",
+        summary: "Vue 3 + TypeScript + Vite \u5355\u9875\u5E94\u7528\uFF1A\u7EC4\u4EF6 / \u89C6\u56FE / \u6837\u5F0F\u5206\u5C42\uFF0C\u53EF\u9009\u7EC4\u4EF6\u5E93\u3001\u72B6\u6001\u3001\u8DEF\u7531\u4E0E\u6D4B\u8BD5\u3002",
         dirs: ["public", "src/components", "src/views", "src/styles"],
         commands: { install: "npm install", dev: "npm run dev", build: "npm run build" },
-        notes: ["\u8DEF\u7531\u6309\u9700\u5F15\u5165 vue-router\uFF0C\u72B6\u6001\u6309\u9700\u5F15\u5165 pinia", "\u5168\u5C40\u6837\u5F0F\u5165\u53E3 src/styles/main.css"],
-        files: (name) => {
-          const slug = archSlug(name);
+        options: {
+          styling: [["css", "\u539F\u751F CSS"], ["tailwind", "Tailwind CSS"], ["scss", "SCSS"]],
+          ui: [["none", "\u65E0\u7EC4\u4EF6\u5E93"], ["element-plus", "Element Plus"], ["naive-ui", "Naive UI"]],
+          state: [["none", "\u65E0\u72B6\u6001\u5E93"], ["pinia", "Pinia"]],
+          router: [["none", "\u65E0\u8DEF\u7531"], ["vue-router", "Vue Router"]],
+          test: [["none", "\u65E0\u6D4B\u8BD5"], ["vitest", "Vitest"]]
+        },
+        defaults: { styling: "css", ui: "none", state: "none", router: "none", test: "none" },
+        files: (name, o) => {
+          const deps = { vue: "^3.5.0" };
+          const devDeps = { "@vitejs/plugin-vue": "^5.2.0", typescript: "^5.7.0", vite: "^6.0.0", "vue-tsc": "^2.2.0" };
+          const scripts = { dev: "vite", build: "vue-tsc -b && vite build", preview: "vite preview" };
+          const imports = [`import { createApp } from "vue";`, `import App from "./App.vue";`];
+          const calls = [];
+          const extra = [];
+          if (o.styling === "tailwind") {
+            devDeps.tailwindcss = "^3.4.0";
+            devDeps.postcss = "^8.4.0";
+            devDeps.autoprefixer = "^10.4.0";
+            extra.push(["tailwind.config.js", "Tailwind \u914D\u7F6E", archTailwindConfig], ["postcss.config.js", "PostCSS \u914D\u7F6E", archPostcss]);
+          }
+          if (o.styling === "scss") devDeps.sass = "^1.80.0";
+          if (o.ui === "element-plus") {
+            deps["element-plus"] = "^2.8.0";
+            imports.push(`import ElementPlus from "element-plus";`, `import "element-plus/dist/index.css";`);
+            calls.push("app.use(ElementPlus);");
+          }
+          if (o.ui === "naive-ui") deps["naive-ui"] = "^2.40.0";
+          if (o.state === "pinia") {
+            deps.pinia = "^2.2.0";
+            imports.push(`import { createPinia } from "pinia";`);
+            calls.push("app.use(createPinia());");
+            extra.push(["src/stores/counter.ts", "\u793A\u4F8B\u72B6\u6001\uFF08Pinia\uFF09", `import { defineStore } from "pinia";
+
+export const useCounter = defineStore("counter", {
+  state: () => ({ count: 0 }),
+  actions: { inc() { this.count += 1; } },
+});
+`]);
+          }
+          if (o.router === "vue-router") {
+            deps["vue-router"] = "^4.4.0";
+            imports.push(`import router from "./router";`);
+            calls.push("app.use(router);");
+            extra.push(
+              ["src/router/index.ts", "\u8DEF\u7531\u8868", `import { createRouter, createWebHistory } from "vue-router";
+import Home from "../views/Home.vue";
+
+export default createRouter({
+  history: createWebHistory(),
+  routes: [{ path: "/", name: "home", component: Home }],
+});
+`],
+              ["src/views/Home.vue", "\u9996\u9875\u89C6\u56FE", `<script setup lang="ts">
+const title = "${name}";
+</script>
+
+<template>
+  <main class="app">
+    <h1>{{ title }}</h1>
+    <p>Home \u89C6\u56FE\uFF1A\u5728 src/router/index.ts \u6DFB\u52A0\u8DEF\u7531\u3002</p>
+  </main>
+</template>
+`]
+            );
+          }
+          if (o.test === "vitest") {
+            devDeps.vitest = "^2.1.0";
+            scripts.test = "vitest run";
+            extra.push(["src/__tests__/app.test.ts", "\u6700\u5C0F\u5355\u6D4B", `import { describe, expect, it } from "vitest";
+
+describe("app", () => {
+  it("runs", () => expect(1 + 1).toBe(2));
+});
+`]);
+          }
+          const styleFile = o.styling === "scss" ? "src/styles/main.scss" : "src/styles/main.css";
+          const styleContent = o.styling === "tailwind" ? archTailwindCss : archMainCss;
+          const appVue = o.router === "vue-router" ? `<template>
+  <router-view />
+</template>
+` : `<script setup lang="ts">
+const title = "${name}";
+</script>
+
+<template>
+  <main class="app">
+    <h1>{{ title }}</h1>
+    <p>\u5F00\u59CB\u5B9E\u73B0\u9875\u9762\uFF1A\u5728 src/views \u6DFB\u52A0\u89C6\u56FE\uFF0C\u5728 src/components \u6DFB\u52A0\u7EC4\u4EF6\u3002</p>
+  </main>
+</template>
+`;
+          const main = [...imports, `import "./styles/${o.styling === "scss" ? "main.scss" : "main.css"}";`, "", "const app = createApp(App);", ...calls, 'app.mount("#app");', ""].join("\n");
           return [
-            ["package.json", "\u4F9D\u8D56\u4E0E\u811A\u672C", archJson({
-              name: slug,
-              private: true,
-              version: "0.1.0",
-              type: "module",
-              scripts: { dev: "vite", build: "vue-tsc -b && vite build", preview: "vite preview" },
-              dependencies: { vue: "^3.5.0" },
-              devDependencies: { "@vitejs/plugin-vue": "^5.2.0", typescript: "^5.7.0", vite: "^6.0.0", "vue-tsc": "^2.2.0" }
-            })],
+            ["package.json", "\u4F9D\u8D56\u4E0E\u811A\u672C", archPkg(name, { scripts, deps, devDeps })],
             ["index.html", "\u5E94\u7528\u5165\u53E3 HTML", `<!doctype html>
 <html lang="zh-CN">
   <head>
@@ -3103,66 +3263,120 @@ import vue from "@vitejs/plugin-vue";
 
 export default defineConfig({ plugins: [vue()] });
 `],
-            ["tsconfig.json", "TypeScript \u914D\u7F6E", archJson({
-              compilerOptions: { target: "ES2022", module: "ESNext", moduleResolution: "Bundler", strict: true, skipLibCheck: true, jsx: "preserve" },
-              include: ["src/**/*.ts", "src/**/*.vue"]
-            })],
-            ["src/main.ts", "\u5E94\u7528\u5F15\u5BFC", `import { createApp } from "vue";
-import App from "./App.vue";
-import "./styles/main.css";
-
-createApp(App).mount("#app");
-`],
-            ["src/App.vue", "\u6839\u7EC4\u4EF6", `<script setup lang="ts">
-import { ref } from "vue";
-
-const title = ref("${name}");
-</script>
-
-<template>
-  <main class="app">
-    <h1>{{ title }}</h1>
-    <p>\u5F00\u59CB\u5B9E\u73B0\u9875\u9762\uFF1A\u5728 src/views \u6DFB\u52A0\u89C6\u56FE\uFF0C\u5728 src/components \u6DFB\u52A0\u7EC4\u4EF6\u3002</p>
-  </main>
-</template>
-`],
-            ["src/styles/main.css", "\u5168\u5C40\u6837\u5F0F", `:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-body { margin: 0; }
-.app { max-width: 960px; margin: 64px auto; padding: 0 24px; }
-`],
+            ["tsconfig.json", "TypeScript \u914D\u7F6E", archJson({ compilerOptions: { target: "ES2022", module: "ESNext", moduleResolution: "Bundler", strict: true, skipLibCheck: true, jsx: "preserve" }, include: ["src/**/*.ts", "src/**/*.vue"] })],
+            ["src/main.ts", "\u5E94\u7528\u5F15\u5BFC", main],
+            ["src/App.vue", "\u6839\u7EC4\u4EF6", appVue],
+            [styleFile, "\u5168\u5C40\u6837\u5F0F", styleContent],
             ["src/components/.gitkeep", "\u7EC4\u4EF6\u76EE\u5F55", ""],
             ["src/views/.gitkeep", "\u9875\u9762\u76EE\u5F55", ""],
             ["public/.gitkeep", "\u9759\u6001\u8D44\u6E90\u76EE\u5F55", ""],
-            ["README.md", "\u9879\u76EE\u8BF4\u660E", `# ${name}
-
-Vue 3 + Vite + TypeScript\u3002
-
-\`\`\`bash
-npm install
-npm run dev
-\`\`\`
-`]
+            ...extra,
+            ["README.md", "\u9879\u76EE\u8BF4\u660E", archReadme(name, "Vue 3 + Vite + TypeScript", "npm install\nnpm run dev")]
           ];
         }
       },
       "react-vite": {
         label: "React + Vite",
-        summary: "React 18 + TypeScript + Vite \u5355\u9875\u5E94\u7528\uFF1A\u9875\u9762 / \u7EC4\u4EF6 / \u6837\u5F0F\u5206\u5C42\uFF0C\u5B89\u88C5\u540E\u53EF\u76F4\u63A5\u542F\u52A8\u3002",
+        summary: "React 18 + TypeScript + Vite \u5355\u9875\u5E94\u7528\uFF1A\u9875\u9762 / \u7EC4\u4EF6 / \u6837\u5F0F\u5206\u5C42\uFF0C\u53EF\u9009\u7EC4\u4EF6\u5E93\u3001\u72B6\u6001\u3001\u8DEF\u7531\u4E0E\u6D4B\u8BD5\u3002",
         dirs: ["public", "src/components", "src/pages", "src/styles"],
         commands: { install: "npm install", dev: "npm run dev", build: "npm run build" },
-        notes: ["\u8DEF\u7531\u6309\u9700\u5F15\u5165 react-router-dom", "\u5168\u5C40\u6837\u5F0F\u5165\u53E3 src/styles/main.css"],
-        files: (name) => {
-          const slug = archSlug(name);
+        options: {
+          styling: [["css", "\u539F\u751F CSS"], ["tailwind", "Tailwind CSS"], ["scss", "SCSS"]],
+          ui: [["none", "\u65E0\u7EC4\u4EF6\u5E93"], ["antd", "Ant Design"]],
+          state: [["none", "\u65E0\u72B6\u6001\u5E93"], ["zustand", "Zustand"]],
+          router: [["none", "\u65E0\u8DEF\u7531"], ["react-router-dom", "React Router"]],
+          test: [["none", "\u65E0\u6D4B\u8BD5"], ["vitest", "Vitest"]]
+        },
+        defaults: { styling: "css", ui: "none", state: "none", router: "none", test: "none" },
+        files: (name, o) => {
+          const deps = { react: "^18.3.0", "react-dom": "^18.3.0" };
+          const devDeps = { "@types/react": "^18.3.0", "@types/react-dom": "^18.3.0", "@vitejs/plugin-react": "^4.3.0", typescript: "^5.7.0", vite: "^6.0.0" };
+          const scripts = { dev: "vite", build: "tsc -b && vite build", preview: "vite preview" };
+          const extra = [];
+          const imports = [];
+          if (o.styling === "tailwind") {
+            devDeps.tailwindcss = "^3.4.0";
+            devDeps.postcss = "^8.4.0";
+            devDeps.autoprefixer = "^10.4.0";
+            extra.push(["tailwind.config.js", "Tailwind \u914D\u7F6E", archTailwindConfig], ["postcss.config.js", "PostCSS \u914D\u7F6E", archPostcss]);
+          }
+          if (o.styling === "scss") devDeps.sass = "^1.80.0";
+          if (o.ui === "antd") {
+            deps.antd = "^5.21.0";
+            imports.push(`import "antd/dist/reset.css";`);
+          }
+          if (o.state === "zustand") {
+            deps.zustand = "^5.0.0";
+            extra.push(["src/stores/counter.ts", "\u793A\u4F8B\u72B6\u6001\uFF08Zustand\uFF09", `import { create } from "zustand";
+
+type Counter = { count: number; inc: () => void };
+
+export const useCounter = create<Counter>((set) => ({
+  count: 0,
+  inc: () => set((s) => ({ count: s.count + 1 })),
+}));
+`]);
+          }
+          if (o.router === "react-router-dom") {
+            deps["react-router-dom"] = "^6.26.0";
+            extra.push(["src/pages/Home.tsx", "\u9996\u9875\u9875\u9762", `export default function Home() {
+  return (
+    <main className="app">
+      <h1>${name}</h1>
+      <p>Home \u9875\u9762\uFF1A\u5728 src/App.tsx \u6DFB\u52A0\u8DEF\u7531\u3002</p>
+    </main>
+  );
+}
+`]);
+          }
+          if (o.test === "vitest") {
+            devDeps.vitest = "^2.1.0";
+            scripts.test = "vitest run";
+            extra.push(["src/__tests__/app.test.ts", "\u6700\u5C0F\u5355\u6D4B", `import { describe, expect, it } from "vitest";
+
+describe("app", () => {
+  it("runs", () => expect(1 + 1).toBe(2));
+});
+`]);
+          }
+          const appTsx = o.router === "react-router-dom" ? `import { BrowserRouter, Route, Routes } from "react-router-dom";
+import Home from "./pages/Home";
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Home />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+` : `export default function App() {
+  return (
+    <main className="app">
+      <h1>${name}</h1>
+      <p>\u5F00\u59CB\u5B9E\u73B0\u9875\u9762\uFF1A\u5728 src/pages \u6DFB\u52A0\u9875\u9762\uFF0C\u5728 src/components \u6DFB\u52A0\u7EC4\u4EF6\u3002</p>
+    </main>
+  );
+}
+`;
+          const main = [
+            `import React from "react";`,
+            `import ReactDOM from "react-dom/client";`,
+            ...imports,
+            `import App from "./App";`,
+            `import "./styles/${o.styling === "scss" ? "main.scss" : "main.css"}";`,
+            "",
+            `ReactDOM.createRoot(document.getElementById("root")!).render(`,
+            `  <React.StrictMode>`,
+            `    <App />`,
+            `  </React.StrictMode>`,
+            ");",
+            ""
+          ].join("\n");
+          const styleFile = o.styling === "scss" ? "src/styles/main.scss" : "src/styles/main.css";
           return [
-            ["package.json", "\u4F9D\u8D56\u4E0E\u811A\u672C", archJson({
-              name: slug,
-              private: true,
-              version: "0.1.0",
-              type: "module",
-              scripts: { dev: "vite", build: "tsc -b && vite build", preview: "vite preview" },
-              dependencies: { react: "^18.3.0", "react-dom": "^18.3.0" },
-              devDependencies: { "@types/react": "^18.3.0", "@types/react-dom": "^18.3.0", "@vitejs/plugin-react": "^4.3.0", typescript: "^5.7.0", vite: "^6.0.0" }
-            })],
+            ["package.json", "\u4F9D\u8D56\u4E0E\u811A\u672C", archPkg(name, { scripts, deps, devDeps })],
             ["index.html", "\u5E94\u7528\u5165\u53E3 HTML", `<!doctype html>
 <html lang="zh-CN">
   <head>
@@ -3181,48 +3395,272 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({ plugins: [react()] });
 `],
-            ["tsconfig.json", "TypeScript \u914D\u7F6E", archJson({
-              compilerOptions: { target: "ES2022", module: "ESNext", moduleResolution: "Bundler", jsx: "react-jsx", strict: true, skipLibCheck: true },
-              include: ["src"]
-            })],
-            ["src/main.tsx", "\u5E94\u7528\u5F15\u5BFC", `import React from "react";
-import ReactDOM from "react-dom/client";
-import App from "./App";
-import "./styles/main.css";
+            ["tsconfig.json", "TypeScript \u914D\u7F6E", archJson({ compilerOptions: { target: "ES2022", module: "ESNext", moduleResolution: "Bundler", jsx: "react-jsx", strict: true, skipLibCheck: true }, include: ["src"] })],
+            ["src/main.tsx", "\u5E94\u7528\u5F15\u5BFC", main],
+            ["src/App.tsx", "\u6839\u7EC4\u4EF6", appTsx],
+            [styleFile, "\u5168\u5C40\u6837\u5F0F", o.styling === "tailwind" ? archTailwindCss : archMainCss],
+            ["src/components/.gitkeep", "\u7EC4\u4EF6\u76EE\u5F55", ""],
+            ["src/pages/.gitkeep", "\u9875\u9762\u76EE\u5F55", ""],
+            ["public/.gitkeep", "\u9759\u6001\u8D44\u6E90\u76EE\u5F55", ""],
+            ...extra,
+            ["README.md", "\u9879\u76EE\u8BF4\u660E", archReadme(name, "React + Vite + TypeScript", "npm install\nnpm run dev")]
+          ];
+        }
+      },
+      "next-app": {
+        label: "Next.js App Router",
+        summary: "Next.js 14 App Router + TypeScript\uFF1Aapp/ \u8DEF\u7531\u76EE\u5F55\u5373\u9875\u9762\u7ED3\u6784\uFF0C\u5185\u7F6E SSR/SSG \u80FD\u529B\u3002",
+        dirs: ["app", "public", "components"],
+        commands: { install: "npm install", dev: "npm run dev", build: "npm run build" },
+        options: {
+          styling: [["css", "\u539F\u751F CSS"], ["tailwind", "Tailwind CSS"]],
+          test: [["none", "\u65E0\u6D4B\u8BD5"], ["vitest", "Vitest"]]
+        },
+        defaults: { styling: "css", test: "none" },
+        files: (name, o) => {
+          const deps = { next: "^14.2.0", react: "^18.3.0", "react-dom": "^18.3.0" };
+          const devDeps = { typescript: "^5.7.0", "@types/node": "^22.10.0", "@types/react": "^18.3.0", "@types/react-dom": "^18.3.0" };
+          const scripts = { dev: "next dev", build: "next build", start: "next start" };
+          const extra = [];
+          let globals = archMainCss;
+          if (o.styling === "tailwind") {
+            devDeps.tailwindcss = "^3.4.0";
+            devDeps.postcss = "^8.4.0";
+            devDeps.autoprefixer = "^10.4.0";
+            globals = archTailwindCss;
+            extra.push(["tailwind.config.js", "Tailwind \u914D\u7F6E", archTailwindConfig], ["postcss.config.js", "PostCSS \u914D\u7F6E", archPostcss]);
+          }
+          if (o.test === "vitest") {
+            devDeps.vitest = "^2.1.0";
+            scripts.test = "vitest run";
+            extra.push(["app/__tests__/app.test.ts", "\u6700\u5C0F\u5355\u6D4B", `import { describe, expect, it } from "vitest";
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+describe("app", () => {
+  it("runs", () => expect(1 + 1).toBe(2));
+});
+`]);
+          }
+          return [
+            ["package.json", "\u4F9D\u8D56\u4E0E\u811A\u672C", archPkg(name, { scripts, deps, devDeps })],
+            ["tsconfig.json", "TypeScript \u914D\u7F6E", archJson({ compilerOptions: { target: "ES2017", lib: ["dom", "dom.iterable", "esnext"], allowJs: true, skipLibCheck: true, strict: true, noEmit: true, esModuleInterop: true, module: "esnext", moduleResolution: "bundler", resolveJsonModule: true, isolatedModules: true, jsx: "preserve", incremental: true, plugins: [{ name: "next" }], paths: { "@/*": ["./*"] } }, include: ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"], exclude: ["node_modules"] })],
+            ["next-env.d.ts", "Next \u7C7B\u578B\u5F15\u7528", `/// <reference types="next" />
+/// <reference types="next/image-types/global" />
 `],
-            ["src/App.tsx", "\u6839\u7EC4\u4EF6", `export default function App() {
+            ["app/layout.tsx", "\u6839\u5E03\u5C40", `import type { Metadata } from "next";
+import "./globals.css";
+
+export const metadata: Metadata = { title: "${name}" };
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="zh-CN">
+      <body>{children}</body>
+    </html>
+  );
+}
+`],
+            ["app/page.tsx", "\u9996\u9875\u8DEF\u7531", `export default function HomePage() {
   return (
     <main className="app">
       <h1>${name}</h1>
-      <p>\u5F00\u59CB\u5B9E\u73B0\u9875\u9762\uFF1A\u5728 src/pages \u6DFB\u52A0\u9875\u9762\uFF0C\u5728 src/components \u6DFB\u52A0\u7EC4\u4EF6\u3002</p>
+      <p>\u5F00\u59CB\u5B9E\u73B0\u9875\u9762\uFF1A\u5728 app/ \u4E0B\u65B0\u589E\u8DEF\u7531\u76EE\u5F55\uFF08\u5982 app/about/page.tsx\uFF09\u3002</p>
     </main>
   );
 }
 `],
-            ["src/styles/main.css", "\u5168\u5C40\u6837\u5F0F", `:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-body { margin: 0; }
-.app { max-width: 960px; margin: 64px auto; padding: 0 24px; }
-`],
-            ["src/components/.gitkeep", "\u7EC4\u4EF6\u76EE\u5F55", ""],
-            ["src/pages/.gitkeep", "\u9875\u9762\u76EE\u5F55", ""],
+            ["app/globals.css", "\u5168\u5C40\u6837\u5F0F", globals],
             ["public/.gitkeep", "\u9759\u6001\u8D44\u6E90\u76EE\u5F55", ""],
-            ["README.md", "\u9879\u76EE\u8BF4\u660E", `# ${name}
-
-React + Vite + TypeScript\u3002
-
-\`\`\`bash
-npm install
-npm run dev
-\`\`\`
-`]
+            ["components/.gitkeep", "\u7EC4\u4EF6\u76EE\u5F55", ""],
+            ...extra,
+            ["README.md", "\u9879\u76EE\u8BF4\u660E", archReadme(name, "Next.js App Router + TypeScript", "npm install\nnpm run dev")]
           ];
         }
+      },
+      nuxt: {
+        label: "Nuxt 3",
+        summary: "Nuxt 3 + Vue 3 + TypeScript\uFF1A\u6587\u4EF6\u8DEF\u7531\uFF08pages/\uFF09\u4E0E\u81EA\u52A8\u5BFC\u5165\uFF0C\u9002\u5408\u5185\u5BB9\u578B\u7AD9\u70B9\u4E0E SSR \u5E94\u7528\u3002",
+        dirs: ["pages", "components", "public"],
+        commands: { install: "npm install", dev: "npm run dev", build: "npm run build" },
+        options: {
+          styling: [["css", "\u539F\u751F CSS"], ["tailwind", "Tailwind CSS"]],
+          test: [["none", "\u65E0\u6D4B\u8BD5"], ["vitest", "Vitest"]]
+        },
+        defaults: { styling: "css", test: "none" },
+        files: (name, o) => {
+          const deps = { nuxt: "^3.13.0", vue: "^3.5.0" };
+          const devDeps = { typescript: "^5.7.0" };
+          const scripts = { dev: "nuxt dev", build: "nuxt build", generate: "nuxt generate", preview: "nuxt preview" };
+          const modules = [];
+          const extra = [];
+          if (o.styling === "tailwind") {
+            deps["@nuxtjs/tailwindcss"] = "^6.12.0";
+            modules.push("@nuxtjs/tailwindcss");
+            extra.push(["assets/css/main.css", "\u5168\u5C40\u6837\u5F0F", archTailwindCss]);
+          } else {
+            extra.push(["assets/css/main.css", "\u5168\u5C40\u6837\u5F0F", archMainCss]);
+          }
+          if (o.test === "vitest") {
+            devDeps.vitest = "^2.1.0";
+            scripts.test = "vitest run";
+            extra.push(["tests/app.test.ts", "\u6700\u5C0F\u5355\u6D4B", `import { describe, expect, it } from "vitest";
+
+describe("app", () => {
+  it("runs", () => expect(1 + 1).toBe(2));
+});
+`]);
+          }
+          return [
+            ["package.json", "\u4F9D\u8D56\u4E0E\u811A\u672C", archPkg(name, { scripts, deps, devDeps })],
+            ["nuxt.config.ts", "Nuxt \u914D\u7F6E", `export default defineNuxtConfig({
+  devtools: { enabled: true },
+  css: ["~/assets/css/main.css"],
+  modules: ${JSON.stringify(modules)},
+});
+`],
+            ["tsconfig.json", "TypeScript \u914D\u7F6E", archJson({ extends: "./.nuxt/tsconfig.json" })],
+            ["app.vue", "\u6839\u7EC4\u4EF6", `<template>
+  <NuxtPage />
+</template>
+`],
+            ["pages/index.vue", "\u9996\u9875\u8DEF\u7531", `<script setup lang="ts">
+const title = "${name}";
+</script>
+
+<template>
+  <main class="app">
+    <h1>{{ title }}</h1>
+    <p>\u5F00\u59CB\u5B9E\u73B0\u9875\u9762\uFF1A\u5728 pages/ \u4E0B\u65B0\u589E .vue \u6587\u4EF6\u5373\u53EF\u751F\u6210\u8DEF\u7531\u3002</p>
+  </main>
+</template>
+`],
+            ...extra,
+            ["public/.gitkeep", "\u9759\u6001\u8D44\u6E90\u76EE\u5F55", ""],
+            ["components/.gitkeep", "\u7EC4\u4EF6\u76EE\u5F55", ""],
+            ["README.md", "\u9879\u76EE\u8BF4\u660E", archReadme(name, "Nuxt 3 + Vue 3 + TypeScript", "npm install\nnpm run dev")]
+          ];
+        }
+      },
+      "svelte-kit": {
+        label: "SvelteKit",
+        summary: "SvelteKit + TypeScript\uFF1Asrc/routes \u6587\u4EF6\u8DEF\u7531\uFF0CSSR/\u9759\u6001\u9002\u914D\u5668\u53EF\u5207\u6362\u3002",
+        dirs: ["src/routes", "src/lib", "static"],
+        commands: { install: "npm install", dev: "npm run dev", build: "npm run build" },
+        options: {
+          styling: [["css", "\u539F\u751F CSS"], ["tailwind", "Tailwind CSS"]],
+          test: [["none", "\u65E0\u6D4B\u8BD5"], ["vitest", "Vitest"]]
+        },
+        defaults: { styling: "css", test: "none" },
+        files: (name, o) => {
+          const devDeps = { "@sveltejs/adapter-auto": "^3.2.0", "@sveltejs/kit": "^2.6.0", "@sveltejs/vite-plugin-svelte": "^4.0.0", svelte: "^5.0.0", typescript: "^5.7.0", vite: "^6.0.0" };
+          const scripts = { dev: "vite dev", build: "vite build", preview: "vite preview" };
+          const extra = [];
+          let layoutImport = "";
+          if (o.styling === "tailwind") {
+            devDeps.tailwindcss = "^3.4.0";
+            devDeps.postcss = "^8.4.0";
+            devDeps.autoprefixer = "^10.4.0";
+            extra.push(["tailwind.config.js", "Tailwind \u914D\u7F6E", archTailwindConfig], ["postcss.config.js", "PostCSS \u914D\u7F6E", archPostcss], ["src/app.css", "\u5168\u5C40\u6837\u5F0F", archTailwindCss]);
+            layoutImport = `import "../app.css";
+`;
+          } else {
+            extra.push(["src/app.css", "\u5168\u5C40\u6837\u5F0F", archMainCss]);
+            layoutImport = `import "../app.css";
+`;
+          }
+          if (o.test === "vitest") {
+            devDeps.vitest = "^2.1.0";
+            scripts.test = "vitest run";
+            extra.push(["src/lib/app.test.ts", "\u6700\u5C0F\u5355\u6D4B", `import { describe, expect, it } from "vitest";
+
+describe("app", () => {
+  it("runs", () => expect(1 + 1).toBe(2));
+});
+`]);
+          }
+          return [
+            ["package.json", "\u4F9D\u8D56\u4E0E\u811A\u672C", archPkg(name, { scripts, devDeps })],
+            ["svelte.config.js", "SvelteKit \u914D\u7F6E", `import adapter from "@sveltejs/adapter-auto";
+
+export default { kit: { adapter: adapter() } };
+`],
+            ["vite.config.ts", "Vite \u914D\u7F6E", `import { sveltekit } from "@sveltejs/kit/vite";
+import { defineConfig } from "vite";
+
+export default defineConfig({ plugins: [sveltekit()] });
+`],
+            ["tsconfig.json", "TypeScript \u914D\u7F6E", archJson({ extends: "./.svelte-kit/tsconfig.json", compilerOptions: { allowJs: true, checkJs: true, esModuleInterop: true, forceConsistentCasingInFileNames: true, resolveJsonModule: true, skipLibCheck: true, sourceMap: true, strict: true, moduleResolution: "bundler" } })],
+            ["src/app.html", "\u5E94\u7528 HTML \u6A21\u677F", `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    %sveltekit.head%
+  </head>
+  <body data-sveltekit-preload-data="hover">
+    <div style="display: contents">%sveltekit.body%</div>
+  </body>
+</html>
+`],
+            ["src/routes/+layout.svelte", "\u5168\u5C40\u5E03\u5C40", `<script lang="ts">
+  ${layoutImport}
+</script>
+
+<slot />
+`],
+            ["src/routes/+page.svelte", "\u9996\u9875\u8DEF\u7531", `<script lang="ts">
+  const title = "${name}";
+</script>
+
+<main class="app">
+  <h1>{title}</h1>
+  <p>\u5F00\u59CB\u5B9E\u73B0\u9875\u9762\uFF1A\u5728 src/routes \u4E0B\u65B0\u589E +page.svelte\u3002</p>
+</main>
+`],
+            ...extra,
+            ["static/.gitkeep", "\u9759\u6001\u8D44\u6E90\u76EE\u5F55", ""],
+            ["README.md", "\u9879\u76EE\u8BF4\u660E", archReadme(name, "SvelteKit + TypeScript", "npm install\nnpm run dev")]
+          ];
+        }
+      },
+      static: {
+        label: "\u539F\u751F HTML/CSS/JS",
+        summary: "\u96F6\u4F9D\u8D56\u9759\u6001\u7AD9\u70B9\uFF1Aindex.html + styles.css + app.js\uFF0C\u53EF\u76F4\u63A5\u53CC\u51FB\u6216\u4EFB\u610F\u9759\u6001\u670D\u52A1\u5668\u6258\u7BA1\u3002",
+        dirs: ["assets"],
+        commands: { install: "\u65E0\u9700\u5B89\u88C5", dev: "\u4EFB\u610F\u9759\u6001\u670D\u52A1\u5668\uFF08\u5982 npx serve .\uFF09", build: "\u65E0\u9700\u6784\u5EFA\uFF0C\u76F4\u63A5\u90E8\u7F72\u76EE\u5F55" },
+        options: {},
+        defaults: {},
+        files: (name) => [
+          ["index.html", "\u9875\u9762\u5165\u53E3", `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${name}</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <h1>${name}</h1>
+      <p id="tip">\u5F00\u59CB\u5B9E\u73B0\u9875\u9762\uFF1A\u7F16\u8F91 index.html / styles.css / app.js\u3002</p>
+      <button id="cta">\u70B9\u6211</button>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>
+`],
+          ["styles.css", "\u5168\u5C40\u6837\u5F0F", `:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { margin: 0; }
+.app { max-width: 960px; margin: 64px auto; padding: 0 24px; }
+button { margin-top: 16px; padding: 8px 14px; }
+`],
+          ["app.js", "\u9875\u9762\u811A\u672C", `document.getElementById("cta")?.addEventListener("click", () => {
+  const tip = document.getElementById("tip");
+  if (tip) tip.textContent = "\u4F60\u597D\uFF0C${name}\uFF01";
+});
+`],
+          ["assets/.gitkeep", "\u9759\u6001\u8D44\u6E90\u76EE\u5F55", ""],
+          ["README.md", "\u9879\u76EE\u8BF4\u660E", archReadme(name, "\u539F\u751F HTML/CSS/JS", "npx serve .")]
+        ]
       }
     }
   },
@@ -3234,7 +3672,8 @@ npm run dev
         summary: "Taro 4 + React + TypeScript \u8DE8\u7AEF\u5C0F\u7A0B\u5E8F\uFF1A\u914D\u7F6E / \u5E94\u7528 / \u9875\u9762\u5206\u5C42\uFF0C\u53EF\u7F16\u8BD1\u5230\u5FAE\u4FE1\u5C0F\u7A0B\u5E8F\u3002",
         dirs: ["config", "src/pages/index"],
         commands: { install: "npm install", dev: "npm run dev:weapp", build: "npm run build:weapp" },
-        notes: ["project.config.json \u91CC\u7684 appid \u9700\u66FF\u6362\u4E3A\u4F60\u7684\u5C0F\u7A0B\u5E8F AppID", "\u9875\u9762\u6CE8\u518C\u5728 src/app.config.ts \u7684 pages \u6570\u7EC4"],
+        options: {},
+        defaults: {},
         files: (name) => {
           const slug = archSlug(name);
           return [
@@ -3300,12 +3739,94 @@ npm run dev:weapp
           ];
         }
       },
+      "uni-app": {
+        label: "uni-app\uFF08Vue 3\uFF09",
+        summary: "uni-app + Vue 3 + Vite\uFF1A\u4E00\u5957\u4EE3\u7801\u7F16\u8BD1\u5230\u5FAE\u4FE1\u5C0F\u7A0B\u5E8F/H5/App\u3002",
+        dirs: ["src/pages/index"],
+        commands: { install: "npm install", dev: "npm run dev:mp-weixin", build: "npm run build:mp-weixin" },
+        options: {},
+        defaults: {},
+        files: (name) => {
+          const slug = archSlug(name);
+          return [
+            ["package.json", "\u4F9D\u8D56\u4E0E\u811A\u672C", archJson({
+              name: slug,
+              private: true,
+              version: "0.1.0",
+              scripts: { "dev:mp-weixin": "uni -p mp-weixin", "build:mp-weixin": "uni build -p mp-weixin", "dev:h5": "uni", "build:h5": "uni build" },
+              dependencies: { "@dcloudio/uni-app": "^3.0.0", "@dcloudio/uni-mp-weixin": "^3.0.0", vue: "^3.4.0" },
+              devDependencies: { "@dcloudio/types": "^3.4.0", "@dcloudio/vite-plugin-uni": "^3.0.0", typescript: "^5.4.0", vite: "^5.2.0" }
+            })],
+            ["vite.config.ts", "Vite \u914D\u7F6E", `import uni from "@dcloudio/vite-plugin-uni";
+
+export default { plugins: [uni()] };
+`],
+            ["index.html", "H5 \u5165\u53E3", `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${name}</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+`],
+            ["src/main.ts", "\u5E94\u7528\u5F15\u5BFC", `import { createSSRApp } from "vue";
+import App from "./App.vue";
+
+export function createApp() {
+  const app = createSSRApp(App);
+  return { app };
+}
+`],
+            ["src/App.vue", "\u6839\u7EC4\u4EF6", `<script setup lang="ts"></script>
+
+<template>
+  <slot />
+</template>
+`],
+            ["src/pages.json", "\u9875\u9762\u6CE8\u518C", archJson({ pages: [{ path: "pages/index/index", style: { navigationBarTitleText: name } }], globalStyle: { navigationBarTitleText: name } })],
+            ["src/pages/index/index.vue", "\u9996\u9875", `<script setup lang="ts">
+const title = "${name}";
+</script>
+
+<template>
+  <view class="page">
+    <text class="title">{{ title }}</text>
+    <text>\u5F00\u59CB\u5B9E\u73B0\u9875\u9762\uFF1A\u5728 src/pages \u4E0B\u65B0\u589E\u9875\u9762\u5E76\u6CE8\u518C\u5230 pages.json\u3002</text>
+  </view>
+</template>
+
+<style>
+.page { padding: 24rpx; }
+.title { display: block; font-size: 40rpx; font-weight: 700; margin-bottom: 16rpx; }
+</style>
+`],
+            ["tsconfig.json", "TypeScript \u914D\u7F6E", archJson({ compilerOptions: { target: "ES2020", module: "ESNext", moduleResolution: "Node", strict: true, skipLibCheck: true, types: ["@dcloudio/types"] } })],
+            ["README.md", "\u9879\u76EE\u8BF4\u660E", `# ${name}
+
+uni-app + Vue 3 \u5C0F\u7A0B\u5E8F\u3002
+
+\`\`\`bash
+npm install
+npm run dev:mp-weixin
+\`\`\`
+
+\u7528\u5FAE\u4FE1\u5F00\u53D1\u8005\u5DE5\u5177\u6253\u5F00 dist/dev/mp-weixin\u3002
+`]
+          ];
+        }
+      },
       "native-wechat": {
         label: "\u5FAE\u4FE1\u539F\u751F",
         summary: "\u5FAE\u4FE1\u539F\u751F\u5C0F\u7A0B\u5E8F\uFF1Aapp \u5168\u5C40 + pages \u9875\u9762\u56DB\u4EF6\u5957\uFF0C\u65E0\u6784\u5EFA\u4F9D\u8D56\u3002",
         dirs: ["pages/index"],
         commands: { install: "\u65E0\u9700\u5B89\u88C5", dev: "\u5FAE\u4FE1\u5F00\u53D1\u8005\u5DE5\u5177\u6253\u5F00\u9879\u76EE\u76EE\u5F55", build: "\u5FAE\u4FE1\u5F00\u53D1\u8005\u5DE5\u5177\u4E0A\u4F20" },
-        notes: ["project.config.json \u7684 appid \u9700\u66FF\u6362\u4E3A\u4F60\u7684\u5C0F\u7A0B\u5E8F AppID"],
+        options: {},
+        defaults: {},
         files: (name) => {
           const slug = archSlug(name);
           return [
@@ -3344,7 +3865,8 @@ npm run dev:weapp
         summary: "Flutter \u8DE8\u7AEF App\uFF1Alib/pages + lib/widgets \u5206\u5C42\uFF0C\u53EF\u76F4\u63A5 flutter run\u3002",
         dirs: ["lib/pages", "lib/widgets"],
         commands: { install: "flutter pub get", dev: "flutter run", build: "flutter build apk --release" },
-        notes: ["\u82E5\u7F3A\u5C11 ios/android \u5E73\u53F0\u76EE\u5F55\uFF0C\u5148\u6267\u884C flutter create ."],
+        options: {},
+        defaults: {},
         files: (name) => {
           const slug = archSlug(name).replace(/-/g, "_");
           return [
@@ -3397,15 +3919,7 @@ class HomePage extends StatelessWidget {
 `],
             ["lib/pages/.gitkeep", "\u9875\u9762\u76EE\u5F55", ""],
             ["lib/widgets/.gitkeep", "\u7EC4\u4EF6\u76EE\u5F55", ""],
-            ["README.md", "\u9879\u76EE\u8BF4\u660E", `# ${name}
-
-Flutter App\u3002
-
-\`\`\`bash
-flutter pub get
-flutter run
-\`\`\`
-`]
+            ["README.md", "\u9879\u76EE\u8BF4\u660E", archReadme(name, "Flutter App", "flutter pub get\nflutter run")]
           ];
         }
       },
@@ -3414,7 +3928,8 @@ flutter run
         summary: "SwiftUI App \u4EE3\u7801\u9AA8\u67B6\uFF08App / Views / Features \u5206\u5C42\uFF09\u3002",
         dirs: ["App/Views", "App/Features", "App/Resources"],
         commands: { install: "Xcode \u6253\u5F00\u5DE5\u7A0B", dev: "Xcode Run", build: "Xcode Archive" },
-        notes: ["\u5148\u7528 Xcode \u65B0\u5EFA\u540C\u540D iOS App \u5DE5\u7A0B\uFF0C\u518D\u628A\u672C\u9AA8\u67B6\u6587\u4EF6\u52A0\u5165\u5DE5\u7A0B", "\u9700\u8981\u53EF\u76F4\u63A5\u8FD0\u884C\u7684\u9996\u7248\u53EF\u6539\u7528 Flutter \u65B9\u6848"],
+        options: {},
+        defaults: {},
         files: (name) => [
           ["App/AppApp.swift", "\u5E94\u7528\u5165\u53E3", `import SwiftUI
 
@@ -3447,6 +3962,57 @@ struct ContentView: View {
 SwiftUI App \u9AA8\u67B6\u3002\u7528 Xcode \u65B0\u5EFA\u5DE5\u7A0B\u540E\u628A App/ \u4E0B\u7684\u6587\u4EF6\u52A0\u5165\u5DE5\u7A0B\u3002
 `]
         ]
+      },
+      expo: {
+        label: "React Native\uFF08Expo\uFF09",
+        summary: "Expo + React Native + TypeScript\uFF1A\u65E0\u9700 Xcode/Android Studio \u5373\u53EF npx expo start \u9884\u89C8\u3002",
+        dirs: ["src/screens", "src/components", "assets"],
+        commands: { install: "npm install", dev: "npx expo start", build: "npx expo export" },
+        options: {},
+        defaults: {},
+        files: (name) => {
+          const slug = archSlug(name);
+          return [
+            ["package.json", "\u4F9D\u8D56\u4E0E\u811A\u672C", archJson({
+              name: slug,
+              private: true,
+              version: "0.1.0",
+              main: "node_modules/expo/AppEntry.js",
+              scripts: { start: "expo start", android: "expo start --android", ios: "expo start --ios", web: "expo start --web" },
+              dependencies: { expo: "^52.0.0", react: "^18.3.0", "react-native": "^0.76.0", "expo-status-bar": "^2.0.0" },
+              devDependencies: { "@types/react": "^18.3.0", typescript: "^5.7.0" }
+            })],
+            ["app.json", "Expo \u914D\u7F6E", archJson({ expo: { name, slug, version: "0.1.0", orientation: "portrait", userInterfaceStyle: "automatic", newArchEnabled: true } })],
+            ["tsconfig.json", "TypeScript \u914D\u7F6E", archJson({ extends: "expo/tsconfig.base", compilerOptions: { strict: true } })],
+            ["babel.config.js", "Babel \u914D\u7F6E", `module.exports = function (api) {
+  api.cache(true);
+  return { presets: ["babel-preset-expo"] };
+};
+`],
+            ["App.tsx", "\u5E94\u7528\u5165\u53E3", `import { StatusBar } from "expo-status-bar";
+import { StyleSheet, Text, View } from "react-native";
+
+export default function App() {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>${name}</Text>
+      <Text>\u5F00\u59CB\u5B9E\u73B0\u9875\u9762\uFF1A\u5728 src/screens \u6DFB\u52A0\u5C4F\u5E55\u3002</Text>
+      <StatusBar style="auto" />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8, padding: 24 },
+  title: { fontSize: 22, fontWeight: "700" },
+});
+`],
+            ["src/screens/.gitkeep", "\u5C4F\u5E55\u76EE\u5F55", ""],
+            ["src/components/.gitkeep", "\u7EC4\u4EF6\u76EE\u5F55", ""],
+            ["assets/.gitkeep", "\u8D44\u6E90\u76EE\u5F55", ""],
+            ["README.md", "\u9879\u76EE\u8BF4\u660E", archReadme(name, "Expo + React Native + TypeScript", "npm install\nnpx expo start")]
+          ];
+        }
       }
     }
   },
@@ -3458,18 +4024,32 @@ SwiftUI App \u9AA8\u67B6\u3002\u7528 Xcode \u65B0\u5EFA\u5DE5\u7A0B\u540E\u628A 
         summary: "NestJS + TypeScript \u670D\u52A1\uFF1A\u6A21\u5757 / \u63A7\u5236\u5668 / \u670D\u52A1\u5206\u5C42\uFF0C\u9ED8\u8BA4\u76D1\u542C 3000\u3002",
         dirs: ["src/common", "src/modules"],
         commands: { install: "npm install", dev: "npm run start:dev", build: "npm run build" },
-        notes: ["\u65B0\u589E\u4E1A\u52A1\u6A21\u5757\u653E\u5230 src/modules/<name>\uFF0C\u5728 AppModule \u6CE8\u518C", "\u73AF\u5883\u53D8\u91CF\u53C2\u8003 .env.example"],
-        files: (name) => {
-          const slug = archSlug(name);
+        options: {
+          test: [["none", "\u65E0\u6D4B\u8BD5"], ["jest", "Jest"]]
+        },
+        defaults: { test: "none" },
+        files: (name, o) => {
+          const deps = { "@nestjs/common": "^10.4.0", "@nestjs/core": "^10.4.0", "@nestjs/platform-express": "^10.4.0", "reflect-metadata": "^0.2.2", rxjs: "^7.8.1" };
+          const devDeps = { "@nestjs/cli": "^10.4.0", "@types/node": "^22.10.0", "ts-node": "^10.9.2", typescript: "^5.7.0" };
+          const scripts = { "start:dev": "nest start --watch", build: "nest build", start: "node dist/main.js" };
+          const extra = [];
+          if (o.test === "jest") {
+            devDeps.jest = "^29.7.0";
+            devDeps["ts-jest"] = "^29.2.0";
+            devDeps["@types/jest"] = "^29.5.0";
+            scripts.test = "jest";
+            extra.push(["src/app.service.spec.ts", "\u793A\u4F8B\u5355\u6D4B", `import { AppService } from "./app.service";
+
+describe("AppService", () => {
+  it("health ok", () => {
+    const svc = new AppService();
+    expect(svc.health().ok).toBe(true);
+  });
+});
+`]);
+          }
           return [
-            ["package.json", "\u4F9D\u8D56\u4E0E\u811A\u672C", archJson({
-              name: slug,
-              private: true,
-              version: "0.1.0",
-              scripts: { "start:dev": "nest start --watch", build: "nest build", start: "node dist/main.js" },
-              dependencies: { "@nestjs/common": "^10.4.0", "@nestjs/core": "^10.4.0", "@nestjs/platform-express": "^10.4.0", "reflect-metadata": "^0.2.2", rxjs: "^7.8.1" },
-              devDependencies: { "@nestjs/cli": "^10.4.0", "@types/node": "^22.10.0", "ts-node": "^10.9.2", typescript: "^5.7.0" }
-            })],
+            ["package.json", "\u4F9D\u8D56\u4E0E\u811A\u672C", archPkg(name, { type: "", scripts, deps, devDeps })],
             ["tsconfig.json", "TypeScript \u914D\u7F6E", archJson({ compilerOptions: { target: "ES2022", module: "commonjs", moduleResolution: "node", experimentalDecorators: true, emitDecoratorMetadata: true, outDir: "dist", strict: true, skipLibCheck: true }, include: ["src/**/*.ts"] })],
             ["nest-cli.json", "Nest CLI \u914D\u7F6E", archJson({ collection: "@nestjs/schematics", sourceRoot: "src" })],
             ["src/main.ts", "\u670D\u52A1\u5165\u53E3", `import { NestFactory } from "@nestjs/core";
@@ -3518,6 +4098,7 @@ export class AppService {
 `],
             ["src/common/.gitkeep", "\u516C\u5171\u7EC4\u4EF6\u76EE\u5F55", ""],
             ["src/modules/.gitkeep", "\u4E1A\u52A1\u6A21\u5757\u76EE\u5F55", ""],
+            ...extra,
             ["README.md", "\u9879\u76EE\u8BF4\u660E", `# ${name}
 
 NestJS \u670D\u52A1\u3002
@@ -3536,7 +4117,8 @@ curl http://127.0.0.1:3000/healthz
         summary: "Go + Gin HTTP \u670D\u52A1\uFF1Acmd / internal \u5206\u5C42\uFF0C\u9ED8\u8BA4\u76D1\u542C 8080\u3002",
         dirs: ["cmd/server", "internal/handler", "internal/service", "internal/store"],
         commands: { install: "go mod tidy", dev: "go run ./cmd/server", build: "go build -o bin/server ./cmd/server" },
-        notes: ["\u4E1A\u52A1\u6309 internal/{handler,service,store} \u5206\u5C42", "Go \u7248\u672C\u8981\u6C42 1.22+"],
+        options: {},
+        defaults: {},
         files: (name) => {
           const mod = archSlug(name);
           return [
@@ -3583,6 +4165,179 @@ curl http://127.0.0.1:8080/healthz
 `]
           ];
         }
+      },
+      express: {
+        label: "Express + TS",
+        summary: "Express + TypeScript \u8F7B\u91CF\u670D\u52A1\uFF1Asrc/routes \u5206\u5C42\uFF0C\u9ED8\u8BA4\u76D1\u542C 3000\uFF0Ctsx \u70ED\u66F4\u65B0\u3002",
+        dirs: ["src/routes", "src/middleware"],
+        commands: { install: "npm install", dev: "npm run dev", build: "npm run build" },
+        options: {},
+        defaults: {},
+        files: (name) => [
+          ["package.json", "\u4F9D\u8D56\u4E0E\u811A\u672C", archPkg(name, {
+            scripts: { dev: "tsx watch src/main.ts", build: "tsc -p tsconfig.json", start: "node dist/main.js" },
+            deps: { express: "^4.21.0", cors: "^2.8.5" },
+            devDeps: { "@types/express": "^5.0.0", "@types/cors": "^2.8.17", "@types/node": "^22.10.0", tsx: "^4.19.0", typescript: "^5.7.0" }
+          })],
+          ["tsconfig.json", "TypeScript \u914D\u7F6E", archJson({ compilerOptions: { target: "ES2022", module: "NodeNext", moduleResolution: "NodeNext", outDir: "dist", strict: true, skipLibCheck: true, esModuleInterop: true }, include: ["src"] })],
+          ["src/main.ts", "\u670D\u52A1\u5165\u53E3", `import express from "express";
+import cors from "cors";
+import { healthRouter } from "./routes/health.js";
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+app.use(healthRouter);
+
+const port = Number(process.env.PORT ?? 3000);
+app.listen(port, () => console.log("${name} api on :" + port));
+`],
+          ["src/routes/health.ts", "\u5065\u5EB7\u68C0\u67E5\u8DEF\u7531", `import { Router } from "express";
+
+export const healthRouter = Router();
+
+healthRouter.get("/healthz", (_req, res) => {
+  res.json({ ok: true, service: "${name}" });
+});
+`],
+          ["src/middleware/.gitkeep", "\u4E2D\u95F4\u4EF6\u76EE\u5F55", ""],
+          [".env.example", "\u73AF\u5883\u53D8\u91CF\u6837\u4F8B", `PORT=3000
+`],
+          ["README.md", "\u9879\u76EE\u8BF4\u660E", `# ${name}
+
+Express + TypeScript \u670D\u52A1\u3002
+
+\`\`\`bash
+npm install
+npm run dev
+curl http://127.0.0.1:3000/healthz
+\`\`\`
+`]
+        ]
+      },
+      fastapi: {
+        label: "Python FastAPI",
+        summary: "FastAPI + Uvicorn\uFF1Aapp/routers \u5206\u5C42\uFF0C\u81EA\u5E26 OpenAPI \u6587\u6863\uFF08/docs\uFF09\u3002",
+        dirs: ["app/routers", "app/models", "tests"],
+        commands: { install: "pip install -r requirements.txt", dev: "uvicorn app.main:app --reload", build: "\u65E0\u9700\u6784\u5EFA\uFF08\u6E90\u7801\u90E8\u7F72\uFF09" },
+        options: {},
+        defaults: {},
+        files: (name) => [
+          ["requirements.txt", "Python \u4F9D\u8D56", `fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.9.0
+`],
+          ["app/__init__.py", "\u5305\u6807\u8BB0", ""],
+          ["app/main.py", "\u670D\u52A1\u5165\u53E3", `from fastapi import FastAPI
+
+from app.routers import health
+
+app = FastAPI(title="${name}")
+app.include_router(health.router)
+`],
+          ["app/routers/__init__.py", "\u8DEF\u7531\u5305", ""],
+          ["app/routers/health.py", "\u5065\u5EB7\u68C0\u67E5\u8DEF\u7531", `from fastapi import APIRouter
+
+router = APIRouter()
+
+
+@router.get("/healthz")
+def healthz():
+    return {"ok": True, "service": "${name}"}
+`],
+          ["app/models/__init__.py", "\u6570\u636E\u6A21\u578B\u5305", ""],
+          ["tests/__init__.py", "\u6D4B\u8BD5\u5305", ""],
+          [".env.example", "\u73AF\u5883\u53D8\u91CF\u6837\u4F8B", `PORT=8000
+`],
+          ["README.md", "\u9879\u76EE\u8BF4\u660E", `# ${name}
+
+FastAPI \u670D\u52A1\u3002
+
+\`\`\`bash
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+# http://127.0.0.1:8000/docs
+\`\`\`
+`]
+        ]
+      },
+      "spring-boot": {
+        label: "Spring Boot",
+        summary: "Spring Boot 3 + Java 21\uFF1AMaven \u6784\u5EFA\uFF0Ccontroller \u5206\u5C42\uFF0C\u9ED8\u8BA4\u76D1\u542C 8080\u3002",
+        dirs: ["src/main/java/com/example/demo", "src/main/resources"],
+        commands: { install: "mvn -q dependency:resolve", dev: "mvn spring-boot:run", build: "mvn -q package" },
+        options: {},
+        defaults: {},
+        files: (name) => [
+          ["pom.xml", "Maven \u4F9D\u8D56", `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.3.4</version>
+    <relativePath/>
+  </parent>
+  <groupId>com.example</groupId>
+  <artifactId>${archSlug(name)}</artifactId>
+  <version>0.1.0</version>
+  <properties><java.version>21</java.version></properties>
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+  </dependencies>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>
+`],
+          ["src/main/java/com/example/demo/DemoApplication.java", "\u5E94\u7528\u5165\u53E3", `package com.example.demo;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class DemoApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(DemoApplication.class, args);
+    }
+}
+`],
+          ["src/main/java/com/example/demo/HealthController.java", "\u5065\u5EB7\u68C0\u67E5\u63A5\u53E3", `package com.example.demo;
+
+import java.util.Map;
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+public class HealthController {
+    @GetMapping("/healthz")
+    public Map<String, Object> health() {
+        return Map.of("ok", true, "service", "${name}");
+    }
+}
+`],
+          ["src/main/resources/application.yml", "\u5E94\u7528\u914D\u7F6E", `server:
+  port: 8080
+`],
+          ["README.md", "\u9879\u76EE\u8BF4\u660E", `# ${name}
+
+Spring Boot 3 \u670D\u52A1\u3002
+
+\`\`\`bash
+mvn spring-boot:run
+curl http://127.0.0.1:8080/healthz
+\`\`\`
+`]
+        ]
       }
     }
   },
@@ -3594,7 +4349,8 @@ curl http://127.0.0.1:8080/healthz
         summary: "pnpm monorepo\uFF1Aapps/web + apps/api + packages/ui \u4E09\u5305\u7ED3\u6784\uFF0C\u5171\u4EAB\u4F9D\u8D56\u4E0E\u811A\u672C\u3002",
         dirs: ["apps/web", "apps/api", "packages/ui"],
         commands: { install: "pnpm install", dev: "pnpm -r dev", build: "pnpm -r build" },
-        notes: ["\u5404\u5B50\u5305\u53EF\u7EE7\u7EED\u8C03\u7528 wudi_arch_plan\uFF08kind=web/backend\uFF09\u7EC6\u5316\u9AA8\u67B6", "\u5B50\u5305 package.json \u540D\u79F0\u6309 @<scope>/<name> \u7EA6\u5B9A"],
+        options: {},
+        defaults: {},
         files: (name) => {
           const scope = archSlug(name);
           return [
@@ -3633,10 +4389,82 @@ pnpm dev
 `]
           ];
         }
+      },
+      turbo: {
+        label: "Turborepo",
+        summary: "Turborepo + pnpm\uFF1A\u5E26\u4EFB\u52A1\u7F13\u5B58\u4E0E\u4F9D\u8D56\u62D3\u6251\u7684 monorepo\uFF0C\u9002\u5408\u591A\u5E94\u7528/\u591A\u5305\u534F\u4F5C\u3002",
+        dirs: ["apps/web", "apps/api", "packages/ui"],
+        commands: { install: "pnpm install", dev: "pnpm dev", build: "pnpm build" },
+        options: {},
+        defaults: {},
+        files: (name) => {
+          const scope = archSlug(name);
+          return [
+            ["package.json", "\u6839\u4F9D\u8D56\u4E0E\u811A\u672C", archJson({ name: scope, private: true, version: "0.1.0", packageManager: "pnpm@9.12.0", scripts: { dev: "turbo dev", build: "turbo build", lint: "turbo lint" }, devDependencies: { turbo: "^2.1.0" } })],
+            ["turbo.json", "Turbo \u4EFB\u52A1\u914D\u7F6E", archJson({ $schema: "https://turbo.build/schema.json", tasks: { build: { dependsOn: ["^build"], outputs: ["dist/**"] }, dev: { cache: false, persistent: true }, lint: {} } })],
+            ["pnpm-workspace.yaml", "workspace \u58F0\u660E", `packages:
+  - "apps/*"
+  - "packages/*"
+`],
+            ["apps/web/package.json", "Web \u5E94\u7528\u5305", archJson({ name: `@${scope}/web`, private: true, version: "0.1.0", scripts: { dev: "vite", build: "vite build" }, dependencies: { react: "^18.3.0", "react-dom": "^18.3.0" }, devDependencies: { vite: "^6.0.0", "@vitejs/plugin-react": "^4.3.0" } })],
+            ["apps/web/index.html", "Web \u5165\u53E3 HTML", `<!doctype html>
+<html lang="zh-CN"><head><meta charset="UTF-8" /><title>${name}</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>
+`],
+            ["apps/web/src/main.tsx", "Web \u5165\u53E3", `import React from "react";
+import ReactDOM from "react-dom/client";
+
+ReactDOM.createRoot(document.getElementById("root")!).render(<h1>${name}</h1>);
+`],
+            ["apps/api/package.json", "API \u5E94\u7528\u5305", archJson({ name: `@${scope}/api`, private: true, version: "0.1.0", scripts: { dev: "tsx watch src/main.ts", build: "tsc -p tsconfig.json" }, dependencies: { express: "^4.21.0" }, devDependencies: { "@types/express": "^5.0.0", "@types/node": "^22.10.0", tsx: "^4.19.0", typescript: "^5.7.0" } })],
+            ["apps/api/src/main.ts", "API \u5165\u53E3", `import express from "express";
+
+const app = express();
+app.get("/healthz", (_req, res) => res.json({ ok: true }));
+app.listen(3000, () => console.log("api on :3000"));
+`],
+            ["packages/ui/package.json", "\u5171\u4EAB UI \u5305", archJson({ name: `@${scope}/ui`, private: true, version: "0.1.0", main: "src/index.ts" })],
+            ["packages/ui/src/index.ts", "\u5171\u4EAB\u7EC4\u4EF6\u51FA\u53E3", `export const version = "0.1.0";
+`],
+            ["README.md", "\u9879\u76EE\u8BF4\u660E", `# ${name}
+
+Turborepo + pnpm monorepo\u3002
+
+\`\`\`bash
+pnpm install
+pnpm dev
+\`\`\`
+`]
+          ];
+        }
       }
     }
   }
 };
+function resolveArchOptions(fwPreset, input = {}) {
+  const supported = fwPreset.options ?? {};
+  const out = { ...fwPreset.defaults ?? {} };
+  for (const key of Object.keys(input ?? {})) {
+    if (!supported[key]) throw new Error(`\u8BE5\u6846\u67B6\u4E0D\u652F\u6301\u9009\u9879 ${key}\uFF08\u652F\u6301\uFF1A${Object.keys(supported).join("\u3001") || "\u65E0"}\uFF09`);
+  }
+  for (const key of Object.keys(supported)) {
+    const val = input?.[key];
+    if (val === void 0 || val === null || val === "") continue;
+    if (!supported[key].some(([id]) => id === val)) {
+      throw new Error(`\u9009\u9879 ${key} \u4E0D\u652F\u6301\u53D6\u503C ${val}\uFF08\u53EF\u9009\uFF1A${supported[key].map(([id]) => id).join("\u3001")}\uFF09`);
+    }
+    out[key] = val;
+  }
+  return out;
+}
+function archStackLabels(fwPreset, options) {
+  const labels = [fwPreset.label];
+  for (const [key, choices] of Object.entries(fwPreset.options ?? {})) {
+    const val = options?.[key];
+    const found = choices.find(([id]) => id === val);
+    if (found && found[1] && !String(found[1]).startsWith("\u65E0") && found[1] !== "none") labels.push(found[1]);
+  }
+  return labels;
+}
 function archTreeText(dirs, filePaths) {
   const dirSet = new Set(dirs);
   for (const p of [...dirs, ...filePaths]) {
@@ -3649,6 +4477,127 @@ function archTreeText(dirs, filePaths) {
     return `${"  ".repeat(depth)}${p.split("/").pop()}${dirSet.has(p) ? "/" : ""}`;
   }).join("\n");
 }
+function archDocMd(plan) {
+  const cmd = plan.commands ?? {};
+  return `# ${plan.name} \xB7 \u67B6\u6784\u8BF4\u660E
+
+> \u72B6\u6001\uFF1A${plan.status === "scaffolded" ? "\u9AA8\u67B6\u5DF2\u5199\u5165" : "\u5DF2\u89C4\u5212\uFF08\u5C1A\u672A\u5199\u5165\u9AA8\u67B6\uFF09"}
+> \u6280\u672F\u6808\uFF1A${(plan.stack ?? []).join(" \xB7 ")}
+> \u751F\u6210\u65F6\u95F4\uFF1A${plan.generatedAt}
+
+## \u76EE\u5F55\u7ED3\u6784
+
+\`\`\`
+${archTreeText(plan.dirs ?? [], (plan.files ?? []).map((f) => f.path))}
+\`\`\`
+
+## \u5E38\u7528\u547D\u4EE4
+
+| \u7528\u9014 | \u547D\u4EE4 |
+| --- | --- |
+| \u5B89\u88C5 | \`${cmd.install ?? "-"}\` |
+| \u5F00\u53D1 | \`${cmd.dev ?? "-"}\` |
+| \u6784\u5EFA | \`${cmd.build ?? "-"}\` |
+
+## \u6280\u672F\u6808\u7EC4\u5408
+
+${(plan.stack ?? []).map((s) => `- ${s}`).join("\n")}
+
+## \u51B3\u7B56\u8BB0\u5F55
+
+- [\u6280\u672F\u6808\u9009\u578B](decisions/0001-tech-stack.md)
+- [\u76EE\u5F55\u7ED3\u6784](decisions/0002-directory-layout.md)
+
+## \u7EA6\u5B9A
+
+- \u65B0\u6A21\u5757\u9075\u5FAA\u4E0A\u9762\u7684\u5206\u5C42\u4E0E\u76EE\u5F55\u804C\u8D23\uFF1B
+- \u4FEE\u6539\u67B6\u6784\u65F6\u540C\u6B65\u66F4\u65B0\u672C\u6587\u4EF6\uFF0C\u5E76\u8FFD\u52A0\u65B0\u7684 ADR\uFF1B
+- \u9AA8\u67B6\u5199\u5165\u540E\u53EF\u7528 \`wudi_architecture\` \u590D\u6838\u7ED3\u6784\u4E0E\u6280\u672F\u6808\u3002
+`;
+}
+function archAdrStackMd(plan) {
+  const opts = Object.entries(plan.options ?? {}).filter(([, v]) => v && v !== "none").map(([k, v]) => `- ${k}\uFF1A${v}`);
+  return `# ADR 0001\uFF1A\u6280\u672F\u6808\u9009\u578B
+
+- \u72B6\u6001\uFF1A\u5DF2\u63A5\u53D7
+- \u65E5\u671F\uFF1A${String(plan.generatedAt ?? "").slice(0, 10)}
+- \u51B3\u7B56\uFF1A${(plan.stack ?? []).join(" \xB7 ")}
+
+## \u80CC\u666F
+
+\u9879\u76EE\u521D\u59CB\u4E3A\u7A7A\uFF0C\u9700\u8981\u4E00\u5957\u53EF\u76F4\u63A5\u542F\u52A8\u3001\u4FBF\u4E8E\u6269\u5C55\u7684\u6280\u672F\u6808\u3002
+
+## \u51B3\u7B56
+
+- \u9879\u76EE\u7C7B\u578B\uFF1A${plan.kindLabel}
+- \u6846\u67B6\uFF1A${plan.frameworkLabel}
+${opts.length ? opts.join("\n") : "- \u672A\u542F\u7528\u989D\u5916\u7EC4\u5408\u9879"}
+
+## \u5F71\u54CD
+
+- \u4F9D\u8D56\u4E0E\u811A\u672C\u5199\u5165 package.json\uFF08\u5982\u9002\u7528\uFF09\uFF1B
+- \u76EE\u5F55\u6309 ${plan.kindLabel} \u7EA6\u5B9A\u5206\u5C42\uFF1B
+- \u66FF\u6362\u4EFB\u4E00\u7EC4\u4EF6\u9700\u8FFD\u52A0\u65B0\u7684 ADR\u3002
+`;
+}
+function archAdrLayoutMd(plan) {
+  return `# ADR 0002\uFF1A\u76EE\u5F55\u7ED3\u6784
+
+- \u72B6\u6001\uFF1A\u5DF2\u63A5\u53D7
+- \u65E5\u671F\uFF1A${String(plan.generatedAt ?? "").slice(0, 10)}
+- \u51B3\u7B56\uFF1A\u91C7\u7528\u4EE5\u4E0B\u9876\u5C42\u76EE\u5F55\u4E0E\u5206\u5C42
+
+## \u76EE\u5F55
+
+${(plan.dirs ?? []).map((d) => `- \`${d}/\``).join("\n") || "- \uFF08\u65E0\u989D\u5916\u76EE\u5F55\uFF09"}
+
+## \u6587\u4EF6\u804C\u8D23
+
+${(plan.files ?? []).map((f) => `- \`${f.path}\` \u2014 ${f.purpose || "\u521D\u59CB\u6587\u4EF6"}`).join("\n")}
+
+## \u5F71\u54CD
+
+- \u65B0\u589E\u4EE3\u7801\u5E94\u653E\u5165\u5BF9\u5E94\u76EE\u5F55\uFF0C\u907F\u514D\u5728\u6839\u76EE\u5F55\u5806\u6587\u4EF6\uFF1B
+- \u516C\u5171\u80FD\u529B\u653E\u516C\u5171\u76EE\u5F55\uFF0C\u4E1A\u52A1\u653E\u6A21\u5757\u76EE\u5F55\u3002
+`;
+}
+function archDiagramsMd(plan) {
+  const mods = (plan.dirs ?? []).filter((d) => !d.includes("/")).slice(0, 6);
+  const edges = mods.map((m, i) => `  App --> M${i}[${m}/]`).join("\n");
+  return `# \u6A21\u5757\u4E0E\u5206\u5C42
+
+\`\`\`mermaid
+flowchart LR
+  Entry[\u5165\u53E3] --> App[\u5E94\u7528\u5C42]
+${edges}
+${mods.length ? "  M0 --> Shared[\u516C\u5171/\u7EC4\u4EF6]" : "  App --> Shared[\u516C\u5171/\u7EC4\u4EF6]"}
+\`\`\`
+
+## \u9876\u5C42\u76EE\u5F55
+
+${(plan.dirs ?? []).map((d) => `- \`${d}/\``).join("\n") || "- \uFF08\u65E0\uFF09"}
+`;
+}
+function archModel(plan, relDir, status, extra = {}) {
+  return {
+    version: 1,
+    name: plan.name,
+    kind: plan.kind,
+    kindLabel: plan.kindLabel,
+    framework: plan.framework,
+    frameworkLabel: plan.frameworkLabel,
+    stack: plan.stack ?? [],
+    options: plan.options ?? {},
+    status,
+    summary: plan.summary ?? "",
+    commands: plan.commands ?? {},
+    dirs: plan.dirs ?? [],
+    planFile: `${relDir}/plan.json`,
+    docs: plan.docs ?? [],
+    ...extra,
+    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
 function toolArchPlan(args = {}) {
   let root;
   try {
@@ -3659,43 +4608,61 @@ function toolArchPlan(args = {}) {
   const kind = String(args.kind ?? "web").trim();
   const preset = ARCH_PRESETS[kind];
   if (!preset) return fail(`\u4E0D\u652F\u6301\u7684 kind\uFF1A${kind}\uFF08\u53EF\u9009\uFF1A${Object.keys(ARCH_PRESETS).join("\u3001")}\uFF09`);
-  const fw = String(args.framework ?? "").trim() || Object.keys(preset.frameworks)[0];
-  const fwPreset = preset.frameworks[fw];
-  if (!fwPreset) return fail(`\u4E0D\u652F\u6301\u7684 framework\uFF1A${fw}\uFF08${preset.label} \u53EF\u9009\uFF1A${Object.keys(preset.frameworks).join("\u3001")}\uFF09`);
+  const fwId = String(args.framework ?? "").trim() || Object.keys(preset.frameworks)[0];
+  const fwPreset = preset.frameworks[fwId];
+  if (!fwPreset) return fail(`\u4E0D\u652F\u6301\u7684 framework\uFF1A${fwId}\uFF08${preset.label} \u53EF\u9009\uFF1A${Object.keys(preset.frameworks).join("\u3001")}\uFF09`);
+  let options;
+  try {
+    options = resolveArchOptions(fwPreset, args.options ?? {});
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
   const name = String(args.name ?? "").trim() || loadProjectAt(root)?.name || projectBaseName(root);
-  const files = fwPreset.files(name).map(([path2, purpose, content]) => ({ path: path2, purpose, content }));
+  const files = fwPreset.files(name, options).map(([path2, purpose, content]) => ({ path: path2, purpose, content }));
   const plan = {
     kind,
     kindLabel: preset.label,
-    framework: fw,
+    framework: fwId,
     frameworkLabel: fwPreset.label,
     name,
     summary: fwPreset.summary,
-    dirs: fwPreset.dirs,
+    options,
+    stack: archStackLabels(fwPreset, options),
+    dirs: fwPreset.dirs ?? [],
     files,
     commands: fwPreset.commands,
     notes: fwPreset.notes ?? [],
+    status: "planned",
     generatedAt: (/* @__PURE__ */ new Date()).toISOString()
   };
-  const planFile = archPlanPathFor(root);
-  const relPlanPath = `.wudi/${projectBaseName(root)}/architecture.json`;
-  plan.savedPath = relPlanPath;
+  const relDir = `.wudi/${projectBaseName(root)}/architecture`;
+  const archDir = architectureDirFor(root);
+  plan.savedPath = `${relDir}/plan.json`;
+  plan.architectureDir = relDir;
+  plan.docs = ["plan.json", "architecture.json", "ARCHITECTURE.md", "diagrams.md", "decisions/0001-tech-stack.md", "decisions/0002-directory-layout.md"].map((f) => `${relDir}/${f}`);
   try {
     migrateArchPlanFor(root);
-    mkdirSync2(_dirname(planFile), { recursive: true });
-    writeFileSync2(planFile, JSON.stringify(plan, null, 2));
+    mkdirSync2(join3(archDir, "decisions"), { recursive: true });
+    writeFileSync2(join3(archDir, "plan.json"), JSON.stringify(plan, null, 2));
+    writeFileSync2(join3(archDir, "architecture.json"), JSON.stringify(archModel(plan, relDir, "planned"), null, 2));
+    writeFileSync2(join3(archDir, "ARCHITECTURE.md"), archDocMd(plan));
+    writeFileSync2(join3(archDir, "diagrams.md"), archDiagramsMd(plan));
+    writeFileSync2(join3(archDir, "decisions", "0001-tech-stack.md"), archAdrStackMd(plan));
+    writeFileSync2(join3(archDir, "decisions", "0002-directory-layout.md"), archAdrLayoutMd(plan));
   } catch (err) {
     return fail(`\u67B6\u6784\u65B9\u6848\u5DF2\u751F\u6210\u4F46\u4FDD\u5B58\u5931\u8D25\uFF1A${String(err?.message ?? err)}`);
   }
   const text = [
-    `\u2550\u2550\u2550 \u67B6\u6784\u65B9\u6848\uFF1A${preset.label} \xB7 ${fwPreset.label}\uFF08${name}\uFF09\u2550\u2550\u2550`,
+    `\u2550\u2550\u2550 \u67B6\u6784\u65B9\u6848\uFF1A${preset.label} \xB7 ${plan.stack.join(" \xB7 ")}\uFF08${name}\uFF09\u2550\u2550\u2550`,
     fwPreset.summary,
+    `\u6280\u672F\u6808\u7EC4\u5408\uFF1A${plan.stack.join(" \xB7 ")}`,
     `\u76EE\u5F55\u4E0E\u6587\u4EF6\uFF08${plan.files.length} \u4E2A\u6587\u4EF6\uFF09\uFF1A`,
     archTreeText(plan.dirs, plan.files.map((f) => f.path)),
     `\u547D\u4EE4\uFF1A\u5B89\u88C5 ${plan.commands.install}\uFF5C\u5F00\u53D1 ${plan.commands.dev}\uFF5C\u6784\u5EFA ${plan.commands.build}`,
     plan.notes.length ? `\u6CE8\u610F\uFF1A
 - ${plan.notes.join("\n- ")}` : "",
-    `\u5DF2\u4FDD\u5B58\uFF1A${relPlanPath}\uFF08Agent \u53EF\u8BFB\u53D6\uFF09\u3002\u4E0B\u4E00\u6B65\uFF1A\u70B9\u300C\u5199\u5165\u9AA8\u67B6\u300D\u521B\u5EFA\u76EE\u5F55\u4E0E\u521D\u59CB\u6587\u4EF6\uFF0C\u6216\u8BA9 Agent \u6309\u65B9\u6848\u642D\u5EFA\u5E76\u5B9E\u73B0\u5404\u6A21\u5757\u3002`
+    `\u67B6\u6784\u76EE\u5F55\uFF1A${relDir}/\uFF08ARCHITECTURE.md\u3001architecture.json\u3001plan.json\u3001decisions/\u3001diagrams.md\uFF09`,
+    "\u4E0B\u4E00\u6B65\uFF1A\u70B9\u300C\u5199\u5165\u9AA8\u67B6\u300D\u521B\u5EFA\u76EE\u5F55\u4E0E\u521D\u59CB\u6587\u4EF6\uFF0C\u6216\u8BA9 Agent \u6309\u65B9\u6848\u642D\u5EFA\u5E76\u5B9E\u73B0\u5404\u6A21\u5757\u3002"
   ].filter(Boolean).join("\n");
   return ok(text, plan);
 }
@@ -3714,7 +4681,7 @@ function toolArchScaffold(args = {}) {
     try {
       plan = JSON.parse(readFileSync2(migrateArchPlanFor(root), "utf-8"));
     } catch {
-      return fail(`\u6CA1\u6709\u67B6\u6784\u65B9\u6848\uFF1A\u5148\u8C03\u7528 wudi_arch_plan \u751F\u6210\u65B9\u6848\uFF08\u4F1A\u4FDD\u5B58\u5230 .wudi/${projectBaseName(root)}/architecture.json\uFF09\uFF0C\u6216\u5728 plan \u53C2\u6570\u91CC\u4F20\u65B9\u6848\u5BF9\u8C61\u3002`);
+      return fail(`\u6CA1\u6709\u67B6\u6784\u65B9\u6848\uFF1A\u5148\u8C03\u7528 wudi_arch_plan \u751F\u6210\u65B9\u6848\uFF08\u4F1A\u4FDD\u5B58\u5230 .wudi/${projectBaseName(root)}/architecture/plan.json\uFF09\uFF0C\u6216\u5728 plan \u53C2\u6570\u91CC\u4F20\u65B9\u6848\u5BF9\u8C61\u3002`);
     }
   }
   const files = Array.isArray(plan.files) ? plan.files : [];
@@ -3747,11 +4714,23 @@ function toolArchScaffold(args = {}) {
       failed.push(rel);
     }
   }
-  const planRelPath = `.wudi/${projectBaseName(root)}/architecture.json`;
+  const relDir = `.wudi/${projectBaseName(root)}/architecture`;
+  const archDir = architectureDirFor(root);
+  let detected = { languages: [], modules: [] };
   try {
-    const planFile = archPlanPathFor(root);
-    mkdirSync2(_dirname(planFile), { recursive: true });
-    writeFileSync2(planFile, JSON.stringify(plan, null, 2));
+    const scan = archScan(root);
+    const total = [...scan.languages.values()].reduce((a, b) => a + b, 0) || 1;
+    detected.languages = [...scan.languages.entries()].map(([n, c]) => ({ name: n, files: c, pct: Math.round(c / total * 100) })).sort((a, b) => b.files - a.files).slice(0, 8);
+    detected.modules = scan.modules.map((m) => ({ name: m.name, files: m.files })).sort((a, b) => b.files - a.files).slice(0, 12);
+  } catch {
+  }
+  try {
+    mkdirSync2(join3(archDir, "decisions"), { recursive: true });
+    plan.status = "scaffolded";
+    plan.stack = plan.stack ?? [];
+    writeFileSync2(join3(archDir, "architecture.json"), JSON.stringify(archModel(plan, relDir, "scaffolded", detected), null, 2));
+    if (Array.isArray(plan.files) && plan.files.length) writeFileSync2(join3(archDir, "plan.json"), JSON.stringify(plan, null, 2));
+    writeFileSync2(join3(archDir, "ARCHITECTURE.md"), archDocMd(plan));
   } catch {
   }
   const summary = {
@@ -3759,7 +4738,9 @@ function toolArchScaffold(args = {}) {
     name: plan.name ?? "",
     framework: plan.framework ?? "",
     frameworkLabel: plan.frameworkLabel ?? "",
-    planPath: planRelPath,
+    planPath: `${relDir}/plan.json`,
+    architectureDir: relDir,
+    docs: plan.docs ?? [],
     created,
     skipped,
     failed,
@@ -3767,6 +4748,7 @@ function toolArchScaffold(args = {}) {
   };
   const lines = [
     `\u2550\u2550\u2550 \u9AA8\u67B6\u5DF2\u5199\u5165\uFF1A${plan.frameworkLabel ?? plan.framework ?? "?"}\uFF08${plan.name ?? ""}\uFF09\u2550\u2550\u2550`,
+    `\u6280\u672F\u6808\uFF1A${(plan.stack ?? []).join(" \xB7 ") || "\uFF08\u672A\u8BB0\u5F55\uFF09"}`,
     `\u65B0\u5EFA ${created.length} \u4E2A\u6587\u4EF6${skipped.length ? `\uFF0C\u8DF3\u8FC7\u5DF2\u5B58\u5728 ${skipped.length} \u4E2A` : ""}${failed.length ? `\uFF0C\u5931\u8D25 ${failed.length} \u4E2A` : ""}`,
     created.length ? `\u65B0\u5EFA\uFF1A
 - ${created.slice(0, 40).join("\n- ")}${created.length > 40 ? `
@@ -3775,6 +4757,7 @@ function toolArchScaffold(args = {}) {
 - ${skipped.slice(0, 20).join("\n- ")}${skipped.length > 20 ? "\n- \u2026" : ""}` : "",
     failed.length ? `\u5931\u8D25\uFF1A
 - ${failed.join("\n- ")}` : "",
+    `\u67B6\u6784\u76EE\u5F55\uFF1A${relDir}/\uFF08\u67B6\u6784\u6A21\u578B\u4E0E\u6587\u6863\u5DF2\u66F4\u65B0\u4E3A scaffolded\uFF09`,
     plan.commands?.install ? `\u4E0B\u4E00\u6B65\uFF1A
 1. ${plan.commands.install}
 2. ${plan.commands.dev}` : "\u4E0B\u4E00\u6B65\uFF1A\u5B89\u88C5\u4F9D\u8D56\u5E76\u542F\u52A8\u9879\u76EE\u3002",
@@ -4487,7 +5470,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.40.2" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.41.0" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());
