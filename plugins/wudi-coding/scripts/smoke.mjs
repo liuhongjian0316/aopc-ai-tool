@@ -164,8 +164,8 @@ async function protocolTests() {
     check(`tools/list: 工具数 ≥ 17（实际 ${list.length}）`, list.length >= 17);
     check("tools/list: 全部有 inputSchema", list.every((t) => t.inputSchema?.type === "object"));
     const uiBound = list.filter((t) => t?._meta?.ui?.surface === "wudi");
-    check("tools/list: Gen UI 绑定 8 个（+ wudi_tokens_compare / wudi_architecture）", uiBound.length === 8);
-    check("tools/list: 关键工具在列", ["wudi_deploy", "wudi_rollback", "wudi_doctor", "wudi_deploy_logs", "wudi_env_set", "wudi_design_tokens_set", "wudi_figma_fetch", "wudi_architecture"].every((n) => list.some((t) => t.name === n)));
+    check("tools/list: Gen UI 绑定 10 个（+ wudi_architecture / wudi_arch_plan / wudi_arch_scaffold）", uiBound.length === 10);
+    check("tools/list: 关键工具在列", ["wudi_deploy", "wudi_rollback", "wudi_doctor", "wudi_deploy_logs", "wudi_env_set", "wudi_design_tokens_set", "wudi_figma_fetch", "wudi_architecture", "wudi_arch_plan", "wudi_arch_scaffold"].every((n) => list.some((t) => t.name === n)));
 
     const resList = await s.call("resources/list", {});
     check("resources/list: 面板资源", resList?.result?.resources?.[0]?.uri === "ui://wudi-coding/panel.html" && String(resList.result.resources[0].mimeType).includes("profile=mcp-app"));
@@ -354,6 +354,28 @@ async function protocolTests() {
         && (archSc.compose?.services ?? []).some((x) => x.name === "web" && x.ports === "8080:80"),
         JSON.stringify({ entries: archSc.entries, compose: archSc.compose }));
       check("architecture: 文本摘要可读", textOf(r).includes("架构总览") && textOf(r).includes("技术栈"));
+      /* ---- 空项目：自动设计架构 + 写入骨架 ---- */
+      const blank = join(workdir, "blankproj");
+      await mkdir(blank, { recursive: true });
+      r = await s.call("tools/call", { name: "wudi_architecture", arguments: { root: blank } });
+      check("arch_plan: 空项目识别为 0 文件", !errOf(r) && (r?.result?.structuredContent?.scanned?.files ?? -1) === 0);
+      r = await s.call("tools/call", { name: "wudi_arch_plan", arguments: { kind: "web", framework: "vue-vite", name: "blank", root: blank } });
+      const planSc = r?.result?.structuredContent ?? {};
+      check("arch_plan: 生成 Vue 方案", !errOf(r) && planSc.framework === "vue-vite" && (planSc.files ?? []).length >= 8, textOf(r).slice(0, 160));
+      check("arch_plan: 方案落盘 .wudi/architecture.json", existsSync(join(blank, ".wudi", "architecture.json")));
+      r = await s.call("tools/call", { name: "wudi_arch_scaffold", arguments: { plan: planSc, root: blank } });
+      check("arch_scaffold: 未确认拒绝", errOf(r) && textOf(r).includes("confirm"));
+      r = await s.call("tools/call", { name: "wudi_arch_scaffold", arguments: { plan: planSc, confirm: true, root: blank } });
+      check("arch_scaffold: 写入骨架", !errOf(r)
+        && (r?.result?.structuredContent?.created ?? []).includes("package.json")
+        && existsSync(join(blank, "src", "main.ts")), textOf(r).slice(0, 160));
+      r = await s.call("tools/call", { name: "wudi_arch_scaffold", arguments: { confirm: true, root: blank } });
+      check("arch_scaffold: 幂等（读方案且不覆盖）", !errOf(r)
+        && (r?.result?.structuredContent?.skipped ?? []).length >= 8
+        && (r?.result?.structuredContent?.created ?? []).length === 0);
+      r = await s.call("tools/call", { name: "wudi_architecture", arguments: { root: blank } });
+      const fwAfter = r?.result?.structuredContent?.frameworks ?? [];
+      check("arch_plan: 骨架写入后可识别技术栈", fwAfter.includes("Vue") && fwAfter.includes("Vite"), JSON.stringify(fwAfter));
     } finally {
       await rm(outside, { recursive: true, force: true });
     }

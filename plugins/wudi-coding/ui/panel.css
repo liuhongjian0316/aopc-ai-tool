@@ -327,3 +327,4 @@ details.fold[open] > summary:hover { color: var(--text); }
 .sec { margin-bottom: 12px; }
 .sec-title { font-size: 11.5px; font-weight: 700; color: var(--text-dim); margin-bottom: 10px; letter-spacing: .06em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
 .sec-title .line { flex: 1; height: 1px; background: var(--border); }
+.plan-tree { font-size: 12px; line-height: 1.75; color: var(--text-2); background: var(--bg-inset); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; max-height: 260px; overflow: auto; }

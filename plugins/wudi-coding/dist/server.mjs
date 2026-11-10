@@ -1354,6 +1354,34 @@ var TOOLS = [
     }
   },
   {
+    name: "wudi_arch_plan",
+    description: "\u4E3A\u7A7A\u9879\u76EE\u8BBE\u8BA1\u67B6\u6784\u65B9\u6848\uFF08web / miniprogram / mobile / backend / monorepo \u9884\u8BBE\uFF09\uFF1A\u8F93\u51FA\u6280\u672F\u9009\u578B\u3001\u76EE\u5F55\u4E0E\u6587\u4EF6\u6E05\u5355\u3001\u5E38\u7528\u547D\u4EE4\u3001\u6CE8\u610F\u4E8B\u9879\uFF0C\u5E76\u4FDD\u5B58\u5230 <\u9879\u76EE>/.wudi/architecture.json\u3002\u914D\u5408 wudi_arch_scaffold \u5199\u5165\u9AA8\u67B6\uFF0C\u518D\u7531 Agent \u5B9E\u73B0\u5404\u6A21\u5757\u3002",
+    _meta: UI_META,
+    inputSchema: {
+      type: "object",
+      properties: {
+        kind: { type: "string", enum: ["web", "miniprogram", "mobile", "backend", "monorepo"], description: "\u9879\u76EE\u7C7B\u578B\uFF0C\u7F3A\u7701 web" },
+        framework: { type: "string", description: "\u6846\u67B6\uFF1Aweb[vue-vite|react-vite]\u3001miniprogram[taro|native-wechat]\u3001mobile[flutter|swiftui]\u3001backend[nest|go-gin]\u3001monorepo[pnpm-workspace]" },
+        name: { type: "string", description: "\u9879\u76EE\u663E\u793A\u540D\uFF08\u7F3A\u7701\u7528\u6863\u6848\u540D/\u76EE\u5F55\u540D\uFF09" },
+        root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF09" }
+      }
+    }
+  },
+  {
+    name: "wudi_arch_scaffold",
+    description: "\u6309\u67B6\u6784\u65B9\u6848\u5199\u5165\u9879\u76EE\u9AA8\u67B6\uFF1A\u521B\u5EFA\u76EE\u5F55\u4E0E\u521D\u59CB\u6587\u4EF6\uFF0C\u7EDD\u4E0D\u8986\u76D6\u5DF2\u6709\u6587\u4EF6\u3002plan \u7F3A\u7701\u8BFB\u53D6 <\u9879\u76EE>/.wudi/architecture.json\uFF1B\u5FC5\u987B\u4F20 confirm: true\u3002",
+    _meta: UI_META,
+    inputSchema: {
+      type: "object",
+      properties: {
+        plan: { type: "object", description: "wudi_arch_plan \u8FD4\u56DE\u7684\u65B9\u6848\u5BF9\u8C61\uFF08\u7F3A\u7701\u8BFB .wudi/architecture.json\uFF09" },
+        confirm: { type: "boolean", description: "\u5FC5\u987B\u4E3A true \u624D\u5199\u5165\uFF08\u5B89\u5168\u95F8\uFF09" },
+        root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF09" }
+      },
+      required: ["confirm"]
+    }
+  },
+  {
     name: "wudi_docs_register",
     description: "\u767B\u8BB0/\u66F4\u65B0\u4E00\u4EFD\u9879\u76EE\u6587\u6863\u5230 .wudi/docs.json\uFF08\u5DE5\u4F5C\u53F0\u6587\u6863\u5E93\u53EF\u89C1\uFF09\u3002path \u76F8\u5BF9\u9879\u76EE\u6839\u3002",
     inputSchema: {
@@ -1698,6 +1726,10 @@ async function callTool(name, args = {}) {
         return await toolStatus(args);
       case "wudi_architecture":
         return toolArchitecture(args);
+      case "wudi_arch_plan":
+        return toolArchPlan(args);
+      case "wudi_arch_scaffold":
+        return toolArchScaffold(args);
       case "wudi_docs_register":
         return toolDocsRegister(args);
       case "wudi_ssh_ping":
@@ -2884,7 +2916,11 @@ function archScan(root) {
   for (const e of rootEntries) {
     if (e.isFile()) {
       if (ARCH_ENTRY_NAMES.has(e.name)) entries.push({ name: e.name, path: join3(root, e.name) });
-      take(e.name);
+      const ext = e.name.split(".").pop()?.toLowerCase() ?? "";
+      if (ARCH_LANGS[ext]) {
+        files++;
+        take(e.name);
+      }
     } else if (e.isDirectory() && !ARCH_SKIP_DIRS.has(e.name) && !e.name.startsWith(".")) {
       const mod = { name: e.name, path: join3(root, e.name), files: 0, langs: /* @__PURE__ */ new Map() };
       modules.push(mod);
@@ -3004,6 +3040,721 @@ function toolArchitecture(args = {}) {
   lines.push(`\u5173\u8054\uFF1A\u753B\u5E03 ${related.designs}\uFF5C\u6587\u6863 ${related.docs}\uFF5C\u73AF\u5883 ${related.envs.join("\u3001") || "\u672A\u914D\u7F6E"}`);
   if (scan.truncated) lines.push(`\uFF08\u626B\u63CF\u8FBE\u5230 4000 \u6587\u4EF6\u4E0A\u9650\uFF0C\u7EDF\u8BA1\u4E3A\u4F9D\u636E\u6837\u672C\u7684\u4E0B\u9650\uFF09`);
   return ok(lines.join("\n"), structured);
+}
+var archJson = (obj) => JSON.stringify(obj, null, 2) + "\n";
+var archSlug = (name) => String(name || "app").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") || "app";
+var ARCH_PRESETS = {
+  web: {
+    label: "Web \u524D\u7AEF",
+    frameworks: {
+      "vue-vite": {
+        label: "Vue 3 + Vite",
+        summary: "Vue 3 + TypeScript + Vite \u5355\u9875\u5E94\u7528\uFF1A\u7EC4\u4EF6 / \u89C6\u56FE / \u6837\u5F0F\u5206\u5C42\uFF0C\u5B89\u88C5\u540E\u53EF\u76F4\u63A5\u542F\u52A8\u5F00\u53D1\u670D\u52A1\u5668\u3002",
+        dirs: ["public", "src/components", "src/views", "src/styles"],
+        commands: { install: "npm install", dev: "npm run dev", build: "npm run build" },
+        notes: ["\u8DEF\u7531\u6309\u9700\u5F15\u5165 vue-router\uFF0C\u72B6\u6001\u6309\u9700\u5F15\u5165 pinia", "\u5168\u5C40\u6837\u5F0F\u5165\u53E3 src/styles/main.css"],
+        files: (name) => {
+          const slug = archSlug(name);
+          return [
+            ["package.json", "\u4F9D\u8D56\u4E0E\u811A\u672C", archJson({
+              name: slug,
+              private: true,
+              version: "0.1.0",
+              type: "module",
+              scripts: { dev: "vite", build: "vue-tsc -b && vite build", preview: "vite preview" },
+              dependencies: { vue: "^3.5.0" },
+              devDependencies: { "@vitejs/plugin-vue": "^5.2.0", typescript: "^5.7.0", vite: "^6.0.0", "vue-tsc": "^2.2.0" }
+            })],
+            ["index.html", "\u5E94\u7528\u5165\u53E3 HTML", `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${name}</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+`],
+            ["vite.config.ts", "Vite \u914D\u7F6E", `import { defineConfig } from "vite";
+import vue from "@vitejs/plugin-vue";
+
+export default defineConfig({ plugins: [vue()] });
+`],
+            ["tsconfig.json", "TypeScript \u914D\u7F6E", archJson({
+              compilerOptions: { target: "ES2022", module: "ESNext", moduleResolution: "Bundler", strict: true, skipLibCheck: true, jsx: "preserve" },
+              include: ["src/**/*.ts", "src/**/*.vue"]
+            })],
+            ["src/main.ts", "\u5E94\u7528\u5F15\u5BFC", `import { createApp } from "vue";
+import App from "./App.vue";
+import "./styles/main.css";
+
+createApp(App).mount("#app");
+`],
+            ["src/App.vue", "\u6839\u7EC4\u4EF6", `<script setup lang="ts">
+import { ref } from "vue";
+
+const title = ref("${name}");
+</script>
+
+<template>
+  <main class="app">
+    <h1>{{ title }}</h1>
+    <p>\u5F00\u59CB\u5B9E\u73B0\u9875\u9762\uFF1A\u5728 src/views \u6DFB\u52A0\u89C6\u56FE\uFF0C\u5728 src/components \u6DFB\u52A0\u7EC4\u4EF6\u3002</p>
+  </main>
+</template>
+`],
+            ["src/styles/main.css", "\u5168\u5C40\u6837\u5F0F", `:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { margin: 0; }
+.app { max-width: 960px; margin: 64px auto; padding: 0 24px; }
+`],
+            ["src/components/.gitkeep", "\u7EC4\u4EF6\u76EE\u5F55", ""],
+            ["src/views/.gitkeep", "\u9875\u9762\u76EE\u5F55", ""],
+            ["public/.gitkeep", "\u9759\u6001\u8D44\u6E90\u76EE\u5F55", ""],
+            ["README.md", "\u9879\u76EE\u8BF4\u660E", `# ${name}
+
+Vue 3 + Vite + TypeScript\u3002
+
+\`\`\`bash
+npm install
+npm run dev
+\`\`\`
+`]
+          ];
+        }
+      },
+      "react-vite": {
+        label: "React + Vite",
+        summary: "React 18 + TypeScript + Vite \u5355\u9875\u5E94\u7528\uFF1A\u9875\u9762 / \u7EC4\u4EF6 / \u6837\u5F0F\u5206\u5C42\uFF0C\u5B89\u88C5\u540E\u53EF\u76F4\u63A5\u542F\u52A8\u3002",
+        dirs: ["public", "src/components", "src/pages", "src/styles"],
+        commands: { install: "npm install", dev: "npm run dev", build: "npm run build" },
+        notes: ["\u8DEF\u7531\u6309\u9700\u5F15\u5165 react-router-dom", "\u5168\u5C40\u6837\u5F0F\u5165\u53E3 src/styles/main.css"],
+        files: (name) => {
+          const slug = archSlug(name);
+          return [
+            ["package.json", "\u4F9D\u8D56\u4E0E\u811A\u672C", archJson({
+              name: slug,
+              private: true,
+              version: "0.1.0",
+              type: "module",
+              scripts: { dev: "vite", build: "tsc -b && vite build", preview: "vite preview" },
+              dependencies: { react: "^18.3.0", "react-dom": "^18.3.0" },
+              devDependencies: { "@types/react": "^18.3.0", "@types/react-dom": "^18.3.0", "@vitejs/plugin-react": "^4.3.0", typescript: "^5.7.0", vite: "^6.0.0" }
+            })],
+            ["index.html", "\u5E94\u7528\u5165\u53E3 HTML", `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${name}</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+`],
+            ["vite.config.ts", "Vite \u914D\u7F6E", `import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+export default defineConfig({ plugins: [react()] });
+`],
+            ["tsconfig.json", "TypeScript \u914D\u7F6E", archJson({
+              compilerOptions: { target: "ES2022", module: "ESNext", moduleResolution: "Bundler", jsx: "react-jsx", strict: true, skipLibCheck: true },
+              include: ["src"]
+            })],
+            ["src/main.tsx", "\u5E94\u7528\u5F15\u5BFC", `import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App";
+import "./styles/main.css";
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+`],
+            ["src/App.tsx", "\u6839\u7EC4\u4EF6", `export default function App() {
+  return (
+    <main className="app">
+      <h1>${name}</h1>
+      <p>\u5F00\u59CB\u5B9E\u73B0\u9875\u9762\uFF1A\u5728 src/pages \u6DFB\u52A0\u9875\u9762\uFF0C\u5728 src/components \u6DFB\u52A0\u7EC4\u4EF6\u3002</p>
+    </main>
+  );
+}
+`],
+            ["src/styles/main.css", "\u5168\u5C40\u6837\u5F0F", `:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { margin: 0; }
+.app { max-width: 960px; margin: 64px auto; padding: 0 24px; }
+`],
+            ["src/components/.gitkeep", "\u7EC4\u4EF6\u76EE\u5F55", ""],
+            ["src/pages/.gitkeep", "\u9875\u9762\u76EE\u5F55", ""],
+            ["public/.gitkeep", "\u9759\u6001\u8D44\u6E90\u76EE\u5F55", ""],
+            ["README.md", "\u9879\u76EE\u8BF4\u660E", `# ${name}
+
+React + Vite + TypeScript\u3002
+
+\`\`\`bash
+npm install
+npm run dev
+\`\`\`
+`]
+          ];
+        }
+      }
+    }
+  },
+  miniprogram: {
+    label: "\u5C0F\u7A0B\u5E8F",
+    frameworks: {
+      taro: {
+        label: "Taro\uFF08React\uFF09",
+        summary: "Taro 4 + React + TypeScript \u8DE8\u7AEF\u5C0F\u7A0B\u5E8F\uFF1A\u914D\u7F6E / \u5E94\u7528 / \u9875\u9762\u5206\u5C42\uFF0C\u53EF\u7F16\u8BD1\u5230\u5FAE\u4FE1\u5C0F\u7A0B\u5E8F\u3002",
+        dirs: ["config", "src/pages/index"],
+        commands: { install: "npm install", dev: "npm run dev:weapp", build: "npm run build:weapp" },
+        notes: ["project.config.json \u91CC\u7684 appid \u9700\u66FF\u6362\u4E3A\u4F60\u7684\u5C0F\u7A0B\u5E8F AppID", "\u9875\u9762\u6CE8\u518C\u5728 src/app.config.ts \u7684 pages \u6570\u7EC4"],
+        files: (name) => {
+          const slug = archSlug(name);
+          return [
+            ["package.json", "\u4F9D\u8D56\u4E0E\u811A\u672C", archJson({
+              name: slug,
+              private: true,
+              version: "0.1.0",
+              scripts: { "dev:weapp": "taro build --type weapp --watch", "build:weapp": "taro build --type weapp" },
+              dependencies: { "@tarojs/components": "^4.0.0", "@tarojs/helper": "^4.0.0", "@tarojs/plugin-framework-react": "^4.0.0", "@tarojs/react": "^4.0.0", "@tarojs/runtime": "^4.0.0", "@tarojs/taro": "^4.0.0", react: "^18.2.0", "react-dom": "^18.2.0" },
+              devDependencies: { "@tarojs/cli": "^4.0.0", "@tarojs/webpack5-runner": "^4.0.0", typescript: "^5.7.0" }
+            })],
+            ["config/index.ts", "Taro \u7F16\u8BD1\u914D\u7F6E", `export default {
+  projectName: "${slug}",
+  outputRoot: "dist",
+  framework: "react",
+  compiler: { type: "webpack5", prebundle: { enable: true } },
+};
+`],
+            ["project.config.json", "\u5FAE\u4FE1\u5F00\u53D1\u8005\u5DE5\u5177\u914D\u7F6E", archJson({ miniprogramRoot: "dist/", projectname: slug, appid: "touristappid", setting: { es6: true } })],
+            ["src/app.tsx", "\u5E94\u7528\u5165\u53E3", `import { PropsWithChildren } from "react";
+import "./app.scss";
+
+export default function App({ children }: PropsWithChildren) {
+  return children;
+}
+`],
+            ["src/app.config.ts", "\u5E94\u7528\u914D\u7F6E\uFF08\u9875\u9762\u6CE8\u518C\uFF09", `export default {
+  pages: ["pages/index/index"],
+  window: { navigationBarTitleText: "${name}" },
+};
+`],
+            ["src/app.scss", "\u5168\u5C40\u6837\u5F0F", `page { background: #f5f5f5; }
+`],
+            ["src/pages/index/index.tsx", "\u9996\u9875", `import { View, Text } from "@tarojs/components";
+import "./index.scss";
+
+export default function Index() {
+  return (
+    <View className="page">
+      <Text className="title">${name}</Text>
+      <Text>\u5F00\u59CB\u5B9E\u73B0\u9875\u9762\uFF1A\u5728 src/pages \u4E0B\u65B0\u589E\u9875\u9762\u5E76\u6CE8\u518C\u5230 app.config.ts\u3002</Text>
+    </View>
+  );
+}
+`],
+            ["src/pages/index/index.config.ts", "\u9996\u9875\u914D\u7F6E", `export default { navigationBarTitleText: "\u9996\u9875" };
+`],
+            ["src/pages/index/index.scss", "\u9996\u9875\u6837\u5F0F", `.page { padding: 24px; }
+.title { display: block; font-size: 32px; font-weight: 700; margin-bottom: 12px; }
+`],
+            ["tsconfig.json", "TypeScript \u914D\u7F6E", archJson({ compilerOptions: { target: "ES2020", module: "ESNext", moduleResolution: "Node", jsx: "react-jsx", strict: true, skipLibCheck: true } })],
+            ["README.md", "\u9879\u76EE\u8BF4\u660E", `# ${name}
+
+Taro 4 + React + TypeScript \u5C0F\u7A0B\u5E8F\u3002
+
+\`\`\`bash
+npm install
+npm run dev:weapp
+\`\`\`
+
+\u7528\u5FAE\u4FE1\u5F00\u53D1\u8005\u5DE5\u5177\u6253\u5F00\u9879\u76EE\u6839\u76EE\u5F55\uFF08\u8BFB\u53D6 dist/\uFF09\u3002
+`]
+          ];
+        }
+      },
+      "native-wechat": {
+        label: "\u5FAE\u4FE1\u539F\u751F",
+        summary: "\u5FAE\u4FE1\u539F\u751F\u5C0F\u7A0B\u5E8F\uFF1Aapp \u5168\u5C40 + pages \u9875\u9762\u56DB\u4EF6\u5957\uFF0C\u65E0\u6784\u5EFA\u4F9D\u8D56\u3002",
+        dirs: ["pages/index"],
+        commands: { install: "\u65E0\u9700\u5B89\u88C5", dev: "\u5FAE\u4FE1\u5F00\u53D1\u8005\u5DE5\u5177\u6253\u5F00\u9879\u76EE\u76EE\u5F55", build: "\u5FAE\u4FE1\u5F00\u53D1\u8005\u5DE5\u5177\u4E0A\u4F20" },
+        notes: ["project.config.json \u7684 appid \u9700\u66FF\u6362\u4E3A\u4F60\u7684\u5C0F\u7A0B\u5E8F AppID"],
+        files: (name) => {
+          const slug = archSlug(name);
+          return [
+            ["project.config.json", "\u5FAE\u4FE1\u5F00\u53D1\u8005\u5DE5\u5177\u914D\u7F6E", archJson({ description: name, projectname: slug, appid: "touristappid", compileType: "miniprogram", setting: { es6: true, minified: true } })],
+            ["app.js", "\u5E94\u7528\u5165\u53E3", `App({ onLaunch() {} });
+`],
+            ["app.json", "\u5E94\u7528\u914D\u7F6E\uFF08\u9875\u9762\u6CE8\u518C\uFF09", archJson({ pages: ["pages/index/index"], window: { navigationBarTitleText: name } })],
+            ["app.wxss", "\u5168\u5C40\u6837\u5F0F", `page { background: #f5f5f5; }
+`],
+            ["sitemap.json", "\u7D22\u5F15\u914D\u7F6E", archJson({ rules: [{ action: "allow", page: "*" }] })],
+            ["pages/index/index.js", "\u9996\u9875\u903B\u8F91", `Page({ data: { title: "${name}" } });
+`],
+            ["pages/index/index.json", "\u9996\u9875\u914D\u7F6E", archJson({ navigationBarTitleText: "\u9996\u9875" })],
+            ["pages/index/index.wxml", "\u9996\u9875\u7ED3\u6784", `<view class="page">
+  <view class="title">{{title}}</view>
+  <view>\u5F00\u59CB\u5B9E\u73B0\u9875\u9762\uFF1A\u5728 pages \u4E0B\u65B0\u589E\u9875\u9762\u5E76\u6CE8\u518C\u5230 app.json\u3002</view>
+</view>
+`],
+            ["pages/index/index.wxss", "\u9996\u9875\u6837\u5F0F", `.page { padding: 24px; }
+.title { font-size: 32rpx; font-weight: 700; margin-bottom: 16rpx; }
+`],
+            ["README.md", "\u9879\u76EE\u8BF4\u660E", `# ${name}
+
+\u5FAE\u4FE1\u539F\u751F\u5C0F\u7A0B\u5E8F\u3002\u7528\u5FAE\u4FE1\u5F00\u53D1\u8005\u5DE5\u5177\u6253\u5F00\u672C\u76EE\u5F55\u5373\u53EF\u9884\u89C8\u3002
+`]
+          ];
+        }
+      }
+    }
+  },
+  mobile: {
+    label: "\u79FB\u52A8 App",
+    frameworks: {
+      flutter: {
+        label: "Flutter",
+        summary: "Flutter \u8DE8\u7AEF App\uFF1Alib/pages + lib/widgets \u5206\u5C42\uFF0C\u53EF\u76F4\u63A5 flutter run\u3002",
+        dirs: ["lib/pages", "lib/widgets"],
+        commands: { install: "flutter pub get", dev: "flutter run", build: "flutter build apk --release" },
+        notes: ["\u82E5\u7F3A\u5C11 ios/android \u5E73\u53F0\u76EE\u5F55\uFF0C\u5148\u6267\u884C flutter create ."],
+        files: (name) => {
+          const slug = archSlug(name).replace(/-/g, "_");
+          return [
+            ["pubspec.yaml", "\u4F9D\u8D56\u4E0E\u5143\u6570\u636E", `name: ${slug}
+description: ${name}
+publish_to: "none"
+version: 0.1.0
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+flutter:
+  uses-material-design: true
+`],
+            ["analysis_options.yaml", "\u9759\u6001\u68C0\u67E5", `include: package:flutter_lints/flutter.yaml
+`],
+            ["lib/main.dart", "\u5E94\u7528\u5165\u53E3", `import "package:flutter/material.dart";
+
+void main() => runApp(const App());
+
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: "${name}",
+      home: const HomePage(),
+    );
+  }
+}
+
+class HomePage extends StatelessWidget {
+  const HomePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("${name}")),
+      body: const Center(child: Text("\u5F00\u59CB\u5B9E\u73B0\u9875\u9762\uFF1A\u5728 lib/pages \u6DFB\u52A0\u9875\u9762")),
+    );
+  }
+}
+`],
+            ["lib/pages/.gitkeep", "\u9875\u9762\u76EE\u5F55", ""],
+            ["lib/widgets/.gitkeep", "\u7EC4\u4EF6\u76EE\u5F55", ""],
+            ["README.md", "\u9879\u76EE\u8BF4\u660E", `# ${name}
+
+Flutter App\u3002
+
+\`\`\`bash
+flutter pub get
+flutter run
+\`\`\`
+`]
+          ];
+        }
+      },
+      swiftui: {
+        label: "SwiftUI",
+        summary: "SwiftUI App \u4EE3\u7801\u9AA8\u67B6\uFF08App / Views / Features \u5206\u5C42\uFF09\u3002",
+        dirs: ["App/Views", "App/Features", "App/Resources"],
+        commands: { install: "Xcode \u6253\u5F00\u5DE5\u7A0B", dev: "Xcode Run", build: "Xcode Archive" },
+        notes: ["\u5148\u7528 Xcode \u65B0\u5EFA\u540C\u540D iOS App \u5DE5\u7A0B\uFF0C\u518D\u628A\u672C\u9AA8\u67B6\u6587\u4EF6\u52A0\u5165\u5DE5\u7A0B", "\u9700\u8981\u53EF\u76F4\u63A5\u8FD0\u884C\u7684\u9996\u7248\u53EF\u6539\u7528 Flutter \u65B9\u6848"],
+        files: (name) => [
+          ["App/AppApp.swift", "\u5E94\u7528\u5165\u53E3", `import SwiftUI
+
+@main
+struct ${String(name).replace(/[^A-Za-z0-9]/g, "") || "App"}App: App {
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+        }
+    }
+}
+`],
+          ["App/Views/ContentView.swift", "\u6839\u89C6\u56FE", `import SwiftUI
+
+struct ContentView: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            Text("${name}").font(.title.bold())
+            Text("\u5F00\u59CB\u5B9E\u73B0\u9875\u9762\uFF1A\u5728 App/Features \u6DFB\u52A0\u529F\u80FD\u6A21\u5757")
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+    }
+}
+`],
+          ["App/Features/.gitkeep", "\u529F\u80FD\u6A21\u5757\u76EE\u5F55", ""],
+          ["App/Resources/.gitkeep", "\u8D44\u6E90\u76EE\u5F55", ""],
+          ["README.md", "\u9879\u76EE\u8BF4\u660E", `# ${name}
+
+SwiftUI App \u9AA8\u67B6\u3002\u7528 Xcode \u65B0\u5EFA\u5DE5\u7A0B\u540E\u628A App/ \u4E0B\u7684\u6587\u4EF6\u52A0\u5165\u5DE5\u7A0B\u3002
+`]
+        ]
+      }
+    }
+  },
+  backend: {
+    label: "\u540E\u7AEF\u670D\u52A1",
+    frameworks: {
+      nest: {
+        label: "NestJS",
+        summary: "NestJS + TypeScript \u670D\u52A1\uFF1A\u6A21\u5757 / \u63A7\u5236\u5668 / \u670D\u52A1\u5206\u5C42\uFF0C\u9ED8\u8BA4\u76D1\u542C 3000\u3002",
+        dirs: ["src/common", "src/modules"],
+        commands: { install: "npm install", dev: "npm run start:dev", build: "npm run build" },
+        notes: ["\u65B0\u589E\u4E1A\u52A1\u6A21\u5757\u653E\u5230 src/modules/<name>\uFF0C\u5728 AppModule \u6CE8\u518C", "\u73AF\u5883\u53D8\u91CF\u53C2\u8003 .env.example"],
+        files: (name) => {
+          const slug = archSlug(name);
+          return [
+            ["package.json", "\u4F9D\u8D56\u4E0E\u811A\u672C", archJson({
+              name: slug,
+              private: true,
+              version: "0.1.0",
+              scripts: { "start:dev": "nest start --watch", build: "nest build", start: "node dist/main.js" },
+              dependencies: { "@nestjs/common": "^10.4.0", "@nestjs/core": "^10.4.0", "@nestjs/platform-express": "^10.4.0", "reflect-metadata": "^0.2.2", rxjs: "^7.8.1" },
+              devDependencies: { "@nestjs/cli": "^10.4.0", "@types/node": "^22.10.0", "ts-node": "^10.9.2", typescript: "^5.7.0" }
+            })],
+            ["tsconfig.json", "TypeScript \u914D\u7F6E", archJson({ compilerOptions: { target: "ES2022", module: "commonjs", moduleResolution: "node", experimentalDecorators: true, emitDecoratorMetadata: true, outDir: "dist", strict: true, skipLibCheck: true }, include: ["src/**/*.ts"] })],
+            ["nest-cli.json", "Nest CLI \u914D\u7F6E", archJson({ collection: "@nestjs/schematics", sourceRoot: "src" })],
+            ["src/main.ts", "\u670D\u52A1\u5165\u53E3", `import { NestFactory } from "@nestjs/core";
+import { AppModule } from "./app.module";
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  await app.listen(process.env.PORT ?? 3000);
+}
+bootstrap();
+`],
+            ["src/app.module.ts", "\u6839\u6A21\u5757", `import { Module } from "@nestjs/common";
+import { AppController } from "./app.controller";
+import { AppService } from "./app.service";
+
+@Module({
+  imports: [],
+  controllers: [AppController],
+  providers: [AppService],
+})
+export class AppModule {}
+`],
+            ["src/app.controller.ts", "\u6839\u63A7\u5236\u5668", `import { Controller, Get } from "@nestjs/common";
+import { AppService } from "./app.service";
+
+@Controller()
+export class AppController {
+  constructor(private readonly appService: AppService) {}
+
+  @Get("healthz")
+  health() {
+    return this.appService.health();
+  }
+}
+`],
+            ["src/app.service.ts", "\u6839\u670D\u52A1", `import { Injectable } from "@nestjs/common";
+
+@Injectable()
+export class AppService {
+  health() {
+    return { ok: true, service: "${name}" };
+  }
+}
+`],
+            [".env.example", "\u73AF\u5883\u53D8\u91CF\u6837\u4F8B", `PORT=3000
+`],
+            ["src/common/.gitkeep", "\u516C\u5171\u7EC4\u4EF6\u76EE\u5F55", ""],
+            ["src/modules/.gitkeep", "\u4E1A\u52A1\u6A21\u5757\u76EE\u5F55", ""],
+            ["README.md", "\u9879\u76EE\u8BF4\u660E", `# ${name}
+
+NestJS \u670D\u52A1\u3002
+
+\`\`\`bash
+npm install
+npm run start:dev
+curl http://127.0.0.1:3000/healthz
+\`\`\`
+`]
+          ];
+        }
+      },
+      "go-gin": {
+        label: "Go + Gin",
+        summary: "Go + Gin HTTP \u670D\u52A1\uFF1Acmd / internal \u5206\u5C42\uFF0C\u9ED8\u8BA4\u76D1\u542C 8080\u3002",
+        dirs: ["cmd/server", "internal/handler", "internal/service", "internal/store"],
+        commands: { install: "go mod tidy", dev: "go run ./cmd/server", build: "go build -o bin/server ./cmd/server" },
+        notes: ["\u4E1A\u52A1\u6309 internal/{handler,service,store} \u5206\u5C42", "Go \u7248\u672C\u8981\u6C42 1.22+"],
+        files: (name) => {
+          const mod = archSlug(name);
+          return [
+            ["go.mod", "\u6A21\u5757\u5B9A\u4E49", `module ${mod}
+
+go 1.22
+
+require github.com/gin-gonic/gin v1.10.0
+`],
+            ["cmd/server/main.go", "\u670D\u52A1\u5165\u53E3", `package main
+
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+)
+
+func main() {
+	r := gin.Default()
+	r.GET("/healthz", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true, "service": "${name}"})
+	})
+	_ = r.Run(":8080")
+}
+`],
+            ["internal/handler/.gitkeep", "HTTP \u5904\u7406\u5668\u76EE\u5F55", ""],
+            ["internal/service/.gitkeep", "\u4E1A\u52A1\u903B\u8F91\u76EE\u5F55", ""],
+            ["internal/store/.gitkeep", "\u6570\u636E\u8BBF\u95EE\u76EE\u5F55", ""],
+            ["Makefile", "\u5E38\u7528\u547D\u4EE4", `.PHONY: run build
+run:
+	go run ./cmd/server
+build:
+	go build -o bin/server ./cmd/server
+`],
+            ["README.md", "\u9879\u76EE\u8BF4\u660E", `# ${name}
+
+Go + Gin \u670D\u52A1\u3002
+
+\`\`\`bash
+go mod tidy
+go run ./cmd/server
+curl http://127.0.0.1:8080/healthz
+\`\`\`
+`]
+          ];
+        }
+      }
+    }
+  },
+  monorepo: {
+    label: "Monorepo \u5168\u6808",
+    frameworks: {
+      "pnpm-workspace": {
+        label: "pnpm workspace",
+        summary: "pnpm monorepo\uFF1Aapps/web + apps/api + packages/ui \u4E09\u5305\u7ED3\u6784\uFF0C\u5171\u4EAB\u4F9D\u8D56\u4E0E\u811A\u672C\u3002",
+        dirs: ["apps/web", "apps/api", "packages/ui"],
+        commands: { install: "pnpm install", dev: "pnpm -r dev", build: "pnpm -r build" },
+        notes: ["\u5404\u5B50\u5305\u53EF\u7EE7\u7EED\u8C03\u7528 wudi_arch_plan\uFF08kind=web/backend\uFF09\u7EC6\u5316\u9AA8\u67B6", "\u5B50\u5305 package.json \u540D\u79F0\u6309 @<scope>/<name> \u7EA6\u5B9A"],
+        files: (name) => {
+          const scope = archSlug(name);
+          return [
+            ["package.json", "\u6839\u4F9D\u8D56\u4E0E\u811A\u672C", archJson({ name: scope, private: true, version: "0.1.0", packageManager: "pnpm@9.12.0", scripts: { dev: "pnpm -r dev", build: "pnpm -r build", lint: "pnpm -r lint" } })],
+            ["pnpm-workspace.yaml", "workspace \u58F0\u660E", `packages:
+  - "apps/*"
+  - "packages/*"
+`],
+            ["apps/web/package.json", "Web \u5E94\u7528\u5305", archJson({ name: `@${scope}/web`, private: true, version: "0.1.0", scripts: { dev: "vite", build: "vite build" }, dependencies: { react: "^18.3.0", "react-dom": "^18.3.0" }, devDependencies: { vite: "^6.0.0", "@vitejs/plugin-react": "^4.3.0" } })],
+            ["apps/web/index.html", "Web \u5165\u53E3 HTML", `<!doctype html>
+<html lang="zh-CN"><head><meta charset="UTF-8" /><title>${name}</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>
+`],
+            ["apps/web/src/main.tsx", "Web \u5165\u53E3", `import React from "react";
+import ReactDOM from "react-dom/client";
+
+ReactDOM.createRoot(document.getElementById("root")!).render(<h1>${name}</h1>);
+`],
+            ["apps/api/package.json", "API \u5E94\u7528\u5305", archJson({ name: `@${scope}/api`, private: true, version: "0.1.0", scripts: { dev: "tsx watch src/main.ts", build: "tsc -p tsconfig.json" }, dependencies: { express: "^4.21.0" }, devDependencies: { "@types/express": "^5.0.0", "@types/node": "^22.10.0", tsx: "^4.19.0", typescript: "^5.7.0" } })],
+            ["apps/api/src/main.ts", "API \u5165\u53E3", `import express from "express";
+
+const app = express();
+app.get("/healthz", (_req, res) => res.json({ ok: true }));
+app.listen(3000, () => console.log("api on :3000"));
+`],
+            ["packages/ui/package.json", "\u5171\u4EAB UI \u5305", archJson({ name: `@${scope}/ui`, private: true, version: "0.1.0", main: "src/index.ts" })],
+            ["packages/ui/src/index.ts", "\u5171\u4EAB\u7EC4\u4EF6\u51FA\u53E3", `export const version = "0.1.0";
+`],
+            ["README.md", "\u9879\u76EE\u8BF4\u660E", `# ${name}
+
+pnpm monorepo\uFF1Aapps/web\u3001apps/api\u3001packages/ui\u3002
+
+\`\`\`bash
+pnpm install
+pnpm dev
+\`\`\`
+`]
+          ];
+        }
+      }
+    }
+  }
+};
+function archTreeText(dirs, filePaths) {
+  const dirSet = new Set(dirs);
+  for (const p of [...dirs, ...filePaths]) {
+    const parts = p.split("/");
+    for (let i = 1; i < parts.length; i++) dirSet.add(parts.slice(0, i).join("/"));
+  }
+  const all = [.../* @__PURE__ */ new Set([...dirSet, ...filePaths])].sort();
+  return all.map((p) => {
+    const depth = Math.max(0, p.split("/").length - 1);
+    return `${"  ".repeat(depth)}${p.split("/").pop()}${dirSet.has(p) ? "/" : ""}`;
+  }).join("\n");
+}
+function toolArchPlan(args = {}) {
+  let root;
+  try {
+    root = toolRoot(args);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  const kind = String(args.kind ?? "web").trim();
+  const preset = ARCH_PRESETS[kind];
+  if (!preset) return fail(`\u4E0D\u652F\u6301\u7684 kind\uFF1A${kind}\uFF08\u53EF\u9009\uFF1A${Object.keys(ARCH_PRESETS).join("\u3001")}\uFF09`);
+  const fw = String(args.framework ?? "").trim() || Object.keys(preset.frameworks)[0];
+  const fwPreset = preset.frameworks[fw];
+  if (!fwPreset) return fail(`\u4E0D\u652F\u6301\u7684 framework\uFF1A${fw}\uFF08${preset.label} \u53EF\u9009\uFF1A${Object.keys(preset.frameworks).join("\u3001")}\uFF09`);
+  const name = String(args.name ?? "").trim() || loadProjectAt(root)?.name || projectBaseName(root);
+  const files = fwPreset.files(name).map(([path2, purpose, content]) => ({ path: path2, purpose, content }));
+  const plan = {
+    kind,
+    kindLabel: preset.label,
+    framework: fw,
+    frameworkLabel: fwPreset.label,
+    name,
+    summary: fwPreset.summary,
+    dirs: fwPreset.dirs,
+    files,
+    commands: fwPreset.commands,
+    notes: fwPreset.notes ?? [],
+    generatedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  try {
+    mkdirSync2(join3(root, ".wudi"), { recursive: true });
+    writeFileSync2(join3(root, ".wudi", "architecture.json"), JSON.stringify(plan, null, 2));
+    plan.savedPath = ".wudi/architecture.json";
+  } catch (err) {
+    return fail(`\u67B6\u6784\u65B9\u6848\u5DF2\u751F\u6210\u4F46\u4FDD\u5B58\u5931\u8D25\uFF1A${String(err?.message ?? err)}`);
+  }
+  const text = [
+    `\u2550\u2550\u2550 \u67B6\u6784\u65B9\u6848\uFF1A${preset.label} \xB7 ${fwPreset.label}\uFF08${name}\uFF09\u2550\u2550\u2550`,
+    fwPreset.summary,
+    `\u76EE\u5F55\u4E0E\u6587\u4EF6\uFF08${plan.files.length} \u4E2A\u6587\u4EF6\uFF09\uFF1A`,
+    archTreeText(plan.dirs, plan.files.map((f) => f.path)),
+    `\u547D\u4EE4\uFF1A\u5B89\u88C5 ${plan.commands.install}\uFF5C\u5F00\u53D1 ${plan.commands.dev}\uFF5C\u6784\u5EFA ${plan.commands.build}`,
+    plan.notes.length ? `\u6CE8\u610F\uFF1A
+- ${plan.notes.join("\n- ")}` : "",
+    `\u5DF2\u4FDD\u5B58\uFF1A.wudi/architecture.json\uFF08Agent \u53EF\u8BFB\u53D6\uFF09\u3002\u4E0B\u4E00\u6B65\uFF1A\u70B9\u300C\u5199\u5165\u9AA8\u67B6\u300D\u521B\u5EFA\u76EE\u5F55\u4E0E\u521D\u59CB\u6587\u4EF6\uFF0C\u6216\u8BA9 Agent \u6309\u65B9\u6848\u642D\u5EFA\u5E76\u5B9E\u73B0\u5404\u6A21\u5757\u3002`
+  ].filter(Boolean).join("\n");
+  return ok(text, plan);
+}
+function toolArchScaffold(args = {}) {
+  let root;
+  try {
+    root = toolRoot(args);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  if (args.confirm !== true) {
+    return fail("\u5199\u5165\u9879\u76EE\u9AA8\u67B6\u9700\u8981\u786E\u8BA4\uFF1A\u8BF7\u4F20 confirm: true\uFF08\u53EA\u521B\u5EFA\u7F3A\u5931\u7684\u76EE\u5F55\u4E0E\u6587\u4EF6\uFF0C\u4E0D\u8986\u76D6\u5DF2\u6709\u6587\u4EF6\uFF09\u3002");
+  }
+  let plan = args.plan;
+  if (!plan || typeof plan !== "object") {
+    try {
+      plan = JSON.parse(readFileSync2(join3(root, ".wudi", "architecture.json"), "utf-8"));
+    } catch {
+      return fail("\u6CA1\u6709\u67B6\u6784\u65B9\u6848\uFF1A\u5148\u8C03\u7528 wudi_arch_plan \u751F\u6210\u65B9\u6848\uFF08\u4F1A\u4FDD\u5B58\u5230 .wudi/architecture.json\uFF09\uFF0C\u6216\u5728 plan \u53C2\u6570\u91CC\u4F20\u65B9\u6848\u5BF9\u8C61\u3002");
+    }
+  }
+  const files = Array.isArray(plan.files) ? plan.files : [];
+  if (!files.length) return fail("\u67B6\u6784\u65B9\u6848\u7F3A\u5C11 files \u6E05\u5355\uFF0C\u65E0\u6CD5\u5199\u5165\u9AA8\u67B6\u3002");
+  if (files.length > 120) return fail(`\u65B9\u6848\u5305\u542B ${files.length} \u4E2A\u6587\u4EF6\uFF0C\u8D85\u8FC7\u4E0A\u9650 120\uFF0C\u62D2\u7EDD\u5199\u5165\u3002`);
+  const rootAbs = resolve3(root);
+  const created = [];
+  const skipped = [];
+  const failed = [];
+  for (const f of files) {
+    const rel = String(f?.path ?? "").replace(/^\/+/, "").trim();
+    if (!rel || rel.includes("..") || rel.includes("\\") || rel.startsWith(".wudi/") || /^[A-Za-z]:/.test(rel)) {
+      failed.push(rel || "(\u7A7A\u8DEF\u5F84)");
+      continue;
+    }
+    const abs = resolve3(rootAbs, rel);
+    if (abs !== rootAbs && !abs.startsWith(rootAbs + "/")) {
+      failed.push(rel);
+      continue;
+    }
+    try {
+      mkdirSync2(_dirname(abs), { recursive: true });
+      if (existsSync3(abs)) {
+        skipped.push(rel);
+        continue;
+      }
+      writeFileSync2(abs, String(f?.content ?? ""));
+      created.push(rel);
+    } catch {
+      failed.push(rel);
+    }
+  }
+  try {
+    mkdirSync2(join3(root, ".wudi"), { recursive: true });
+    writeFileSync2(join3(root, ".wudi", "architecture.json"), JSON.stringify(plan, null, 2));
+  } catch {
+  }
+  const summary = {
+    root,
+    name: plan.name ?? "",
+    framework: plan.framework ?? "",
+    frameworkLabel: plan.frameworkLabel ?? "",
+    created,
+    skipped,
+    failed,
+    commands: plan.commands ?? {}
+  };
+  const lines = [
+    `\u2550\u2550\u2550 \u9AA8\u67B6\u5DF2\u5199\u5165\uFF1A${plan.frameworkLabel ?? plan.framework ?? "?"}\uFF08${plan.name ?? ""}\uFF09\u2550\u2550\u2550`,
+    `\u65B0\u5EFA ${created.length} \u4E2A\u6587\u4EF6${skipped.length ? `\uFF0C\u8DF3\u8FC7\u5DF2\u5B58\u5728 ${skipped.length} \u4E2A` : ""}${failed.length ? `\uFF0C\u5931\u8D25 ${failed.length} \u4E2A` : ""}`,
+    created.length ? `\u65B0\u5EFA\uFF1A
+- ${created.slice(0, 40).join("\n- ")}${created.length > 40 ? `
+- \u2026\uFF08\u5171 ${created.length} \u4E2A\uFF09` : ""}` : "",
+    skipped.length ? `\u8DF3\u8FC7\uFF08\u5DF2\u5B58\u5728\uFF0C\u672A\u8986\u76D6\uFF09\uFF1A
+- ${skipped.slice(0, 20).join("\n- ")}${skipped.length > 20 ? "\n- \u2026" : ""}` : "",
+    failed.length ? `\u5931\u8D25\uFF1A
+- ${failed.join("\n- ")}` : "",
+    plan.commands?.install ? `\u4E0B\u4E00\u6B65\uFF1A
+1. ${plan.commands.install}
+2. ${plan.commands.dev}` : "\u4E0B\u4E00\u6B65\uFF1A\u5B89\u88C5\u4F9D\u8D56\u5E76\u542F\u52A8\u9879\u76EE\u3002",
+    "Agent \u53EF\u7EE7\u7EED\u6309\u65B9\u6848\u5B9E\u73B0\u9875\u9762/\u6A21\u5757\uFF0C\u5E76\u7528 wudi_architecture \u590D\u67E5\u7ED3\u6784\u3002"
+  ].filter(Boolean).join("\n");
+  return ok(lines, summary);
 }
 function toolProjectsList() {
   const root = projectRoot();
@@ -3710,7 +4461,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.39.0" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.40.0" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());

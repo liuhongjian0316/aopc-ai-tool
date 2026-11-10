@@ -438,6 +438,17 @@ plugins/wudi-coding/
 - 面板架构页：技术栈 chips + 语言分布条 + 模块卡片 + 关键文件/关联资产 + 服务与脚本；右上「刷新」重新扫描。
 - smoke +5（145 全绿）：React/Vite 识别、TypeScript 统计、src 模块、关键文件与 compose 服务解析、文本摘要。
 
+## 空项目自动设计架构 + Agent 搭框架（v0.40.0）
+
+- **自动识别**：非空项目直接扫描展示（语言/框架/模块/服务）。
+- **空项目架构向导**：架构页自动进入向导，选择项目类型与框架（Web：Vue/React+Vite；小程序：Taro/微信原生；移动端：Flutter/SwiftUI；后端：NestJS/Go+Gin；Monorepo：pnpm workspace），生成方案。
+- **`wudi_arch_plan`**：输出技术选型、目录与文件清单、安装/开发/构建命令、注意事项，并保存到 `<项目>/.wudi/architecture.json`（Agent 可直接读取）。
+- **`wudi_arch_scaffold`**：按方案写入骨架（目录 + 可运行的初始文件），**绝不覆盖已有文件**、需 `confirm: true`、可重复执行（幂等跳过）。
+- **面板两个出口**：
+  - 「写入骨架」→ 直接落地初始工程（`npm install && npm run dev` 即可启动）；
+  - 「交给 Agent 搭建」→ 把带方案路径的任务消息发给 Agent，Agent 继续实现页面/接口，并用 `wudi_architecture` 复查。
+- **回归**：smoke 152 项全绿（+7）：空项目识别、Vue 方案生成与落盘、未确认拒绝、骨架写入、幂等跳过、写入后可识别技术栈。
+
 ## 编辑器已打开仍报「未打开」（v0.38.7）
 
 - **现象**：编辑器明明已打开（面板状态「已连接 · 已自动适应视图」），Agent 的设计工具仍报「设计稿编辑器未打开」；编辑器自己的 HostBar 一直显示「连接中」。

@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.39.0",
+      "version": "0.40.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,17 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.40.0",
+          "date": "2026-11-10",
+          "changes": [
+            "架构页支持自动识别 + 空项目架构设计：非空项目直接扫描展示；空项目自动进入架构向导",
+            "新增 wudi_arch_plan：web（Vue/React+Vite）、小程序（Taro/微信原生）、移动端（Flutter/SwiftUI）、后端（NestJS/Go+Gin）、Monorepo 五类预设，输出目录/文件清单、命令与注意事项，保存到 .wudi/architecture.json",
+            "新增 wudi_arch_scaffold：按方案写入项目骨架（目录 + 初始可运行文件），不覆盖已有文件，需 confirm:true，可重复执行（幂等跳过）",
+            "架构页「写入骨架」一键落地；「交给 Agent 搭建」把带方案路径的任务消息发给 Agent，由 Agent 继续实现页面/接口并用 wudi_architecture 复查",
+            "smoke +7（152 全绿）：空项目识别、Vue 方案生成与落盘、未确认拒绝、骨架写入、幂等跳过、写入后可识别技术栈"
+          ]
+        },
         {
           "version": "0.39.0",
           "date": "2026-11-10",

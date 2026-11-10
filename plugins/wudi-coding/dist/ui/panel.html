@@ -333,6 +333,7 @@ details.fold[open] > summary:hover { color: var(--text); }
 .sec { margin-bottom: 12px; }
 .sec-title { font-size: 11.5px; font-weight: 700; color: var(--text-dim); margin-bottom: 10px; letter-spacing: .06em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
 .sec-title .line { flex: 1; height: 1px; background: var(--border); }
+.plan-tree { font-size: 12px; line-height: 1.75; color: var(--text-2); background: var(--bg-inset); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; max-height: 260px; overflow: auto; }
 </style>
 </head>
 <body>
@@ -505,7 +506,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.39.0" },
+    { name: "wudi-coding", version: "0.40.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -533,6 +534,10 @@ const EmptyResultSchema = {
     canvasBusy: false,
     designs: null,     // wudi_designs_list structuredContent {designs}
     arch: null,        // wudi_architecture structuredContent（架构页）
+    archPlan: null,    // wudi_arch_plan structuredContent（空项目架构方案）
+    archWizard: false, // 架构向导展开态
+    archKind: "web",   // 方案项目类型
+    archBusy: false,   // 生成方案 / 写入骨架进行中
     figmaUrl: "",
     opEmbed: null,     // 内嵌 OpenPencil 编辑器会话 {path}（overlay 层，不参与 render 循环）
     opFrameOrigin: "", // 内嵌编辑器 iframe 的 http origin（wudi 协同桥）
@@ -726,6 +731,7 @@ const EmptyResultSchema = {
       saveWidgetState();
     });
     bindActions();
+    bindArchActions();
     reportSize();
   }
 
@@ -952,10 +958,80 @@ const EmptyResultSchema = {
 
   /* ---------- 架构页：技术栈 / 语言 / 模块 / 关键文件 / 服务（静态扫描，只读） ---------- */
   const LANG_COLORS = ["#4f7cff", "#e8a33d", "#3fbf8f", "#b06df0", "#e2605f", "#5bb7d6", "#9a9a9a", "#c9b458"];
+  /* 空项目架构向导：类型与可选框架（与服务端 wudi_arch_plan 的预设一一对应） */
+  const ARCH_KINDS = [
+    ["web", "Web 前端", [["vue-vite", "Vue 3 + Vite"], ["react-vite", "React + Vite"]]],
+    ["miniprogram", "小程序", [["taro", "Taro（React）"], ["native-wechat", "微信原生"]]],
+    ["mobile", "移动 App", [["flutter", "Flutter"], ["swiftui", "SwiftUI"]]],
+    ["backend", "后端服务", [["nest", "NestJS"], ["go-gin", "Go + Gin"]]],
+    ["monorepo", "Monorepo 全栈", [["pnpm-workspace", "pnpm workspace"]]],
+  ];
+  function archKindDef(id) { return ARCH_KINDS.find((k) => k[0] === id) ?? ARCH_KINDS[0]; }
+  function archIsEmpty(a) {
+    if (!a || a.error) return false;
+    const entries = a.entries ?? [];
+    return (a.scanned?.files ?? 0) === 0 && (a.modules ?? []).length === 0 &&
+      !entries.some((e) => /^(package\.json|go\.mod|pubspec\.yaml|Podfile|pom\.xml|Cargo\.toml)$/.test(e.name));
+  }
+  function archPlanTree(plan) {
+    const dirs = plan.dirs ?? [];
+    const files = (plan.files ?? []).map((f) => f.path);
+    const dirSet = new Set(dirs);
+    for (const p of [...dirs, ...files]) {
+      const parts = p.split("/");
+      for (let i = 1; i < parts.length; i++) dirSet.add(parts.slice(0, i).join("/"));
+    }
+    const paths = [...new Set([...dirSet, ...files])].sort();
+    return paths.map((p) => {
+      const depth = Math.max(0, p.split("/").length - 1);
+      return `<div>${"&nbsp;&nbsp;&nbsp;".repeat(depth)}${esc(p.split("/").pop())}${dirSet.has(p) ? "/" : ""}</div>`;
+    }).join("");
+  }
+  function renderArchWizard() {
+    const def = archKindDef(state.archKind);
+    const fw = state.archFw && def[2].some((f) => f[0] === state.archFw) ? state.archFw : def[2][0][0];
+    const name = state.data?.project?.name || "";
+    return `
+      <div class="card"><h3>设计项目架构<span class="line"></span></h3>
+        <div class="muted">当前项目还没有代码。选择项目类型生成架构方案，随后可一键写入骨架，或让 Agent 按方案搭建项目框架。</div>
+        <div class="entrychips" style="margin:12px 0">
+          ${ARCH_KINDS.map(([id, label]) => `<button class="btn ${id === state.archKind ? "primary" : ""}" data-arch-kind="${id}" ${state.archBusy ? "disabled" : ""}>${label}</button>`).join("")}
+        </div>
+        <div class="kv" style="grid-template-columns:88px 1fr">
+          <span class="k">框架</span><span class="v"><select id="arch-fw" style="${INPUT_CSS}" ${state.archBusy ? "disabled" : ""}>${def[2].map(([id, label]) => `<option value="${id}" ${id === fw ? "selected" : ""}>${esc(label)}</option>`).join("")}</select></span>
+          <span class="k">项目名</span><span class="v"><input id="arch-name" style="${INPUT_CSS}" value="${esc(name)}" placeholder="项目显示名（可留空）" ${state.archBusy ? "disabled" : ""}></span>
+        </div>
+        <div class="btnrow" style="margin-top:10px">
+          <button class="btn primary" id="btn-arch-plan" ${state.archBusy ? "disabled" : ""}>${state.archBusy ? '<span class="spin"></span>' : ""}生成架构方案</button>
+          <span class="muted">方案会保存到项目 .wudi/architecture.json，Agent 可直接读取</span>
+        </div>
+      </div>`;
+  }
+  function renderArchPlan(p) {
+    const cmds = p.commands ?? {};
+    return `
+      <div class="banner">
+        <div class="row"><h2>架构方案</h2><span class="chip">${esc(p.kindLabel ?? "")} · ${esc(p.frameworkLabel ?? p.framework ?? "")}</span></div>
+        <div class="meta"><span class="chip">${esc(p.name ?? "")}</span><span class="chip">${(p.files ?? []).length} 个文件</span><span class="chip">${esc(p.savedPath ?? ".wudi/architecture.json")}</span></div>
+      </div>
+      <div class="card"><h3>方案说明<span class="line"></span></h3>
+        <div class="muted" style="margin-bottom:10px">${esc(p.summary ?? "")}</div>
+        <div class="plan-tree mono">${archPlanTree(p)}</div>
+        <div class="muted" style="margin-top:10px">命令：安装 <span class="mono">${esc(cmds.install ?? "—")}</span>｜开发 <span class="mono">${esc(cmds.dev ?? "—")}</span>｜构建 <span class="mono">${esc(cmds.build ?? "—")}</span></div>
+        ${(p.notes ?? []).length ? `<div class="muted" style="margin-top:8px">注意：${p.notes.map((n) => esc(n)).join("；")}</div>` : ""}
+      </div>
+      <div class="btnrow">
+        <button class="btn primary" id="btn-arch-scaffold" ${state.archBusy ? "disabled" : ""}>${state.archBusy ? '<span class="spin"></span>' : ""}写入骨架</button>
+        <button class="btn" id="btn-arch-agent" ${state.archBusy ? "disabled" : ""}>交给 Agent 搭建</button>
+        <button class="btn" id="btn-arch-replan" ${state.archBusy ? "disabled" : ""}>重新设计</button>
+      </div>`;
+  }
   function renderArch() {
     const a = state.arch;
+    if (state.archPlan) return renderArchPlan(state.archPlan);
     if (!a) return `<div class="card"><h3>项目架构<span class="line"></span></h3><div class="muted">正在扫描项目结构…</div></div>`;
     if (a.error) return `<div class="card"><h3>项目架构<span class="line"></span></h3><div class="muted">扫描失败：${esc(a.error)}</div></div>`;
+    if (archIsEmpty(a) || state.archWizard) return renderArchWizard();
     const langs = a.languages ?? [];
     const frameworks = a.frameworks ?? [];
     const pms = a.packageManagers ?? [];
@@ -1006,6 +1082,7 @@ const EmptyResultSchema = {
         <div class="entrychips">${scripts.map((s) => `<span class="chip mono">${esc(s.name)}<span class="muted"> · ${esc(s.command)}</span></span>`).join("")}</div>
       </div>` : ""}
       ${(a.workspaces ?? []).length ? `<div class="card" style="margin-top:12px"><h3>Monorepo workspaces<span class="line"></span></h3><div class="entrychips">${a.workspaces.map((w) => `<span class="chip mono">${esc(w)}</span>`).join("")}</div></div>` : ""}
+      <div class="btnrow" style="margin-top:10px"><button class="btn" id="btn-arch-wizard">＋ 为这个项目设计架构骨架</button></div>
       <div class="muted" style="margin-top:10px">扫描于 ${esc(fmtTime(a.generatedAt))} · 只读静态扫描（跳过 node_modules / dist 等目录），点右上「刷新」重新扫描</div>`;
   }
 
@@ -1256,7 +1333,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.39.0" },
+              hostInfo: { name: "wudi-workbench", version: "0.40.0" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -1402,6 +1479,85 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
   }
   const isForeignProject = () => !!state.projectRoot;
 
+  /* ---------- 架构页交互：向导 / 生成方案 / 写入骨架 / 交给 Agent ---------- */
+  function demoArchPlan(kind, fw, name) {
+    const def = archKindDef(kind);
+    const f = def[2].find((x) => x[0] === fw) ?? def[2][0];
+    return {
+      kind, kindLabel: def[1], framework: f[0], frameworkLabel: f[1], name: name || "demo",
+      summary: "示例架构方案（demo 模式：不会真的写文件）",
+      dirs: ["src/components", "src/views"],
+      files: ["package.json", "index.html", "vite.config.ts", "src/main.ts", "src/App.vue"].map((p) => ({ path: p, purpose: "" })),
+      commands: { install: "npm install", dev: "npm run dev", build: "npm run build" },
+      notes: [], savedPath: ".wudi/architecture.json", generatedAt: new Date().toISOString(),
+    };
+  }
+  function bindArchActions() {
+    $root().querySelectorAll("[data-arch-kind]").forEach((b) => b.addEventListener("click", () => {
+      state.archKind = b.dataset.archKind;
+      state.archFw = "";
+      state.archPlan = null;
+      render();
+    }));
+    document.getElementById("btn-arch-wizard")?.addEventListener("click", () => { state.archWizard = true; render(); });
+    document.getElementById("btn-arch-replan")?.addEventListener("click", () => { state.archPlan = null; state.archWizard = true; render(); });
+    document.getElementById("btn-arch-plan")?.addEventListener("click", async () => {
+      const fw = String(document.getElementById("arch-fw")?.value ?? "");
+      const name = String(document.getElementById("arch-name")?.value ?? "").trim();
+      state.archBusy = true;
+      render();
+      try {
+        if (DEMO) {
+          await new Promise((r) => setTimeout(r, 300));
+          state.archPlan = demoArchPlan(state.archKind, fw, name);
+        } else {
+          const res = await callTool("wudi_arch_plan", { kind: state.archKind, ...(fw ? { framework: fw } : {}), ...(name ? { name } : {}), ...rootArg() });
+          state.archPlan = struct(res);
+        }
+        state.notice = { kind: "ok", text: `已生成架构方案：${state.archPlan?.frameworkLabel ?? ""}` };
+      } catch (err) {
+        state.notice = { kind: "err", text: `生成架构方案失败：${String(err.message ?? err).slice(0, 300)}` };
+      }
+      state.archBusy = false;
+      render();
+    });
+    document.getElementById("btn-arch-scaffold")?.addEventListener("click", async () => {
+      if (!state.archPlan) return;
+      if (DEMO) { state.notice = { kind: "ok", text: "演示模式：不会真的写文件" }; render(); return; }
+      state.archBusy = true;
+      render();
+      let done = false;
+      try {
+        const res = await callTool("wudi_arch_scaffold", { plan: state.archPlan, confirm: true, ...rootArg() });
+        const sc = struct(res);
+        state.notice = { kind: "ok", text: `骨架已写入：新建 ${sc?.created?.length ?? 0} 个文件${sc?.skipped?.length ? `，跳过 ${sc.skipped.length} 个已存在` : ""}` };
+        done = true;
+      } catch (err) {
+        state.notice = { kind: "err", text: `写入骨架失败：${String(err.message ?? err).slice(0, 300)}` };
+      }
+      state.archBusy = false;
+      if (done) { state.archPlan = null; state.archWizard = false; await loadArch(); }
+      render();
+    });
+    document.getElementById("btn-arch-agent")?.addEventListener("click", async () => {
+      const p = state.archPlan;
+      if (!p) return;
+      const prompt = `请按已确认的架构方案搭建「${p.name}」项目框架：\n- 方案文件：${p.savedPath ?? ".wudi/architecture.json"}\n- 类型：${p.kindLabel ?? p.kind} · ${p.frameworkLabel ?? p.framework}\n- 说明：${p.summary ?? ""}\n请先读取该方案（或调用 wudi_arch_plan 复核），然后调用 wudi_arch_scaffold {confirm:true} 写入骨架，并按方案实现各模块的初始页面/接口，最后用 wudi_architecture 复查结构。`;
+      try {
+        await app.sendMessage({ role: "user", content: { type: "text", text: prompt } });
+        state.notice = { kind: "ok", text: "已把搭建任务发给 Agent" };
+      } catch {
+        try {
+          await navigator.clipboard.writeText(prompt);
+          state.notice = { kind: "ok", text: "宿主不支持面板发消息：任务已复制到剪贴板，粘贴到对话即可" };
+        } catch {
+          state.notice = { kind: "err", text: "无法发送给 Agent：请在对话里说明「按 .wudi/architecture.json 的架构方案搭建项目框架」" };
+        }
+      }
+      render();
+    });
+  }
+
   function bindActions() {
     document.getElementById("btn-padd")?.addEventListener("click", async () => {
       const path = String(document.getElementById("p-path")?.value ?? "").trim();
@@ -1469,7 +1625,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
         state.projectRoot = p.isCurrent ? "" : p.path;
         state.view = "detail";
         state.tab = "overview";
-        if (!DEMO) { state.data = null; state.history = null; state.designs = null; state.arch = null; }
+        if (!DEMO) { state.data = null; state.history = null; state.designs = null; state.arch = null; state.archPlan = null; state.archWizard = false; }
         render();
         saveWidgetState();
         loadAll();
