@@ -255,7 +255,7 @@ export const TOOLS = [
   },
   {
     name: "wudi_arch_plan",
-    description: "为空项目设计架构方案（web / miniprogram / mobile / backend / monorepo 预设）：输出技术选型、目录与文件清单、常用命令、注意事项，并保存到 <项目>/.wudi/architecture.json。配合 wudi_arch_scaffold 写入骨架，再由 Agent 实现各模块。",
+    description: "为空项目设计架构方案（web / miniprogram / mobile / backend / monorepo 预设）：输出技术选型、目录与文件清单、常用命令、注意事项，并保存到 <工作区>/.wudi/<项目名>/architecture.json。配合 wudi_arch_scaffold 写入骨架，再由 Agent 实现各模块。",
     _meta: UI_META,
     inputSchema: {
       type: "object",
@@ -269,12 +269,12 @@ export const TOOLS = [
   },
   {
     name: "wudi_arch_scaffold",
-    description: "按架构方案写入项目骨架：创建目录与初始文件，绝不覆盖已有文件。plan 缺省读取 <项目>/.wudi/architecture.json；必须传 confirm: true。",
+    description: "按架构方案写入项目骨架：创建目录与初始文件，绝不覆盖已有文件。plan 缺省读取 <工作区>/.wudi/<项目名>/architecture.json；必须传 confirm: true。",
     _meta: UI_META,
     inputSchema: {
       type: "object",
       properties: {
-        plan: { type: "object", description: "wudi_arch_plan 返回的方案对象（缺省读 .wudi/architecture.json）" },
+        plan: { type: "object", description: "wudi_arch_plan 返回的方案对象（缺省读 .wudi/<项目名>/architecture.json）" },
         confirm: { type: "boolean", description: "必须为 true 才写入（安全闸）" },
         root: { type: "string", description: "项目根路径（缺省为当前工作区）" },
       },
@@ -2182,10 +2182,13 @@ function toolArchPlan(args: any = {}) {
     notes: fwPreset.notes ?? [],
     generatedAt: new Date().toISOString(),
   };
+  const planFile = store.archPlanPathFor(root);
+  const relPlanPath = `.wudi/${store.projectBaseName(root)}/architecture.json`;
+  plan.savedPath = relPlanPath;
   try {
-    mkdirSync(join(root, ".wudi"), { recursive: true });
-    writeFileSync(join(root, ".wudi", "architecture.json"), JSON.stringify(plan, null, 2));
-    plan.savedPath = ".wudi/architecture.json";
+    store.migrateArchPlanFor(root);
+    mkdirSync(_dirname(planFile), { recursive: true });
+    writeFileSync(planFile, JSON.stringify(plan, null, 2));
   } catch (err: any) {
     return fail(`架构方案已生成但保存失败：${String(err?.message ?? err)}`);
   }
@@ -2196,7 +2199,7 @@ function toolArchPlan(args: any = {}) {
     archTreeText(plan.dirs, plan.files.map((f) => f.path)),
     `命令：安装 ${plan.commands.install}｜开发 ${plan.commands.dev}｜构建 ${plan.commands.build}`,
     plan.notes.length ? `注意：\n- ${plan.notes.join("\n- ")}` : "",
-    `已保存：.wudi/architecture.json（Agent 可读取）。下一步：点「写入骨架」创建目录与初始文件，或让 Agent 按方案搭建并实现各模块。`,
+    `已保存：${relPlanPath}（Agent 可读取）。下一步：点「写入骨架」创建目录与初始文件，或让 Agent 按方案搭建并实现各模块。`,
   ].filter(Boolean).join("\n");
   return ok(text, plan);
 }
@@ -2210,9 +2213,9 @@ function toolArchScaffold(args: any = {}) {
   let plan = args.plan;
   if (!plan || typeof plan !== "object") {
     try {
-      plan = JSON.parse(readFileSync(join(root, ".wudi", "architecture.json"), "utf-8"));
+      plan = JSON.parse(readFileSync(store.migrateArchPlanFor(root), "utf-8"));
     } catch {
-      return fail("没有架构方案：先调用 wudi_arch_plan 生成方案（会保存到 .wudi/architecture.json），或在 plan 参数里传方案对象。");
+      return fail(`没有架构方案：先调用 wudi_arch_plan 生成方案（会保存到 .wudi/${store.projectBaseName(root)}/architecture.json），或在 plan 参数里传方案对象。`);
     }
   }
   const files = Array.isArray(plan.files) ? plan.files : [];
@@ -2239,15 +2242,18 @@ function toolArchScaffold(args: any = {}) {
       failed.push(rel);
     }
   }
+  const planRelPath = `.wudi/${store.projectBaseName(root)}/architecture.json`;
   try {
-    mkdirSync(join(root, ".wudi"), { recursive: true });
-    writeFileSync(join(root, ".wudi", "architecture.json"), JSON.stringify(plan, null, 2));
+    const planFile = store.archPlanPathFor(root);
+    mkdirSync(_dirname(planFile), { recursive: true });
+    writeFileSync(planFile, JSON.stringify(plan, null, 2));
   } catch { /* 方案落盘失败不阻塞骨架 */ }
   const summary = {
     root,
     name: plan.name ?? "",
     framework: plan.framework ?? "",
     frameworkLabel: plan.frameworkLabel ?? "",
+    planPath: planRelPath,
     created,
     skipped,
     failed,

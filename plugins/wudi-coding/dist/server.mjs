@@ -168,6 +168,26 @@ function designsDirFor(root) {
   mkdirSync(dir, { recursive: true });
   return dir;
 }
+function projectDataDirFor(root) {
+  return join(wudiDir(), projectBaseName(root));
+}
+function archPlanPathFor(root) {
+  return join(projectDataDirFor(root), "architecture.json");
+}
+function migrateArchPlanFor(root) {
+  const abs = resolve(root);
+  const target = archPlanPathFor(abs);
+  if (existsSync(target)) return target;
+  const legacy = join(abs, ".wudi", "architecture.json");
+  if (legacy !== target && existsSync(legacy)) {
+    try {
+      mkdirSync(join(wudiDir(), projectBaseName(abs)), { recursive: true });
+      renameSync(legacy, target);
+    } catch {
+    }
+  }
+  return target;
+}
 function migrateDesignsFor(root) {
   const absRoot = resolve(root);
   const wsRoot = projectRoot();
@@ -1355,7 +1375,7 @@ var TOOLS = [
   },
   {
     name: "wudi_arch_plan",
-    description: "\u4E3A\u7A7A\u9879\u76EE\u8BBE\u8BA1\u67B6\u6784\u65B9\u6848\uFF08web / miniprogram / mobile / backend / monorepo \u9884\u8BBE\uFF09\uFF1A\u8F93\u51FA\u6280\u672F\u9009\u578B\u3001\u76EE\u5F55\u4E0E\u6587\u4EF6\u6E05\u5355\u3001\u5E38\u7528\u547D\u4EE4\u3001\u6CE8\u610F\u4E8B\u9879\uFF0C\u5E76\u4FDD\u5B58\u5230 <\u9879\u76EE>/.wudi/architecture.json\u3002\u914D\u5408 wudi_arch_scaffold \u5199\u5165\u9AA8\u67B6\uFF0C\u518D\u7531 Agent \u5B9E\u73B0\u5404\u6A21\u5757\u3002",
+    description: "\u4E3A\u7A7A\u9879\u76EE\u8BBE\u8BA1\u67B6\u6784\u65B9\u6848\uFF08web / miniprogram / mobile / backend / monorepo \u9884\u8BBE\uFF09\uFF1A\u8F93\u51FA\u6280\u672F\u9009\u578B\u3001\u76EE\u5F55\u4E0E\u6587\u4EF6\u6E05\u5355\u3001\u5E38\u7528\u547D\u4EE4\u3001\u6CE8\u610F\u4E8B\u9879\uFF0C\u5E76\u4FDD\u5B58\u5230 <\u5DE5\u4F5C\u533A>/.wudi/<\u9879\u76EE\u540D>/architecture.json\u3002\u914D\u5408 wudi_arch_scaffold \u5199\u5165\u9AA8\u67B6\uFF0C\u518D\u7531 Agent \u5B9E\u73B0\u5404\u6A21\u5757\u3002",
     _meta: UI_META,
     inputSchema: {
       type: "object",
@@ -1369,12 +1389,12 @@ var TOOLS = [
   },
   {
     name: "wudi_arch_scaffold",
-    description: "\u6309\u67B6\u6784\u65B9\u6848\u5199\u5165\u9879\u76EE\u9AA8\u67B6\uFF1A\u521B\u5EFA\u76EE\u5F55\u4E0E\u521D\u59CB\u6587\u4EF6\uFF0C\u7EDD\u4E0D\u8986\u76D6\u5DF2\u6709\u6587\u4EF6\u3002plan \u7F3A\u7701\u8BFB\u53D6 <\u9879\u76EE>/.wudi/architecture.json\uFF1B\u5FC5\u987B\u4F20 confirm: true\u3002",
+    description: "\u6309\u67B6\u6784\u65B9\u6848\u5199\u5165\u9879\u76EE\u9AA8\u67B6\uFF1A\u521B\u5EFA\u76EE\u5F55\u4E0E\u521D\u59CB\u6587\u4EF6\uFF0C\u7EDD\u4E0D\u8986\u76D6\u5DF2\u6709\u6587\u4EF6\u3002plan \u7F3A\u7701\u8BFB\u53D6 <\u5DE5\u4F5C\u533A>/.wudi/<\u9879\u76EE\u540D>/architecture.json\uFF1B\u5FC5\u987B\u4F20 confirm: true\u3002",
     _meta: UI_META,
     inputSchema: {
       type: "object",
       properties: {
-        plan: { type: "object", description: "wudi_arch_plan \u8FD4\u56DE\u7684\u65B9\u6848\u5BF9\u8C61\uFF08\u7F3A\u7701\u8BFB .wudi/architecture.json\uFF09" },
+        plan: { type: "object", description: "wudi_arch_plan \u8FD4\u56DE\u7684\u65B9\u6848\u5BF9\u8C61\uFF08\u7F3A\u7701\u8BFB .wudi/<\u9879\u76EE\u540D>/architecture.json\uFF09" },
         confirm: { type: "boolean", description: "\u5FC5\u987B\u4E3A true \u624D\u5199\u5165\uFF08\u5B89\u5168\u95F8\uFF09" },
         root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF09" }
       },
@@ -3657,10 +3677,13 @@ function toolArchPlan(args = {}) {
     notes: fwPreset.notes ?? [],
     generatedAt: (/* @__PURE__ */ new Date()).toISOString()
   };
+  const planFile = archPlanPathFor(root);
+  const relPlanPath = `.wudi/${projectBaseName(root)}/architecture.json`;
+  plan.savedPath = relPlanPath;
   try {
-    mkdirSync2(join3(root, ".wudi"), { recursive: true });
-    writeFileSync2(join3(root, ".wudi", "architecture.json"), JSON.stringify(plan, null, 2));
-    plan.savedPath = ".wudi/architecture.json";
+    migrateArchPlanFor(root);
+    mkdirSync2(_dirname(planFile), { recursive: true });
+    writeFileSync2(planFile, JSON.stringify(plan, null, 2));
   } catch (err) {
     return fail(`\u67B6\u6784\u65B9\u6848\u5DF2\u751F\u6210\u4F46\u4FDD\u5B58\u5931\u8D25\uFF1A${String(err?.message ?? err)}`);
   }
@@ -3672,7 +3695,7 @@ function toolArchPlan(args = {}) {
     `\u547D\u4EE4\uFF1A\u5B89\u88C5 ${plan.commands.install}\uFF5C\u5F00\u53D1 ${plan.commands.dev}\uFF5C\u6784\u5EFA ${plan.commands.build}`,
     plan.notes.length ? `\u6CE8\u610F\uFF1A
 - ${plan.notes.join("\n- ")}` : "",
-    `\u5DF2\u4FDD\u5B58\uFF1A.wudi/architecture.json\uFF08Agent \u53EF\u8BFB\u53D6\uFF09\u3002\u4E0B\u4E00\u6B65\uFF1A\u70B9\u300C\u5199\u5165\u9AA8\u67B6\u300D\u521B\u5EFA\u76EE\u5F55\u4E0E\u521D\u59CB\u6587\u4EF6\uFF0C\u6216\u8BA9 Agent \u6309\u65B9\u6848\u642D\u5EFA\u5E76\u5B9E\u73B0\u5404\u6A21\u5757\u3002`
+    `\u5DF2\u4FDD\u5B58\uFF1A${relPlanPath}\uFF08Agent \u53EF\u8BFB\u53D6\uFF09\u3002\u4E0B\u4E00\u6B65\uFF1A\u70B9\u300C\u5199\u5165\u9AA8\u67B6\u300D\u521B\u5EFA\u76EE\u5F55\u4E0E\u521D\u59CB\u6587\u4EF6\uFF0C\u6216\u8BA9 Agent \u6309\u65B9\u6848\u642D\u5EFA\u5E76\u5B9E\u73B0\u5404\u6A21\u5757\u3002`
   ].filter(Boolean).join("\n");
   return ok(text, plan);
 }
@@ -3689,9 +3712,9 @@ function toolArchScaffold(args = {}) {
   let plan = args.plan;
   if (!plan || typeof plan !== "object") {
     try {
-      plan = JSON.parse(readFileSync2(join3(root, ".wudi", "architecture.json"), "utf-8"));
+      plan = JSON.parse(readFileSync2(migrateArchPlanFor(root), "utf-8"));
     } catch {
-      return fail("\u6CA1\u6709\u67B6\u6784\u65B9\u6848\uFF1A\u5148\u8C03\u7528 wudi_arch_plan \u751F\u6210\u65B9\u6848\uFF08\u4F1A\u4FDD\u5B58\u5230 .wudi/architecture.json\uFF09\uFF0C\u6216\u5728 plan \u53C2\u6570\u91CC\u4F20\u65B9\u6848\u5BF9\u8C61\u3002");
+      return fail(`\u6CA1\u6709\u67B6\u6784\u65B9\u6848\uFF1A\u5148\u8C03\u7528 wudi_arch_plan \u751F\u6210\u65B9\u6848\uFF08\u4F1A\u4FDD\u5B58\u5230 .wudi/${projectBaseName(root)}/architecture.json\uFF09\uFF0C\u6216\u5728 plan \u53C2\u6570\u91CC\u4F20\u65B9\u6848\u5BF9\u8C61\u3002`);
     }
   }
   const files = Array.isArray(plan.files) ? plan.files : [];
@@ -3724,9 +3747,11 @@ function toolArchScaffold(args = {}) {
       failed.push(rel);
     }
   }
+  const planRelPath = `.wudi/${projectBaseName(root)}/architecture.json`;
   try {
-    mkdirSync2(join3(root, ".wudi"), { recursive: true });
-    writeFileSync2(join3(root, ".wudi", "architecture.json"), JSON.stringify(plan, null, 2));
+    const planFile = archPlanPathFor(root);
+    mkdirSync2(_dirname(planFile), { recursive: true });
+    writeFileSync2(planFile, JSON.stringify(plan, null, 2));
   } catch {
   }
   const summary = {
@@ -3734,6 +3759,7 @@ function toolArchScaffold(args = {}) {
     name: plan.name ?? "",
     framework: plan.framework ?? "",
     frameworkLabel: plan.frameworkLabel ?? "",
+    planPath: planRelPath,
     created,
     skipped,
     failed,
@@ -4461,7 +4487,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.40.1" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.40.2" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());

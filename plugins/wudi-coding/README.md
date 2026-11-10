@@ -427,6 +427,13 @@ plugins/wudi-coding/
   - 面板**主动打开编辑器**：收到 `get_design_status` 的 `live:false` 或「编辑器未打开」失败结果时，自动打开该画布编辑器——Agent 稍后重试即可写入了。
 - 注意：本机 homebrew Node 24 依赖损坏（libsimdjson 缺失），openpencil 的 web 构建暂不可用；本次服务端补丁直接应用于 vendored dist（与源码补丁一致）。
 
+## 架构方案存储位置修正（v0.40.2）
+
+- **问题**：架构方案曾写到 `<项目根>/.wudi/architecture.json`，不符合「`.wudi/` 下以项目为基准」的约定。
+- **修复**：统一改为 `<工作区>/.wudi/<项目名>/architecture.json`（与画布 `.wudi/<项目名>/designs/` 同级）；`wudi_arch_plan` 写入、`wudi_arch_scaffold` 读取、面板展示与 Agent 提示里的路径全部同步。
+- **兼容**：旧位置 `<项目根>/.wudi/architecture.json` 在生成/写入骨架时自动迁移到新位置（幂等，不覆盖新文件）。
+- smoke 153 项全绿（+1：旧位置自动迁移）。
+
 ## 「交给 Agent」修复（v0.40.1）
 
 - **现象**：架构方案页点「交给 Agent 搭建」报「无法发送给 Agent」。

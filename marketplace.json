@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.40.1",
+      "version": "0.40.2",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,15 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.40.2",
+          "date": "2026-11-11",
+          "changes": [
+            "架构方案存储位置修正：由 <项目根>/.wudi/architecture.json 改为 <工作区>/.wudi/<项目名>/architecture.json（与 .wudi/<项目名>/designs/ 同一项目基准）",
+            "wudi_arch_plan 写入、wudi_arch_scaffold 读取、面板展示与 Agent 提示路径全部同步；方案内 savedPath 记录新位置",
+            "旧位置方案自动迁移（幂等，不覆盖新文件）；smoke +1（153 全绿）"
+          ]
+        },
         {
           "version": "0.40.1",
           "date": "2026-11-10",

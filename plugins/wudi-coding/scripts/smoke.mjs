@@ -362,7 +362,7 @@ async function protocolTests() {
       r = await s.call("tools/call", { name: "wudi_arch_plan", arguments: { kind: "web", framework: "vue-vite", name: "blank", root: blank } });
       const planSc = r?.result?.structuredContent ?? {};
       check("arch_plan: 生成 Vue 方案", !errOf(r) && planSc.framework === "vue-vite" && (planSc.files ?? []).length >= 8, textOf(r).slice(0, 160));
-      check("arch_plan: 方案落盘 .wudi/architecture.json", existsSync(join(blank, ".wudi", "architecture.json")));
+      check("arch_plan: 方案落盘 .wudi/<项目>/architecture.json", existsSync(join(workdir, ".wudi", "blankproj", "architecture.json")));
       r = await s.call("tools/call", { name: "wudi_arch_scaffold", arguments: { plan: planSc, root: blank } });
       check("arch_scaffold: 未确认拒绝", errOf(r) && textOf(r).includes("confirm"));
       r = await s.call("tools/call", { name: "wudi_arch_scaffold", arguments: { plan: planSc, confirm: true, root: blank } });
@@ -376,6 +376,15 @@ async function protocolTests() {
       r = await s.call("tools/call", { name: "wudi_architecture", arguments: { root: blank } });
       const fwAfter = r?.result?.structuredContent?.frameworks ?? [];
       check("arch_plan: 骨架写入后可识别技术栈", fwAfter.includes("Vue") && fwAfter.includes("Vite"), JSON.stringify(fwAfter));
+      /* 旧位置 <项目>/.wudi/architecture.json 自动迁移到 <工作区>/.wudi/<项目名>/ */
+      const legacyProj = join(workdir, "legacyproj");
+      await mkdir(join(legacyProj, ".wudi"), { recursive: true });
+      await writeFile(join(legacyProj, ".wudi", "architecture.json"),
+        JSON.stringify({ name: "legacy", files: [{ path: "keep.txt", purpose: "", content: "ok" }] }));
+      r = await s.call("tools/call", { name: "wudi_arch_scaffold", arguments: { confirm: true, root: legacyProj } });
+      check("arch_scaffold: 旧位置方案自动迁移", !errOf(r)
+        && existsSync(join(legacyProj, "keep.txt"))
+        && existsSync(join(workdir, ".wudi", "legacyproj", "architecture.json")));
     } finally {
       await rm(outside, { recursive: true, force: true });
     }

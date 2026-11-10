@@ -209,6 +209,31 @@ export function designsDirFor(root) {
   return dir;
 }
 
+/** 项目专属数据目录：<工作区>/.wudi/<项目名>/（画布、架构方案等一律以项目为基准）。 */
+export function projectDataDirFor(root) {
+  return join(wudiDir(), projectBaseName(root));
+}
+
+/** 架构方案文件：<工作区>/.wudi/<项目名>/architecture.json */
+export function archPlanPathFor(root) {
+  return join(projectDataDirFor(root), "architecture.json");
+}
+
+/** 旧版 <项目根>/.wudi/architecture.json → 新位置（幂等迁移）。 */
+export function migrateArchPlanFor(root) {
+  const abs = resolve(root);
+  const target = archPlanPathFor(abs);
+  if (existsSync(target)) return target;
+  const legacy = join(abs, ".wudi", "architecture.json");
+  if (legacy !== target && existsSync(legacy)) {
+    try {
+      mkdirSync(join(wudiDir(), projectBaseName(abs)), { recursive: true });
+      renameSync(legacy, target);
+    } catch { /* 迁移失败按无方案处理 */ }
+  }
+  return target;
+}
+
 /**
  * 迁移历史遗留的画布到集中式目录（幂等）：
  * ① v0.38.0 的 .wudi/designs/（未按项目分）② 各项目根下的 designs/（v0.35 旧位置）。

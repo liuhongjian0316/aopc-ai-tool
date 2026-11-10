@@ -506,7 +506,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.40.1" },
+    { name: "wudi-coding", version: "0.40.2" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -1025,7 +1025,7 @@ const EmptyResultSchema = {
         </div>
         <div class="btnrow" style="margin-top:10px">
           <button class="btn primary" id="btn-arch-plan" ${state.archBusy ? "disabled" : ""}>${state.archBusy ? '<span class="spin"></span>' : ""}生成架构方案</button>
-          <span class="muted">方案会保存到项目 .wudi/architecture.json，Agent 可直接读取</span>
+          <span class="muted">方案会保存到 .wudi/<项目名>/architecture.json，Agent 可直接读取</span>
         </div>
       </div>`;
   }
@@ -1034,7 +1034,7 @@ const EmptyResultSchema = {
     return `
       <div class="banner">
         <div class="row"><h2>架构方案</h2><span class="chip">${esc(p.kindLabel ?? "")} · ${esc(p.frameworkLabel ?? p.framework ?? "")}</span></div>
-        <div class="meta"><span class="chip">${esc(p.name ?? "")}</span><span class="chip">${(p.files ?? []).length} 个文件</span><span class="chip">${esc(p.savedPath ?? ".wudi/architecture.json")}</span></div>
+        <div class="meta"><span class="chip">${esc(p.name ?? "")}</span><span class="chip">${(p.files ?? []).length} 个文件</span><span class="chip">${esc(p.savedPath ?? ".wudi/<项目名>/architecture.json")}</span></div>
       </div>
       <div class="card"><h3>方案说明<span class="line"></span></h3>
         <div class="muted" style="margin-bottom:10px">${esc(p.summary ?? "")}</div>
@@ -1355,7 +1355,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.40.1" },
+              hostInfo: { name: "wudi-workbench", version: "0.40.2" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -1512,7 +1512,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
       dirs: ["src/components", "src/views"],
       files: ["package.json", "index.html", "vite.config.ts", "src/main.ts", "src/App.vue"].map((p) => ({ path: p, purpose: "" })),
       commands: { install: "npm install", dev: "npm run dev", build: "npm run build" },
-      notes: [], savedPath: ".wudi/architecture.json", generatedAt: new Date().toISOString(),
+      notes: [], savedPath: ".wudi/zongheng-app/architecture.json", generatedAt: new Date().toISOString(),
     };
   }
   function bindArchActions() {
@@ -1565,7 +1565,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
     document.getElementById("btn-arch-agent")?.addEventListener("click", async () => {
       const p = state.archPlan;
       if (!p) return;
-      const prompt = `请按已确认的架构方案搭建「${p.name}」项目框架：\n- 方案文件：${p.savedPath ?? ".wudi/architecture.json"}\n- 类型：${p.kindLabel ?? p.kind} · ${p.frameworkLabel ?? p.framework}\n- 说明：${p.summary ?? ""}\n请先读取该方案（或调用 wudi_arch_plan 复核），然后调用 wudi_arch_scaffold {confirm:true} 写入骨架，并按方案实现各模块的初始页面/接口，最后用 wudi_architecture 复查结构。`;
+      const prompt = `请按已确认的架构方案搭建「${p.name}」项目框架：\n- 方案文件：${p.savedPath ?? ".wudi/<项目名>/architecture.json"}\n- 类型：${p.kindLabel ?? p.kind} · ${p.frameworkLabel ?? p.framework}\n- 说明：${p.summary ?? ""}\n请先读取该方案（或调用 wudi_arch_plan 复核），然后调用 wudi_arch_scaffold {confirm:true} 写入骨架，并按方案实现各模块的初始页面/接口，最后用 wudi_architecture 复查结构。`;
       try {
         /* ui/message 的 content 必须是 content block 数组（对齐 openPencil sendFollowUpMessage）；
            structuredContent 附轻量方案摘要，宿主支持时模型可直接拿到路径与文件清单。 */
@@ -1577,7 +1577,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
               kind: p.kind,
               framework: p.framework,
               name: p.name,
-              savedPath: p.savedPath ?? ".wudi/architecture.json",
+              savedPath: p.savedPath ?? ".wudi/<项目名>/architecture.json",
               dirs: p.dirs ?? [],
               files: (p.files ?? []).map((f) => f.path),
             },
@@ -1589,7 +1589,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
         const copied = await copyText(prompt);
         state.notice = copied
           ? { kind: "ok", text: "宿主未接受面板消息（ui/message）：任务已复制到剪贴板，粘贴到对话即可" }
-          : { kind: "err", text: "无法发送给 Agent：请在对话里说明「按 .wudi/architecture.json 的架构方案搭建项目框架」" };
+          : { kind: "err", text: "无法发送给 Agent：请在对话里说明「按 .wudi/<项目名>/architecture.json 的架构方案搭建项目框架」" };
       }
       render();
     });
