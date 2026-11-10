@@ -611,7 +611,7 @@
         "en": "selfaware: layered functional self-awareness for the AOPC agent — state perception, metacognition, a persistent self-model, and human-approved reflective improvement.",
         "zh-CN": "观己:给 AOPC agent 装上分层的功能性自我意识——状态感知、元认知、持久自我模型、经人审批的反思改进"
       },
-      "version": "3.4.0",
+      "version": "3.5.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -626,6 +626,16 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "3.5.0",
+          "date": "2026-11-10",
+          "changes": [
+            "主动跨域学习协议(用户需求:每天不断学各个领域的知识,写入知识库):学习时刻升级四源——源③ 固化为每日必修的跨域轮换(AI/编程/设计/产品/商业/心理学/科学),WebSearch 研究透后 self_learn 入库(tags 带领域名)",
+            "学习路线图页:跨域轮换表 + 已学记录,首次执行自动创建于知识库",
+            "首批跨域知识入库:心理学·信息缺口理论与钩子设计(Loewenstein 1994,与账号完播数据互证)",
+            "冒烟测试 247 → 256 项全绿"
+          ]
+        },
         {
           "version": "3.4.0",
           "date": "2026-11-09",
