@@ -19,7 +19,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.38.8" },
+    { name: "wudi-coding", version: "0.38.9" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -308,7 +308,7 @@ const EmptyResultSchema = {
         ${!p.isCurrent && p.archived ? '<div class="muted" style="margin-top:8px">这是只读总览；部署操作请在该项目的工作区会话中进行（AOPC 打开该项目目录）。</div>' : ""}
       </div>
       <div class="card"><h3>资产<span class="line"></span></h3>
-        <div class="kv"><span class="k">文档</span><span class="v plain">${p.docsCount} 份</span><span class="k">设计产物</span><span class="v plain">${p.designCount} 个</span><span class="k">登记时间</span><span class="v plain">${esc(fmtTime(p.addedAt))}</span></div>
+        <div class="kv"><span class="k">文档</span><span class="v plain">${p.docsCount} 份</span><span class="k">画布</span><span class="v plain">${p.designCount} 个</span><span class="k">登记时间</span><span class="v plain">${esc(fmtTime(p.addedAt))}</span></div>
       </div>`;
   }
 
@@ -705,7 +705,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.38.8" },
+              hostInfo: { name: "wudi-workbench", version: "0.38.9" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",

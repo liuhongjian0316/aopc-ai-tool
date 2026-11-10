@@ -321,6 +321,14 @@ async function protocolTests() {
       check("multi_root: designs_list 按根", (r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "sub.fig" && d.path.startsWith(".wudi/")));
       r = await s.call("tools/call", { name: "wudi_designs_list", arguments: {} });
       check("multi_root: 当前根不含他项目设计稿", !(r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "sub.fig" && d.path.startsWith(".wudi/")));
+      /* 项目卡「设计」统计：按项目统计集中存储里的 .fig/.pen，不能串项目、不能还看旧 .wudi/design */
+      r = await s.call("tools/call", { name: "wudi_projects_list", arguments: {} });
+      const statProjects = r?.result?.structuredContent?.projects ?? [];
+      check("projects_list: 画布统计按项目（subproj=1）",
+        (statProjects.find((x) => x.name === "subproj")?.designCount ?? 0) === 1,
+        JSON.stringify(statProjects.map((x) => [x.name, x.designCount])));
+      check("projects_list: 画布统计不串项目（当前=0）",
+        (statProjects.find((x) => x.isCurrent)?.designCount ?? -1) === 0);
     } finally {
       await rm(outside, { recursive: true, force: true });
     }

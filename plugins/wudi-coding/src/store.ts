@@ -762,8 +762,23 @@ export function registrySummaries(currentRoot = "", wsRoot = projectRoot()) {
     const docs = read("docs.json", []);
     let designCount = 0;
     try {
-      designCount = readdirSync(join(wudi, "design"), { recursive: true }).filter((f) => String(f).endsWith(".html") || String(f).endsWith(".json")).length;
-    } catch { /* 无设计产物 */ }
+      /* 画布集中存储：<工作区>/.wudi/<项目>/designs/*.fig|.pen（与设计页列表同一口径）；
+       * 未迁移的历史位置（项目根 designs/、v0.38 中央 .wudi/designs/）一并统计，按文件名去重。 */
+      const canvasDirs = [
+        join(wsRoot, ".wudi", projectBaseName(entry.path), "designs"),
+        join(entry.path, "designs"),
+      ];
+      if (resolve(entry.path) === resolve(wsRoot)) canvasDirs.push(join(wsRoot, ".wudi", "designs"));
+      const names = new Set();
+      for (const dir of canvasDirs) {
+        try {
+          for (const f of readdirSync(dir)) {
+            if (/\.(fig|pen)$/i.test(f)) names.add(f);
+          }
+        } catch { /* 目录不存在 */ }
+      }
+      designCount = names.size;
+    } catch { /* 无画布目录 */ }
     const envs = Array.isArray(project?.envs) ? project.envs.map((e) => e.name) : [];
     const last = deploys[0] ?? null;
     return {

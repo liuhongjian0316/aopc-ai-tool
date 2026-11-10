@@ -1613,7 +1613,7 @@ function toolProjectsList() {
       const last = p.lastDeploy
         ? `${p.lastDeploy.type === "rollback" ? "回滚" : "部署"}@${p.lastDeploy.env ?? "default"} ${p.lastDeploy.release}（${p.lastDeploy.status}）`
         : "无部署";
-      return `- ${p.isCurrent ? "★当前 " : ""}${p.name}｜${p.path}\n  技术栈 ${p.techStack || "?"}｜环境 ${(p.envNames || ["—"]).join("、")}｜${last}｜文档 ${p.docsCount}｜设计产物 ${p.designCount}`;
+      return `- ${p.isCurrent ? "★当前 " : ""}${p.name}｜${p.path}\n  技术栈 ${p.techStack || "?"}｜环境 ${(p.envNames || ["—"]).join("、")}｜${last}｜文档 ${p.docsCount}｜画布 ${p.designCount}`;
     })
     .join("\n");
   return ok(`═══ 项目注册表（${projects.length}）═══\n${lines || "（空）"}`, { projects });

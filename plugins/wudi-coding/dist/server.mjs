@@ -648,7 +648,21 @@ function registrySummaries(currentRoot = "", wsRoot = projectRoot()) {
     const docs = read("docs.json", []);
     let designCount = 0;
     try {
-      designCount = readdirSync(join(wudi, "design"), { recursive: true }).filter((f) => String(f).endsWith(".html") || String(f).endsWith(".json")).length;
+      const canvasDirs = [
+        join(wsRoot, ".wudi", projectBaseName(entry.path), "designs"),
+        join(entry.path, "designs")
+      ];
+      if (resolve(entry.path) === resolve(wsRoot)) canvasDirs.push(join(wsRoot, ".wudi", "designs"));
+      const names = /* @__PURE__ */ new Set();
+      for (const dir of canvasDirs) {
+        try {
+          for (const f of readdirSync(dir)) {
+            if (/\.(fig|pen)$/i.test(f)) names.add(f);
+          }
+        } catch {
+        }
+      }
+      designCount = names.size;
     } catch {
     }
     const envs = Array.isArray(project?.envs) ? project.envs.map((e) => e.name) : [];
@@ -2620,7 +2634,7 @@ function toolProjectsList() {
   const lines = projects.map((p) => {
     const last = p.lastDeploy ? `${p.lastDeploy.type === "rollback" ? "\u56DE\u6EDA" : "\u90E8\u7F72"}@${p.lastDeploy.env ?? "default"} ${p.lastDeploy.release}\uFF08${p.lastDeploy.status}\uFF09` : "\u65E0\u90E8\u7F72";
     return `- ${p.isCurrent ? "\u2605\u5F53\u524D " : ""}${p.name}\uFF5C${p.path}
-  \u6280\u672F\u6808 ${p.techStack || "?"}\uFF5C\u73AF\u5883 ${(p.envNames || ["\u2014"]).join("\u3001")}\uFF5C${last}\uFF5C\u6587\u6863 ${p.docsCount}\uFF5C\u8BBE\u8BA1\u4EA7\u7269 ${p.designCount}`;
+  \u6280\u672F\u6808 ${p.techStack || "?"}\uFF5C\u73AF\u5883 ${(p.envNames || ["\u2014"]).join("\u3001")}\uFF5C${last}\uFF5C\u6587\u6863 ${p.docsCount}\uFF5C\u753B\u5E03 ${p.designCount}`;
   }).join("\n");
   return ok(`\u2550\u2550\u2550 \u9879\u76EE\u6CE8\u518C\u8868\uFF08${projects.length}\uFF09\u2550\u2550\u2550
 ${lines || "\uFF08\u7A7A\uFF09"}`, { projects });
@@ -3311,7 +3325,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.38.8" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.38.9" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());

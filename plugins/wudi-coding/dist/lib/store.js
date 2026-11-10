@@ -637,7 +637,21 @@ function registrySummaries(currentRoot = "", wsRoot = projectRoot()) {
     const docs = read("docs.json", []);
     let designCount = 0;
     try {
-      designCount = readdirSync(join(wudi, "design"), { recursive: true }).filter((f) => String(f).endsWith(".html") || String(f).endsWith(".json")).length;
+      const canvasDirs = [
+        join(wsRoot, ".wudi", projectBaseName(entry.path), "designs"),
+        join(entry.path, "designs")
+      ];
+      if (resolve(entry.path) === resolve(wsRoot)) canvasDirs.push(join(wsRoot, ".wudi", "designs"));
+      const names = /* @__PURE__ */ new Set();
+      for (const dir of canvasDirs) {
+        try {
+          for (const f of readdirSync(dir)) {
+            if (/\.(fig|pen)$/i.test(f)) names.add(f);
+          }
+        } catch {
+        }
+      }
+      designCount = names.size;
     } catch {
     }
     const envs = Array.isArray(project?.envs) ? project.envs.map((e) => e.name) : [];

@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.38.8",
+      "version": "0.38.9",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,15 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.38.9",
+          "date": "2026-11-10",
+          "changes": [
+            "修复项目卡「设计」统计恒为 0：registrySummaries 还在数旧设计资产目录 <项目>/.wudi/design 下的 html/json，而画布早已集中存储在 <工作区>/.wudi/<项目>/designs/*.fig|.pen",
+            "改为与设计页列表同一口径统计 .fig/.pen（含未迁移的历史位置），按文件名去重、不串项目；卡片/详情文案「设计产物」统一改为「画布」",
+            "实测工作区 test：WEB 显示 1（web.fig），DESKTOP/MINI/APP 显示 0，与磁盘一致；smoke +2（140 全绿）"
+          ]
+        },
         {
           "version": "0.38.8",
           "date": "2026-11-10",
