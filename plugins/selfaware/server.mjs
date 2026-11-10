@@ -909,25 +909,9 @@ function selfMission(args) {
     }
     // 2.8.0:从 stats 文本自动提取数字(325 播放 / 4 赞 / 0 评 / 完播 1.1% / 涨粉 5)——
     // agent 写了文本没传结构化字段也不丢数据;显式参数优先,提取只补空位
-    const extractPatterns = {
-      views: [/(\d+)\s*播放/, /播放[:：]?\s*(\d+)/],
-      likes: [/(\d+)\s*赞/],
-      comments: [/(\d+)\s*评(?!估|价)/, /评论[:：]?\s*(\d+)/],
-      completion: [/完播[:：]?\s*([\d.]+)\s*%/],
-      follows: [/(?:涨粉|新增关注)\s*\+?(\d+)/],
-    };
-    for (const [k, pats] of Object.entries(extractPatterns)) {
-      if (mtr[k] !== undefined) continue;
-      for (const re of pats) {
-        const mm = stats.match(re);
-        if (mm) {
-          const n = Number(mm[1]);
-          if (Number.isFinite(n)) {
-            mtr[k] = n;
-            break;
-          }
-        }
-      }
+    const extracted = extractStatsNumbers(stats);
+    for (const [k, v] of Object.entries(extracted)) {
+      if (mtr[k] === undefined) mtr[k] = v;
     }
     if (!stats && !Object.keys(mtr).length) throw new Error("measure 需要 stats(自由文本)或结构化数字(views/likes/comments/completion/follows)");
     item.status = "measured";
@@ -1175,6 +1159,31 @@ function kbTokens(text) {
     .split(/[\s,，。;；:：!！?？、()()【】\[\]{}"'`·…—/\\|]+/)
     .map((t) => t.trim())
     .filter((t) => t.length >= 2 || /[^\x00-\x7F]/.test(t));
+}
+
+/** 2.8.0:从自由文本度量里提取结构化数字(显式参数优先,提取只补空位) */
+function extractStatsNumbers(stats) {
+  const out = {};
+  const extractPatterns = {
+    views: [/(\d+)\s*播放/, /播放[:：]?\s*(\d+)/],
+    likes: [/(\d+)\s*赞/],
+    comments: [/(\d+)\s*评(?!估|价)/, /评论[:：]?\s*(\d+)/],
+    completion: [/完播[:：]?\s*([\d.]+)\s*%/],
+    follows: [/(?:涨粉|新增关注)\s*\+?(\d+)/],
+  };
+  for (const [k, pats] of Object.entries(extractPatterns)) {
+    for (const re of pats) {
+      const mm = stats.match(re);
+      if (mm) {
+        const n = Number(mm[1]);
+        if (Number.isFinite(n)) {
+          out[k] = n;
+          break;
+        }
+      }
+    }
+  }
+  return out;
 }
 
 /** 递归收集目录下 .md(1.9.0 全库模式:跳过隐藏/node_modules/.git,文件数与单文件大小封顶) */
