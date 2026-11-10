@@ -1580,6 +1580,41 @@ console.log("\n[T60] 版本一致性:双 manifest / server / panel.js / panel.ht
   }
 }
 
+// ---------- T61 横幅台账回访提醒(3.7.0 系统级提醒的回归防线) ----------
+console.log("\n[T61] SessionStart 横幅:台账回访(自评逾期/度量逾期/待决策)注入与零打扰");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  fs.mkdirSync(path.join(dir, "self"), { recursive: true });
+  const now = Date.now();
+  const mission = (ledger, reqStatus = "pending") => JSON.stringify({
+    active: { title: "测试使命", goal: "g", autonomy: "full", startedAt: now - 5 * 86400000 },
+    log: [], open: [],
+    requests: [{ id: "r001", t: now - 86400000, type: "B", question: "?", options: "", context: "", status: reqStatus }],
+    ledger, ledgerSeq: 3, openSeq: 0, requestSeq: 1, ideaSeq: 0, ideas: [],
+  });
+  fs.writeFileSync(path.join(dir, "mission.json"), mission([
+    { id: "v001", t: now - 30 * 3600000, title: "自评逾期条", status: "awaiting", hypothesis: "" },
+    { id: "v002", t: now - 50 * 3600000, title: "度量逾期条", status: "awaiting", hypothesis: "" },
+    { id: "v003", t: now - 10 * 3600000, title: "刚发布未到期", status: "awaiting", hypothesis: "" },
+  ]));
+  const r = parseOut(runObserver(dir, { session_id: "sess_t61", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" }).stdout);
+  const out = JSON.stringify(r);
+  check("横幅含台账回访段", out.includes("台账回访"), (r?.hookSpecificOutput?.additionalContext || "").slice(0, 200));
+  check("自评逾期条点名 v001 并引导 action=review", out.includes("v001") && out.includes("action=review"));
+  check("度量逾期条点名 v002 并引导 action=measure", out.includes("v002") && out.includes("action=measure"));
+  check("未到期条 v003 不触发点名(零打扰)", !out.includes("v003"));
+  check("待决策 r001 进横幅", out.includes("r001") && out.includes("待用户决策"));
+  // 已全部处置(自评已落+请示已批复):横幅不再带回访段(防打扰)
+  fs.writeFileSync(path.join(dir, "mission.json"), mission([
+    { id: "v001", t: now - 30 * 3600000, title: "已自评", status: "awaiting", hypothesis: "", selfReviewAt: now - 3600000 },
+    { id: "v002", t: now - 10 * 3600000, title: "刚发布", status: "awaiting", hypothesis: "" },
+  ], "decided"));
+  const r2 = parseOut(runObserver(dir, { session_id: "sess_t61b", hook_event_name: "SessionStart", source: "startup", cwd: "/tmp" }).stdout);
+  const out2 = JSON.stringify(r2);
+  check("全部处置后横幅无台账回访段", !out2.includes("台账回访"), (r2?.hookSpecificOutput?.additionalContext || "").slice(0, 160));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);
