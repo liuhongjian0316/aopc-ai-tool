@@ -1624,6 +1624,8 @@ function toolRoot(args: any = {}) {
   const raw = String(args?.root ?? "").trim();
   if (!raw) return store.projectRoot();
   const abs = resolve(raw);
+  /* 注册表按工作区分域：显式 root 也必须在当前工作区内（防面板残留状态跨工作区读写） */
+  if (!withinProjectRoot(abs)) throw new Error(`项目根不在当前项目范围内：${raw}`);
   if (!existsSync(abs) || !statSync(abs).isDirectory()) throw new Error(`项目根不存在：${raw}`);
   return abs;
 }

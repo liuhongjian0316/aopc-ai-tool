@@ -6,7 +6,7 @@
  * 用法：node scripts/smoke.mjs   —— 全绿退出码 0，任何失败退出码 1。
  */
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import net from "node:net";
 import crypto from "node:crypto";
@@ -146,8 +146,11 @@ const errOf = (r) => r?.result?.isError === true;
 async function protocolTests() {
   console.log("◆ MCP 协议与工具面（真实 stdio server）");
   const workdir = await mkdtemp(join(tmpdir(), "wudi-smoke-"));
+  /* 插件数据目录也隔离：迁移逻辑会读旧全局注册表，不能碰用户 home */
+  const pluginData = await mkdtemp(join(tmpdir(), "wudi-plugin-data-"));
   const s = rpcSession({
     AOPC_WORKSPACE_ROOT: workdir,
+    AOPC_PLUGIN_DATA: pluginData,
     WUDI_SSH_HOST: "203.0.113.10",
     WUDI_SSH_TIMEOUT_SEC: "2",
   });
@@ -320,6 +323,43 @@ async function protocolTests() {
       check("multi_root: 当前根不含他项目设计稿", !(r?.result?.structuredContent?.designs ?? []).some((d) => d.name === "sub.fig" && d.path.startsWith(".wudi/")));
     } finally {
       await rm(outside, { recursive: true, force: true });
+    }
+    /* ---- 注册表按工作区分域：新工作区看不到别的工作区登记的项目 ---- */
+    const otherWs = await mkdtemp(join(tmpdir(), "wudi-ws2-"));
+    const s2 = rpcSession({ AOPC_WORKSPACE_ROOT: otherWs, AOPC_PLUGIN_DATA: pluginData });
+    try {
+      await s2.call("initialize", { protocolVersion: "2024-11-05" });
+      const r2 = await s2.call("tools/call", { name: "wudi_projects_list", arguments: {} });
+      const projs2 = r2?.result?.structuredContent?.projects ?? [];
+      check("registry_scope: 新工作区只看到自己（当前项目自动登记）",
+        projs2.length === 1 && projs2[0].isCurrent && resolve(projs2[0].path) === resolve(otherWs),
+        JSON.stringify(projs2.map((p) => p.path)));
+      check("registry_scope: 看不到别的工作区项目", !projs2.some((p) => p.path === sub || p.path === workdir));
+      check("registry_scope: 注册表落在各自 .wudi/projects.json",
+        existsSync(join(otherWs, ".wudi", "projects.json")) && existsSync(join(workdir, ".wudi", "projects.json")));
+      const cross = await s.call("tools/call", { name: "wudi_status", arguments: { root: otherWs } });
+      check("registry_scope: 跨工作区 root 拒绝", errOf(cross) && textOf(cross).includes("不在当前项目范围内"), textOf(cross).slice(0, 120));
+      /* 旧全局注册表迁移：只迁入本工作区范围内的条目 */
+      const legacyData = await mkdtemp(join(tmpdir(), "wudi-plugin-data-"));
+      const migWs = await mkdtemp(join(tmpdir(), "wudi-ws-mig-"));
+      const legacyEntry = (p, n) => ({ id: `proj-legacy-${n}`, name: n, path: resolve(p), addedAt: new Date().toISOString() });
+      await mkdir(join(legacyData, "wudi-coding"), { recursive: true });
+      await writeFile(join(legacyData, "wudi-coding", "projects.json"),
+        JSON.stringify([legacyEntry(sub, "legacy-sub"), legacyEntry(migWs, "legacy-mig")], null, 2));
+      const s3 = rpcSession({ AOPC_WORKSPACE_ROOT: migWs, AOPC_PLUGIN_DATA: legacyData });
+      try {
+        await s3.call("initialize", { protocolVersion: "2024-11-05" });
+        const r3 = await s3.call("tools/call", { name: "wudi_projects_list", arguments: {} });
+        const projs3 = r3?.result?.structuredContent?.projects ?? [];
+        check("registry_migrate: 旧全局表只迁入本工作区条目",
+          projs3.some((p) => p.path === resolve(migWs)) && !projs3.some((p) => p.path === resolve(sub)),
+          JSON.stringify(projs3.map((p) => p.path)));
+      } finally { s3.kill(); }
+      await rm(legacyData, { recursive: true, force: true });
+      await rm(migWs, { recursive: true, force: true });
+    } finally {
+      s2.kill();
+      await rm(otherWs, { recursive: true, force: true });
     }
     r = await s.call("tools/call", { name: "wudi_projects_list", arguments: {} });
     const curNow2 = (r?.result?.structuredContent?.projects ?? []).find((p) => p.isCurrent);
@@ -535,6 +575,7 @@ async function protocolTests() {
   } finally {
     s.kill();
     await rm(workdir, { recursive: true, force: true });
+    await rm(pluginData, { recursive: true, force: true });
   }
 }
 

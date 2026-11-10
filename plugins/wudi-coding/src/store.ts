@@ -10,7 +10,8 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
 export function projectRoot() {
-  const root = process.env.AOPC_WORKSPACE_ROOT || process.cwd();
+  /* 与 openpencil.defaultWorkspaceRoot() 保持同一解析顺序：宿主以项目目录为准 */
+  const root = process.env.AOPC_PROJECT_DIR || process.env.AOPC_WORKSPACE_ROOT || process.cwd();
   return resolve(root);
 }
 
@@ -576,27 +577,75 @@ export function pluginDataDir() {
     : join(homedir(), ".aopc", "wudi-coding");
 }
 
-/* ---------------- 项目注册表（跨项目管理，plugin data 下） ---------------- */
+/* ---------------- 项目注册表（按工作区分域：<工作区>/.wudi/projects.json） ----------------
+ * 每个左侧栏工作区（AOPC_WORKSPACE_ROOT）只看到自己登记的项目；注册表与隐藏集随工作区走，
+ * 不再放插件全局数据目录——否则新开一个工作区还能看到别的工作区登记的项目。 */
 
-function registryPath() {
-  return join(pluginDataDir(), "projects.json");
+function wudiDirAt(root) {
+  return join(resolve(root), ".wudi");
 }
 
-/** 读项目注册表：[{id, name, path, addedAt}]。注意：注册表在插件数据目录，不能复用 .wudi 作用域的 readJSON。 */
-export function loadRegistry() {
-  const p = registryPath();
+function registryPath(wsRoot = projectRoot()) {
+  return join(wudiDirAt(wsRoot), "projects.json");
+}
+
+function hiddenPath(wsRoot = projectRoot()) {
+  return join(wudiDirAt(wsRoot), "hidden_projects.json");
+}
+
+function legacyPath(name) {
+  return join(pluginDataDir(), name);
+}
+
+function withinRoot(p, root) {
+  const abs = resolve(String(p ?? ""));
+  const base = resolve(root);
+  return abs === base || abs.startsWith(base + "/");
+}
+
+/** 旧版全局注册表 → 按工作区惰性迁移：只迁入本工作区范围内的条目，旧文件保留不动。 */
+export function migrateRegistryFor(wsRoot = projectRoot()) {
+  const root = resolve(wsRoot);
+  try {
+    if (!existsSync(registryPath(root))) {
+      const legacy = legacyPath("projects.json");
+      if (existsSync(legacy)) {
+        const list = JSON.parse(readFileSync(legacy, "utf-8"));
+        const mine = Array.isArray(list) ? list.filter((e) => e?.path && withinRoot(e.path, root)) : [];
+        if (mine.length) saveRegistry(mine, root);
+      }
+    }
+    if (!existsSync(hiddenPath(root))) {
+      const legacy = legacyPath("hidden_projects.json");
+      if (existsSync(legacy)) {
+        const list = JSON.parse(readFileSync(legacy, "utf-8"));
+        const mine = Array.isArray(list) ? list.filter((x) => withinRoot(x, root)) : [];
+        if (mine.length) saveHidden(mine, root);
+      }
+    }
+  } catch (err) {
+    console.error(`[wudi-coding] 注册表迁移失败（按空处理）：${err.message}`);
+  }
+}
+
+/** 读项目注册表：[{id, name, path, addedAt}]（工作区作用域，随 .wudi 走）。 */
+export function loadRegistry(wsRoot = projectRoot()) {
+  const root = resolve(wsRoot);
+  migrateRegistryFor(root);
+  const p = registryPath(root);
   if (!existsSync(p)) return [];
   try {
-    return JSON.parse(readFileSync(p, "utf-8"));
+    const list = JSON.parse(readFileSync(p, "utf-8"));
+    return Array.isArray(list) ? list : [];
   } catch (err) {
     console.error(`[wudi-coding] ${p} 解析失败，按空注册表处理：${err.message}`);
     return [];
   }
 }
 
-function saveRegistry(list) {
-  mkdirSync(pluginDataDir(), { recursive: true });
-  const p = registryPath();
+function saveRegistry(list, wsRoot = projectRoot()) {
+  mkdirSync(wudiDirAt(wsRoot), { recursive: true });
+  const p = registryPath(wsRoot);
   const tmp = `${p}.tmp-${process.pid}`;
   writeFileSync(tmp, JSON.stringify(list, null, 2));
   renameSync(tmp, p);
@@ -607,14 +656,14 @@ function saveRegistry(list) {
  * 注册表登记/更新一个项目（按 path 去重；name 缺省取目录名）。
  * 返回 {entry, added}。
  */
-export function registryAdd(path, name = "") {
+export function registryAdd(path, name = "", wsRoot = projectRoot()) {
   const abs = resolve(String(path).trim());
   if (!abs || abs === "/") throw new Error("path 无效。");
-  const list = loadRegistry();
+  const list = loadRegistry(wsRoot);
   const existing = list.find((e) => e.path === abs);
   if (existing) {
     if (name) existing.name = name;
-    saveRegistry(list);
+    saveRegistry(list, wsRoot);
     return { entry: existing, added: false };
   }
   const entry = {
@@ -624,28 +673,24 @@ export function registryAdd(path, name = "") {
     addedAt: new Date().toISOString(),
   };
   list.unshift(entry);
-  saveRegistry(list);
+  saveRegistry(list, wsRoot);
   return { entry, added: true };
 }
 
-/* ---------------- 隐藏项目（用户显式移除当前工作区后不再自动登记） ---------------- */
+/* ---------------- 隐藏项目（用户显式移除当前工作区后不再自动登记，工作区作用域） ---------------- */
 
-function hiddenPath() {
-  return join(pluginDataDir(), "hidden_projects.json");
-}
-
-function loadHidden() {
+function loadHidden(wsRoot = projectRoot()) {
   try {
-    const list = JSON.parse(readFileSync(hiddenPath(), "utf-8"));
+    const list = JSON.parse(readFileSync(hiddenPath(wsRoot), "utf-8"));
     return Array.isArray(list) ? list : [];
   } catch {
     return [];
   }
 }
 
-function saveHidden(list) {
-  mkdirSync(pluginDataDir(), { recursive: true });
-  const p = hiddenPath();
+function saveHidden(list, wsRoot = projectRoot()) {
+  mkdirSync(wudiDirAt(wsRoot), { recursive: true });
+  const p = hiddenPath(wsRoot);
   const tmp = `${p}.tmp-${process.pid}`;
   writeFileSync(tmp, JSON.stringify(list, null, 2));
   renameSync(tmp, p);
@@ -653,47 +698,47 @@ function saveHidden(list) {
 }
 
 /** 把项目根加入隐藏集（显式移除当前工作区项目后调用）。 */
-export function hideProjectRoot(root) {
+export function hideProjectRoot(root, wsRoot = projectRoot()) {
   const abs = resolve(String(root));
-  const list = loadHidden();
+  const list = loadHidden(wsRoot);
   if (!list.includes(abs)) {
     list.push(abs);
-    saveHidden(list);
+    saveHidden(list, wsRoot);
   }
   return abs;
 }
 
 /** 取消隐藏（重新登记时调用）。 */
-export function unhideProjectRoot(root) {
+export function unhideProjectRoot(root, wsRoot = projectRoot()) {
   const abs = resolve(String(root));
-  const list = loadHidden().filter((x) => resolve(x) !== abs);
-  saveHidden(list);
+  const list = loadHidden(wsRoot).filter((x) => resolve(x) !== abs);
+  saveHidden(list, wsRoot);
   return abs;
 }
 
 /** 该项目根是否被用户显式移除/隐藏。 */
-export function isProjectRootHidden(root) {
+export function isProjectRootHidden(root, wsRoot = projectRoot()) {
   const abs = resolve(String(root));
-  return loadHidden().some((x) => resolve(x) === abs);
+  return loadHidden(wsRoot).some((x) => resolve(x) === abs);
 }
 
 /** 重命名注册表条目（只改显示名，不动项目目录）。 */
-export function registryRename(idOrPath, name) {
+export function registryRename(idOrPath, name, wsRoot = projectRoot()) {
   const trimmed = String(name ?? "").trim();
   if (!trimmed) throw new Error("name 不能为空。");
-  const list = loadRegistry();
+  const list = loadRegistry(wsRoot);
   const entry = list.find((e) => e.id === idOrPath || e.path === idOrPath);
   if (!entry) return null;
   entry.name = trimmed;
-  saveRegistry(list);
+  saveRegistry(list, wsRoot);
   return entry;
 }
 
-export function registryRemove(idOrPath) {
-  const list = loadRegistry();
+export function registryRemove(idOrPath, wsRoot = projectRoot()) {
+  const list = loadRegistry(wsRoot);
   const next = list.filter((e) => e.id !== idOrPath && e.path !== idOrPath);
   if (next.length === list.length) return null;
-  saveRegistry(next);
+  saveRegistry(next, wsRoot);
   return list.find((e) => e.id === idOrPath || e.path === idOrPath);
 }
 
@@ -701,9 +746,9 @@ export function registryRemove(idOrPath) {
  * 汇总注册表里每个项目的只读概览（读各自 .wudi/）：
  * 档案字段、环境数、最近部署、文档数、设计产物数、是否当前工作区。
  */
-export function registrySummaries(currentRoot = "") {
+export function registrySummaries(currentRoot = "", wsRoot = projectRoot()) {
   const cur = currentRoot ? resolve(currentRoot) : "";
-  return loadRegistry().map((entry) => {
+  return loadRegistry(wsRoot).map((entry) => {
     const wudi = join(entry.path, ".wudi");
     const read = (name, fallback) => {
       try {

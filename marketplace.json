@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.38.7",
+      "version": "0.38.8",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,17 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.38.8",
+          "date": "2026-11-10",
+          "changes": [
+            "修复项目存储未按工作区隔离：项目注册表与隐藏集此前放在插件全局数据目录（~/.aopc/wudi-coding/），新开一个左侧栏项目仍能看到其他工作区登记的项目",
+            "改为按工作区分域：注册表/隐藏集存到各自 <工作区>/.wudi/projects.json、hidden_projects.json；每个工作区只看到自己登记的项目",
+            "旧全局注册表惰性迁移：首次打开某工作区时只迁入位于该工作区范围内的条目，全局旧文件保留不动，其他工作区各自迁移",
+            "显式 root 参数限制在当前工作区内（toolRoot 校验），面板残留的跨工作区 projectRoot 自动清空，避免串读",
+            "smoke +5（138 全绿）：两个工作区互不可见、跨工作区 root 拒绝、注册表落盘位置、旧表迁移过滤"
+          ]
+        },
         {
           "version": "0.38.7",
           "date": "2026-11-09",

@@ -14,7 +14,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameS
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 function projectRoot() {
-  const root = process.env.AOPC_WORKSPACE_ROOT || process.cwd();
+  const root = process.env.AOPC_PROJECT_DIR || process.env.AOPC_WORKSPACE_ROOT || process.cwd();
   return resolve(root);
 }
 function wudiDir() {
@@ -499,35 +499,75 @@ function releaseStamp(date = /* @__PURE__ */ new Date()) {
 function pluginDataDir() {
   return process.env.AOPC_PLUGIN_DATA ? join(process.env.AOPC_PLUGIN_DATA, "wudi-coding") : join(homedir(), ".aopc", "wudi-coding");
 }
-function registryPath() {
-  return join(pluginDataDir(), "projects.json");
+function wudiDirAt(root) {
+  return join(resolve(root), ".wudi");
 }
-function loadRegistry() {
-  const p = registryPath();
+function registryPath(wsRoot = projectRoot()) {
+  return join(wudiDirAt(wsRoot), "projects.json");
+}
+function hiddenPath(wsRoot = projectRoot()) {
+  return join(wudiDirAt(wsRoot), "hidden_projects.json");
+}
+function legacyPath(name) {
+  return join(pluginDataDir(), name);
+}
+function withinRoot(p, root) {
+  const abs = resolve(String(p ?? ""));
+  const base = resolve(root);
+  return abs === base || abs.startsWith(base + "/");
+}
+function migrateRegistryFor(wsRoot = projectRoot()) {
+  const root = resolve(wsRoot);
+  try {
+    if (!existsSync(registryPath(root))) {
+      const legacy = legacyPath("projects.json");
+      if (existsSync(legacy)) {
+        const list = JSON.parse(readFileSync(legacy, "utf-8"));
+        const mine = Array.isArray(list) ? list.filter((e) => e?.path && withinRoot(e.path, root)) : [];
+        if (mine.length) saveRegistry(mine, root);
+      }
+    }
+    if (!existsSync(hiddenPath(root))) {
+      const legacy = legacyPath("hidden_projects.json");
+      if (existsSync(legacy)) {
+        const list = JSON.parse(readFileSync(legacy, "utf-8"));
+        const mine = Array.isArray(list) ? list.filter((x) => withinRoot(x, root)) : [];
+        if (mine.length) saveHidden(mine, root);
+      }
+    }
+  } catch (err) {
+    console.error(`[wudi-coding] \u6CE8\u518C\u8868\u8FC1\u79FB\u5931\u8D25\uFF08\u6309\u7A7A\u5904\u7406\uFF09\uFF1A${err.message}`);
+  }
+}
+function loadRegistry(wsRoot = projectRoot()) {
+  const root = resolve(wsRoot);
+  migrateRegistryFor(root);
+  const p = registryPath(root);
   if (!existsSync(p)) return [];
   try {
-    return JSON.parse(readFileSync(p, "utf-8"));
+    const list = JSON.parse(readFileSync(p, "utf-8"));
+    return Array.isArray(list) ? list : [];
   } catch (err) {
     console.error(`[wudi-coding] ${p} \u89E3\u6790\u5931\u8D25\uFF0C\u6309\u7A7A\u6CE8\u518C\u8868\u5904\u7406\uFF1A${err.message}`);
     return [];
   }
 }
-function saveRegistry(list) {
-  mkdirSync(pluginDataDir(), { recursive: true });
-  const p = registryPath();
+function saveRegistry(list, wsRoot = projectRoot()) {
+  mkdirSync(wudiDirAt(wsRoot), { recursive: true });
+  const p = registryPath(wsRoot);
   const tmp = `${p}.tmp-${process.pid}`;
   writeFileSync(tmp, JSON.stringify(list, null, 2));
   renameSync(tmp, p);
   return list;
 }
-function registryAdd(path2, name = "") {
+function registryAdd(path2, name = "", wsRoot = projectRoot()) {
   const abs = resolve(String(path2).trim());
   if (!abs || abs === "/") throw new Error("path \u65E0\u6548\u3002");
-  const list = loadRegistry();
+  const list = loadRegistry(wsRoot);
   const existing = list.find((e) => e.path === abs);
   if (existing) {
     if (name) existing.name = name;
-    saveRegistry(list);
+    saveRegistry(list, wsRoot);
     return { entry: existing, added: false };
   }
   const entry = {
@@ -537,67 +577,64 @@ function registryAdd(path2, name = "") {
     addedAt: (/* @__PURE__ */ new Date()).toISOString()
   };
   list.unshift(entry);
-  saveRegistry(list);
+  saveRegistry(list, wsRoot);
   return { entry, added: true };
 }
-function hiddenPath() {
-  return join(pluginDataDir(), "hidden_projects.json");
-}
-function loadHidden() {
+function loadHidden(wsRoot = projectRoot()) {
   try {
-    const list = JSON.parse(readFileSync(hiddenPath(), "utf-8"));
+    const list = JSON.parse(readFileSync(hiddenPath(wsRoot), "utf-8"));
     return Array.isArray(list) ? list : [];
   } catch {
     return [];
   }
 }
-function saveHidden(list) {
-  mkdirSync(pluginDataDir(), { recursive: true });
-  const p = hiddenPath();
+function saveHidden(list, wsRoot = projectRoot()) {
+  mkdirSync(wudiDirAt(wsRoot), { recursive: true });
+  const p = hiddenPath(wsRoot);
   const tmp = `${p}.tmp-${process.pid}`;
   writeFileSync(tmp, JSON.stringify(list, null, 2));
   renameSync(tmp, p);
   return list;
 }
-function hideProjectRoot(root) {
+function hideProjectRoot(root, wsRoot = projectRoot()) {
   const abs = resolve(String(root));
-  const list = loadHidden();
+  const list = loadHidden(wsRoot);
   if (!list.includes(abs)) {
     list.push(abs);
-    saveHidden(list);
+    saveHidden(list, wsRoot);
   }
   return abs;
 }
-function unhideProjectRoot(root) {
+function unhideProjectRoot(root, wsRoot = projectRoot()) {
   const abs = resolve(String(root));
-  const list = loadHidden().filter((x) => resolve(x) !== abs);
-  saveHidden(list);
+  const list = loadHidden(wsRoot).filter((x) => resolve(x) !== abs);
+  saveHidden(list, wsRoot);
   return abs;
 }
-function isProjectRootHidden(root) {
+function isProjectRootHidden(root, wsRoot = projectRoot()) {
   const abs = resolve(String(root));
-  return loadHidden().some((x) => resolve(x) === abs);
+  return loadHidden(wsRoot).some((x) => resolve(x) === abs);
 }
-function registryRename(idOrPath, name) {
+function registryRename(idOrPath, name, wsRoot = projectRoot()) {
   const trimmed = String(name ?? "").trim();
   if (!trimmed) throw new Error("name \u4E0D\u80FD\u4E3A\u7A7A\u3002");
-  const list = loadRegistry();
+  const list = loadRegistry(wsRoot);
   const entry = list.find((e) => e.id === idOrPath || e.path === idOrPath);
   if (!entry) return null;
   entry.name = trimmed;
-  saveRegistry(list);
+  saveRegistry(list, wsRoot);
   return entry;
 }
-function registryRemove(idOrPath) {
-  const list = loadRegistry();
+function registryRemove(idOrPath, wsRoot = projectRoot()) {
+  const list = loadRegistry(wsRoot);
   const next = list.filter((e) => e.id !== idOrPath && e.path !== idOrPath);
   if (next.length === list.length) return null;
-  saveRegistry(next);
+  saveRegistry(next, wsRoot);
   return list.find((e) => e.id === idOrPath || e.path === idOrPath);
 }
-function registrySummaries(currentRoot = "") {
+function registrySummaries(currentRoot = "", wsRoot = projectRoot()) {
   const cur = currentRoot ? resolve(currentRoot) : "";
-  return loadRegistry().map((entry) => {
+  return loadRegistry(wsRoot).map((entry) => {
     const wudi = join(entry.path, ".wudi");
     const read = (name, fallback) => {
       try {
@@ -2592,6 +2629,7 @@ function toolRoot(args = {}) {
   const raw = String(args?.root ?? "").trim();
   if (!raw) return projectRoot();
   const abs = resolve3(raw);
+  if (!withinProjectRoot(abs)) throw new Error(`\u9879\u76EE\u6839\u4E0D\u5728\u5F53\u524D\u9879\u76EE\u8303\u56F4\u5185\uFF1A${raw}`);
   if (!existsSync3(abs) || !statSync(abs).isDirectory()) throw new Error(`\u9879\u76EE\u6839\u4E0D\u5B58\u5728\uFF1A${raw}`);
   return abs;
 }
@@ -3273,7 +3311,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.38.7" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.38.8" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());

@@ -19,7 +19,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.38.7" },
+    { name: "wudi-coding", version: "0.38.8" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -705,7 +705,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.38.7" },
+              hostInfo: { name: "wudi-workbench", version: "0.38.8" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -1168,6 +1168,11 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
     try {
       const res = await callTool("wudi_projects_list", {});
       state.projects = struct(res);
+      /* 注册表按工作区分域：残留的 projectRoot 若不在本工作区项目里，清掉，避免串读别的工作区 */
+      if (state.projectRoot && !(state.projects?.projects ?? []).some((p) => p.path === state.projectRoot)) {
+        state.projectRoot = "";
+        saveWidgetState();
+      }
     } catch { /* 保留旧数据 */ }
     if (state.view === "projects" && !state.drill) render();
   }
