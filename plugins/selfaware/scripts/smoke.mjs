@@ -774,6 +774,17 @@ console.log("\n[T31] self_state 暴露 opsScripts 与 playbookFiles");
   const r = spawnSync("node", [SERVER], { input: rpc, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000 });
   const sc = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).map((m) => m?.result?.structuredContent)[0];
   check("自造脚本入清单(未注册标记)", sc?.opsScripts?.some((s) => s.name === "resize_video.sh" && s.registered === false), JSON.stringify(sc?.opsScripts));
+  // 3.7.0:注册表 {description, scripts:[...]} 包装格式兼容(裸数组之外的第二种写法)
+  fs.writeFileSync(
+    path.join(dir, "self", "ops", "ops-scripts.json"),
+    JSON.stringify({ description: "登记簿", scripts: [{ name: "resize_video.sh", desc: "改尺寸", usage: "resize.sh <in>", lastVerifiedAt: "2026-11-11" }] })
+  );
+  const rpc2 = [{ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "self_state", arguments: {} } }]
+    .map((m) => JSON.stringify(m)).join("\n") + "\n";
+  const r2 = spawnSync("node", [SERVER], { input: rpc2, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000 });
+  const sc2 = (r2.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).map((m) => m?.result?.structuredContent)[0];
+  check("包装格式登记簿识别为已登记", sc2?.opsScripts?.some((s) => s.name === "resize_video.sh" && s.registered === true && s.desc === "改尺寸"), JSON.stringify(sc2?.opsScripts));
+  check("包装格式下无未注册欠条", (sc2?.opsScripts || []).every((s) => s.registered === true), JSON.stringify(sc2?.opsScripts));
   check("领域手册入清单", sc?.playbookFiles?.includes("douyin-ops.md") && sc?.playbookFiles?.includes("ops-fixes.md"), JSON.stringify(sc?.playbookFiles));
   fs.rmSync(dir, { recursive: true, force: true });
 }

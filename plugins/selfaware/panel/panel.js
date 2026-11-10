@@ -6,7 +6,7 @@ const { App } = GUANJI_SDK;
 
 (() => {
   const app = new App(
-    { name: "selfaware", version: "3.6.0" },
+    { name: "selfaware", version: "3.7.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
 
@@ -273,6 +273,23 @@ const { App } = GUANJI_SDK;
           ${(ev.modelChanges || []).length
             ? ev.modelChanges.slice().reverse().map((c) => `<div class="narr" style="margin-left:0">${esc(c)}</div>`).join("")
             : `<div class="empty">自我模型尚无变更记录</div>`}
+        </div>`);
+    }
+
+    /* 能力账(3.0 注册表 / 3.7 面板暴露:自造脚本与登记状态,未登记 = 能力账上的欠条) */
+    if (Array.isArray(d?.opsScripts) && d.opsScripts.length) {
+      const unreg = d.opsScripts.filter((s) => s.registered === false);
+      parts.push(`
+        <div class="card">
+          <h2>能力账 <span class="tail">· 自造脚本 ${d.opsScripts.length} 个,未登记 = 欠条</span></h2>
+          ${d.opsScripts.map((s) => `
+            <div class="jentry">
+              ${s.registered === false ? '<span class="tag err">未登记</span>' : '<span class="tag ok">已登记</span>'}
+              <span class="mono">${esc(s.name)}</span>
+              ${s.desc ? `<div class="narr">${esc(s.desc)}</div>` : ""}
+              ${s.lastVerifiedAt ? `<span class="stat">验证于 ${esc(String(s.lastVerifiedAt).slice(0, 10))}</span>` : ""}
+            </div>`).join("")}
+          ${unreg.length ? `<div class="footer">⚠ ${unreg.length} 个未登记——当天在 self/ops/ops-scripts.json 补登记</div>` : ""}
         </div>`);
     }
 

@@ -32,7 +32,7 @@ import {
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "3.6.0";
+const VERSION = "3.7.0";
 
 const TOOLS = [
   {
@@ -438,7 +438,9 @@ function selfState() {
     const regPath = path.join(selfDir(), "ops", "ops-scripts.json");
     try {
       const j = JSON.parse(fs.readFileSync(regPath, "utf8"));
+      // 3.7.0:兼容两种格式——裸数组 或 {description, scripts:[...]} 包装(登记簿带说明文字)
       if (Array.isArray(j)) registry = j;
+      else if (Array.isArray(j?.scripts)) registry = j.scripts;
     } catch {}
     const registered = registry
       .filter((r) => r && r.name)
