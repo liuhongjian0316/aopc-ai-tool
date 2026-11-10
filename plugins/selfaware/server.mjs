@@ -32,7 +32,7 @@ import {
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "3.5.0";
+const VERSION = "3.6.0";
 
 const TOOLS = [
   {
@@ -90,23 +90,20 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["get", "start", "note", "close", "obstacle", "resolve", "publish", "measure", "void", "request", "decide", "idea", "idea-use"] },
+        action: { type: "string", enum: ["get", "start", "note", "close", "obstacle", "resolve", "publish", "measure", "review", "void", "request", "decide", "idea", "idea-use"] },
         title: { type: "string", description: "start:使命标题(一句话);resolve:已研究的困难知识标题(将写入知识库);publish:发布的内容标题" },
         goal: { type: "string", description: "start:完成判据/目标(可选)" },
         autonomy: { type: "string", enum: ["supervised", "full"], description: "start:自主等级。full=完全自主(日常发布与数据分析无需逐条请示,红线仍须请示);supervised=受监督(默认)" },
         text: { type: "string", description: "note/close/obstacle:本条记录内容(obstacle 描述遇到的困难与已尝试的方案)" },
         ref: { type: "string", description: "publish:内容引用标识(视频 ID/链接/文件名)" },
         hypothesis: { type: "string", description: "publish:本条内容要验证的定位假设与预期(如『悬念评测钩子→高完播,验证 j001 定位』)——无假设的发布无法得出结论" },
-        id: { type: "string", description: "resolve:要消化的困难条目 id(d001…);measure:要回访度量的台账条目 id(v001…)" },
-        stats: { type: "string", description: "measure:度量结果(一段话;若能拿到数字,优先用下面的结构化字段)" },
+        id: { type: "string", description: "resolve:要消化的困难条目 id(d001…);measure/review:要操作的台账条目 id(v001…)" },
+        stats: { type: "string", description: "measure:度量结果(一段话;若能拿到数字,优先用下面的结构化字段);review:发布后 24h 观众视角自评(钩子 3 秒是否立住/节奏/信息密度/CTA,至少一条可改进点)" },
         views: { type: "number", description: "measure:播放数(结构化,面板趋势用)" },
         likes: { type: "number", description: "measure:点赞数" },
         comments: { type: "number", description: "measure:评论数" },
         completion: { type: "number", description: "measure:完播率 0-100(%)" },
         follows: { type: "number", description: "measure:新增关注数" },
-        body: { type: "string", description: "resolve:研究正文——机制是什么、为什么会这样、下次怎么更快(写入知识库)" },
-        tags: { type: "string", description: "resolve:附加标签(自动追加 troubleshooting)" },
-        id: { type: "string", description: "resolve:要消化的困难条目 id(d001…)" },
         body: { type: "string", description: "resolve:研究正文——机制是什么、为什么会这样、下次怎么更快(写入知识库)" },
         tags: { type: "string", description: "resolve:附加标签(自动追加 troubleshooting)" },
       },
@@ -893,7 +890,23 @@ function selfMission(args) {
     m.log.push({ t: Date.now(), kind: "publish", text: `${item.id} ${title.slice(0, 100)}` });
     writeMission(m);
     const warn = hypothesis ? "" : "\n⚠ 本条无假设——无假设的发布得不出结论,下条请补 hypothesis(预期什么、验证什么)。";
-    return { text: `台账已记(${item.id}):${title.slice(0, 80)}。${hypothesis ? `假设:${hypothesis.slice(0, 80)}` : ""}≥48h 后用 action=measure(id=${item.id}) 回访度量,对照原假设下结论。${warn}`, structured: missionStructured(m, loadState()) };
+    return { text: `台账已记(${item.id}):${title.slice(0, 80)}。${hypothesis ? `假设:${hypothesis.slice(0, 80)}` : ""}发布 24h 内做观众视角自评:action=review(id=${item.id},stats=…);≥48h 用 action=measure(id=${item.id}) 回访度量,对照原假设下结论。${warn}`, structured: missionStructured(m, loadState()) };
+  }
+  if (action === "review") {
+    // 3.6.0:发布后 24h 观众视角自评落账——数字告诉你完播崩了,自评才告诉你为什么崩
+    const item = (m.ledger || []).find((l) => l.id === String(args.id || ""));
+    if (!item) throw new Error(`未找到台账条目:${args.id || "(未传 id)"}(action=get 查看台账)`);
+    if (item.selfReviewAt) throw new Error(`${item.id} 已自评过(${fmtDate(item.selfReviewAt)}),不要重复落账`);
+    const note = String(args.stats || args.text || "").trim();
+    if (!note) throw new Error("review 需要 stats(观众视角自评:钩子 3 秒是否立住/节奏/信息密度/CTA,至少一条可改进点)");
+    item.selfReviewAt = Date.now();
+    item.selfReview = note.slice(0, 400);
+    m.log.push({ t: Date.now(), kind: "review", text: `${item.id} 自评:${note.slice(0, 90)}` });
+    writeMission(m);
+    return {
+      text: `自评已落账 ${item.id}:${note.slice(0, 120)}\n可改进点请流进下一条的 hypothesis 或领域 playbook——自评不进下一个作品等于白评。${item.status === "awaiting" ? "发布 ≥48h 后仍需 action=measure 补度量。" : ""}`,
+      structured: missionStructured(m, loadState()),
+    };
   }
   if (action === "measure") {
     const item = (m.ledger || []).find((l) => l.id === String(args.id || "") && l.status === "awaiting");
@@ -1036,9 +1049,10 @@ function missionText(m) {
   const now = Date.now();
   const awaiting = (m.ledger || []).filter((l) => l.status === "awaiting");
   const due = awaiting.filter((l) => now - l.t >= 48 * 3600000);
+  const revDue = awaiting.filter((l) => !l.selfReviewAt && now - l.t >= 24 * 3600000);
   const voided = (m.ledger || []).filter((l) => l.status === "void");
   if (awaiting.length) {
-    lines.push(`内容台账:待度量 ${awaiting.length} 条${due.length ? `(其中 ${due.length} 条已 ≥48h,优先回访)` : ""}:`);
+    lines.push(`内容台账:待度量 ${awaiting.length} 条${due.length ? `(其中 ${due.length} 条已 ≥48h,优先回访)` : ""}${revDue.length ? `;自评逾期 ${revDue.length} 条(24h 内应 action=review 观众视角自评)` : ""}:`);
     for (const l of awaiting.slice(-3))
       lines.push(`- [${l.id}] ${l.title.slice(0, 50)}(发布于 ${fmtDate(l.t)})${l.hypothesis ? `\n    假设:${l.hypothesis.slice(0, 70)}` : " ⚠ 无假设"}`);
   }
@@ -1071,6 +1085,7 @@ function missionStructured(m, st) {
       ledger: {
         awaiting: ledger.filter((l) => l.status === "awaiting").length,
         due: ledger.filter((l) => l.status === "awaiting" && now - l.t >= 48 * 3600000).map((l) => ({ id: l.id, title: l.title, t: l.t })),
+        selfReviewDue: ledger.filter((l) => l.status === "awaiting" && !l.selfReviewAt && now - l.t >= 24 * 3600000).map((l) => ({ id: l.id, title: l.title, t: l.t })),
         voided: ledger.filter((l) => l.status === "void").map((l) => ({ id: l.id, reason: l.voidReason })),
         recent: ledger.slice(-5).reverse(),
         measuredAgg: ledgerAgg(ledger),

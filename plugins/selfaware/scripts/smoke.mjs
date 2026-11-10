@@ -1494,6 +1494,49 @@ console.log("\n[T58] self_mission idea/idea-use:灵感捕获/取用标记/结构
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// ---------- T59 发布后 24h 自评闭环 ----------
+console.log("\n[T59] self_mission review:发布后自评落账/自评到期计算/重复拒绝");
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-test-"));
+  const call = (name, args2) => {
+    const r = spawnSync("node", [SERVER], {
+      input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args2 } }) + "\n",
+      env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 30000,
+    });
+    const m = (r.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)[0];
+    const c = (m?.result?.content || []).map((x) => x.text).join("\n");
+    return { text: c, isError: !!m?.result?.isError, sc: m?.result?.structuredContent };
+  };
+  call("self_config", { action: "set", key: "knowledgeBase.path", value: "/tmp/sa-test-kb" });
+  call("self_mission", { action: "start", title: "测试使命", autonomy: "full" });
+  const p = call("self_mission", { action: "publish", title: "测试视频A", hypothesis: "钩子悬念→高完播" });
+  check("publish 文案带 24h 自评提醒", p.text.includes("24h") && p.text.includes("action=review"), p.text.slice(0, 250));
+  // 造一条 30h 前发布的旧台账(直接改 mission.json)以触发自评到期
+  const mPath = path.join(dir, "mission.json");
+  const mj = JSON.parse(fs.readFileSync(mPath, "utf8"));
+  const old = Date.now() - 30 * 3600000;
+  const li = mj.ledger.findIndex((l) => l.id === "v001");
+  mj.ledger[li].t = old;
+  fs.writeFileSync(mPath, JSON.stringify(mj));
+  const g1 = call("self_mission", { action: "get" });
+  check("get 显示自评逾期", g1.text.includes("自评逾期"), g1.text.slice(0, 400));
+  check("structured 带 selfReviewDue", g1.sc?.mission?.ledger?.selfReviewDue?.length === 1 && g1.sc.mission.ledger.selfReviewDue[0].id === "v001", JSON.stringify(g1.sc?.mission?.ledger?.selfReviewDue || null));
+  const r0 = call("self_mission", { action: "review", id: "v999", stats: "x" });
+  check("不存在的条目拒绝", r0.isError && r0.text.includes("v999"), r0.text.slice(0, 150));
+  const r1 = call("self_mission", { action: "review", id: "v001", stats: "钩子3秒立住;节奏偏慢,信息密度可加密" });
+  check("自评落账成功", !r1.isError && r1.text.includes("自评已落账"), r1.text.slice(0, 200));
+  check("自评文案带下一步引导", r1.text.includes("hypothesis") || r1.text.includes("playbook"), r1.text.slice(0, 250));
+  const r2 = call("self_mission", { action: "review", id: "v001", stats: "再评一次" });
+  check("重复自评拒绝", r2.isError && r2.text.includes("已自评过"), r2.text.slice(0, 150));
+  const g2 = call("self_mission", { action: "get" });
+  check("落账后逾期消失", !g2.text.includes("自评逾期"), g2.text.slice(0, 400));
+  check("structured selfReviewDue 清空", g2.sc?.mission?.ledger?.selfReviewDue?.length === 0, JSON.stringify(g2.sc?.mission?.ledger?.selfReviewDue || null));
+  // 度量后再看:measured 条目带 selfReview 字段
+  const ms = call("self_mission", { action: "measure", id: "v001", stats: "100 播放 3 赞 完播 2%" });
+  check("度量正常(含提取)", !ms.isError && ms.sc?.mission?.ledger?.recent?.[0]?.m?.views === 100, JSON.stringify(ms.sc?.mission?.ledger?.recent?.[0]?.m || null));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);

@@ -244,7 +244,7 @@ const { App } = GUANJI_SDK;
 
 (() => {
   const app = new App(
-    { name: "selfaware", version: "2.12.0" },
+    { name: "selfaware", version: "3.6.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
 
@@ -413,17 +413,26 @@ const { App } = GUANJI_SDK;
         <div class="card">
           <h2>使命 <span class="tail">· 跨会话的持久目标</span></h2>
           ${m.active
-            ? `<div class="big" style="margin-bottom:4px"><span class="num" style="font-size:16px">「${esc(m.active.title)}」</span><span class="sub">第 ${m.active.day} 天</span><span class="tag ${m.active.autonomy === "full" ? "ok" : "dim"}">${m.active.autonomy === "full" ? "完全自主" : "受监督"}</span></div>
+            ? `<div class="big" style="margin-bottom:4px"><span class="num" style="font-size:16px">「${esc(m.active.title)}」</span><span class="sub">第 ${m.active.day} 天</span><span class="tag ${m.active.autonomy === "full" ? "ok" : "dim"}">${m.active.autonomy === "full" ? "完全自主" : "受监督"}</span>${m.difficultyAgingDays > 0 ? `<span class="tag warn">困难最老挂 ${m.difficultyAgingDays} 天</span>` : ""}</div>
                ${m.active.goal ? `<div class="narr" style="margin-left:0">目标:${esc(m.active.goal)}</div>` : ""}`
             : `<div class="empty">无进行中的使命(self_mission 工具可立项)</div>`}
+          ${Array.isArray(m.pendingRequests) && m.pendingRequests.length
+            ? `<div style="margin-top:6px"><span class="tag warn">⏳ 待你决策 ${m.pendingRequests.length}</span>
+               ${m.pendingRequests.map((r) => `<div class="narr" style="margin-left:0"><span class="tag dim">${esc(r.id)}·${esc(r.type)} 类</span> ${esc(String(r.question).slice(0, 80))}${r.options ? `<br>选项:${esc(String(r.options).slice(0, 90))}` : ""}</div>`).join("")}</div>`
+            : ""}
+          ${Array.isArray(m.ideas) && m.ideas.length
+            ? `<div style="margin-top:6px"><span class="tag ok">💡 灵感收件箱 ${m.ideas.length}</span>
+               ${m.ideas.map((i) => `<div class="narr" style="margin-left:0">[${esc(i.id)}] ${esc(String(i.text).slice(0, 80))}</div>`).join("")}</div>`
+            : ""}
           ${Array.isArray(m.openDifficulties) && m.openDifficulties.length
             ? `<div style="margin-top:6px"><span class="tag warn">待研究困难 ${m.openDifficulties.length}</span>
                ${m.openDifficulties.slice(-3).map((dd) => `<div class="narr" style="margin-left:0">[${esc(dd.id)}] ${esc(String(dd.text).slice(0, 60))}</div>`).join("")}</div>`
             : ""}
-          ${m.active
-            ? `<div class="big" style="margin-bottom:4px"><span class="num" style="font-size:16px">「${esc(m.active.title)}」</span><span class="sub">第 ${m.active.day} 天</span><span class="tag ${m.active.autonomy === "full" ? "ok" : "dim"}">${m.active.autonomy === "full" ? "完全自主" : "受监督"}</span>${d.difficultyAgingDays > 0 ? `<span class="tag warn">困难最老挂 ${d.difficultyAgingDays} 天</span>` : ""}</div>
-               ${m.active.goal ? `<div class="narr" style="margin-left:0">目标:${esc(m.active.goal)}</div>` : ""}`
-            : `<div class="empty">无进行中的使命(self_mission 工具可立项)</div>`}
+          ${m.ledger?.due?.length || m.ledger?.selfReviewDue?.length
+            ? `<div style="margin-top:6px"><span class="tag warn">回访逾期</span>
+               ${(m.ledger.selfReviewDue || []).map((l) => `<div class="narr" style="margin-left:0">[${esc(l.id)}] 发布超 24h 未自评:${esc(String(l.title).slice(0, 50))}</div>`).join("")}
+               ${(m.ledger.due || []).map((l) => `<div class="narr" style="margin-left:0">[${esc(l.id)}] 发布超 48h 未度量:${esc(String(l.title).slice(0, 50))}</div>`).join("")}</div>`
+            : ""}
           ${m.ledger?.measuredAgg
             ? (() => {
                 const agg = m.ledger.measuredAgg;
