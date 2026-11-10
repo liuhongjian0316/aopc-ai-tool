@@ -32,7 +32,7 @@ import {
 } from "./lib/state.mjs";
 import { updateBudget, rolloutExists } from "./lib/budget.mjs";
 
-const VERSION = "3.7.0";
+const VERSION = "3.7.1";
 
 const TOOLS = [
   {
@@ -633,7 +633,9 @@ function selfUsage() {
     lines.push("最近样本:" + cur.samples.map((s) => `${fmtK(s.used)}@${new Date(s.t).toISOString().slice(11, 19)}`).join(" → "));
   }
   lines.push("</self-usage>");
-  return lines.join("\n");
+  // 3.7.1:structured 面暴露——面板 ontoolresult 合并路径(budget+rolloutOffset)依赖它,
+  // 主 agent 会话中调 self_usage 时预算卡可实时刷新,不必等整页重拉
+  return { text: lines.join("\n"), structured: { budget, rolloutOffset: cur.rolloutOffset, rolloutExists: rolloutExists(cur.sid), window: cfg.contextWindow } };
 }
 
 function selfHistory(limit) {

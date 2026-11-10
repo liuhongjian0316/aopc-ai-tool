@@ -785,6 +785,13 @@ console.log("\n[T31] self_state 暴露 opsScripts 与 playbookFiles");
   const sc2 = (r2.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).map((m) => m?.result?.structuredContent)[0];
   check("包装格式登记簿识别为已登记", sc2?.opsScripts?.some((s) => s.name === "resize_video.sh" && s.registered === true && s.desc === "改尺寸"), JSON.stringify(sc2?.opsScripts));
   check("包装格式下无未注册欠条", (sc2?.opsScripts || []).every((s) => s.registered === true), JSON.stringify(sc2?.opsScripts));
+  // 3.7.1:self_usage structured 面(budget+rolloutOffset)——面板实时预算合并路径的数据源
+  const rpc3 = [{ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "self_usage", arguments: {} } }]
+    .map((m) => JSON.stringify(m)).join("\n") + "\n";
+  const r3 = spawnSync("node", [SERVER], { input: rpc3, env: { ...process.env, AOPC_PLUGIN_DATA: dir }, encoding: "utf8", timeout: 20000 });
+  const sc3 = (r3.stdout || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).map((m) => m?.result?.structuredContent)[0];
+  check("self_usage 带 structured(budget+rolloutOffset)", sc3?.budget !== undefined && sc3?.rolloutOffset !== undefined, JSON.stringify(sc3));
+  check("self_usage structured 带 window 与 rolloutOffset 数字", typeof sc3?.window === "number" && typeof sc3?.rolloutOffset === "number", JSON.stringify({ window: sc3?.window, rolloutOffset: sc3?.rolloutOffset }));
   check("领域手册入清单", sc?.playbookFiles?.includes("douyin-ops.md") && sc?.playbookFiles?.includes("ops-fixes.md"), JSON.stringify(sc?.playbookFiles));
   fs.rmSync(dir, { recursive: true, force: true });
 }
