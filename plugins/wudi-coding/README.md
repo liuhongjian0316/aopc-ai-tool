@@ -427,6 +427,12 @@ plugins/wudi-coding/
   - 面板**主动打开编辑器**：收到 `get_design_status` 的 `live:false` 或「编辑器未打开」失败结果时，自动打开该画布编辑器——Agent 稍后重试即可写入了。
 - 注意：本机 homebrew Node 24 依赖损坏（libsimdjson 缺失），openpencil 的 web 构建暂不可用；本次服务端补丁直接应用于 vendored dist（与源码补丁一致）。
 
+## 「交给 Agent」修复（v0.40.1）
+
+- **现象**：架构方案页点「交给 Agent 搭建」报「无法发送给 Agent」。
+- **根因**：`ui/message` 的 `content` 必须是 **content block 数组**（`{role:"user", content:[{type:"text", text}]}`），之前传了单个对象 → 宿主参数校验失败 → 进入兜底分支；同时沙箱禁用 `navigator.clipboard`，导致最终报错。
+- **修复**：对齐 openPencil `sendFollowUpMessage` 的实现方式：数组载荷 + 轻量 `structuredContent`（类型/框架/方案路径/文件清单）；面板作为内嵌编辑器 shim 转发 `ui/message` 时默认值同样改为数组；剪贴板兜底增加 `textarea + execCommand("copy")` 回落。
+
 ## 新增「架构」tab（v0.39.0）
 
 - 项目内容页签：**项目 / 总览 / 架构 / 部署 / 设计 / 文档**。

@@ -19,7 +19,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.40.0" },
+    { name: "wudi-coding", version: "0.40.1" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -63,6 +63,28 @@ const EmptyResultSchema = {
   /* ---------- 小工具 ---------- */
   const $root = () => document.getElementById("root");
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  /** 复制文本：优先 Clipboard API；沙箱禁用它时回落到临时 textarea + execCommand。 */
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        return ok;
+      } catch {
+        return false;
+      }
+    }
+  }
   const fmtTime = (iso) => {
     if (!iso) return "";
     try {
@@ -846,7 +868,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.40.0" },
+              hostInfo: { name: "wudi-workbench", version: "0.40.1" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -860,7 +882,8 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
           case "ping": reply({}); break;
           case "ui/open-link": await app.openLink?.({ url: p.url }); reply({}); break;
           case "ui/message":
-            await app.sendMessage?.({ role: "user", content: p.content ?? { type: "text", text: "" } });
+            /* 协议要求 content 是 content block 数组（编辑器 SDK 已按数组发送） */
+            await app.sendMessage?.({ role: "user", content: p.content ?? [{ type: "text", text: "" }] });
             reply({});
             break;
           case "ui/update-model-context": reply({}); break; // 模型上下文上报：内嵌模式 no-op
@@ -1057,15 +1080,29 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
       if (!p) return;
       const prompt = `请按已确认的架构方案搭建「${p.name}」项目框架：\n- 方案文件：${p.savedPath ?? ".wudi/architecture.json"}\n- 类型：${p.kindLabel ?? p.kind} · ${p.frameworkLabel ?? p.framework}\n- 说明：${p.summary ?? ""}\n请先读取该方案（或调用 wudi_arch_plan 复核），然后调用 wudi_arch_scaffold {confirm:true} 写入骨架，并按方案实现各模块的初始页面/接口，最后用 wudi_architecture 复查结构。`;
       try {
-        await app.sendMessage({ role: "user", content: { type: "text", text: prompt } });
+        /* ui/message 的 content 必须是 content block 数组（对齐 openPencil sendFollowUpMessage）；
+           structuredContent 附轻量方案摘要，宿主支持时模型可直接拿到路径与文件清单。 */
+        await app.sendMessage({
+          role: "user",
+          content: [{ type: "text", text: prompt }],
+          structuredContent: {
+            architecture: {
+              kind: p.kind,
+              framework: p.framework,
+              name: p.name,
+              savedPath: p.savedPath ?? ".wudi/architecture.json",
+              dirs: p.dirs ?? [],
+              files: (p.files ?? []).map((f) => f.path),
+            },
+          },
+        });
         state.notice = { kind: "ok", text: "已把搭建任务发给 Agent" };
-      } catch {
-        try {
-          await navigator.clipboard.writeText(prompt);
-          state.notice = { kind: "ok", text: "宿主不支持面板发消息：任务已复制到剪贴板，粘贴到对话即可" };
-        } catch {
-          state.notice = { kind: "err", text: "无法发送给 Agent：请在对话里说明「按 .wudi/architecture.json 的架构方案搭建项目框架」" };
-        }
+      } catch (err) {
+        try { app.sendLog?.({ level: "warning", data: `[wudi] ui/message 失败：${String(err?.message ?? err)}` }); } catch {}
+        const copied = await copyText(prompt);
+        state.notice = copied
+          ? { kind: "ok", text: "宿主未接受面板消息（ui/message）：任务已复制到剪贴板，粘贴到对话即可" }
+          : { kind: "err", text: "无法发送给 Agent：请在对话里说明「按 .wudi/architecture.json 的架构方案搭建项目框架」" };
       }
       render();
     });
@@ -1331,7 +1368,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             render();
             return;
           }
-          await app.sendMessage({ role: "user", content: { type: "text", text: `请打开 ${path} 并给我一个三句话以内的简介。` } });
+          await app.sendMessage({ role: "user", content: [{ type: "text", text: `请打开 ${path} 并给我一个三句话以内的简介。` }] });
         } catch (err) {
           state.notice = { kind: "err", text: `唤起失败：${String(err.message ?? err).slice(0, 300)}` };
           render();
