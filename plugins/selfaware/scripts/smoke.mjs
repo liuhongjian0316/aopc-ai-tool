@@ -1548,6 +1548,31 @@ console.log("\n[T59] self_mission review:发布后自评落账/自评到期计�
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// ---------- T60 版本一致性(防漂移复发:v3.1.0 与 v3.7.0 均发生过双 manifest 漂移) ----------
+console.log("\n[T60] 版本一致性:双 manifest / server / panel.js / panel.html / 双 marketplace");
+{
+  const read = (f) => fs.readFileSync(path.join(ROOT, f), "utf8");
+  const ver = JSON.parse(read(".aopc-plugin/plugin.json")).version;
+  check(".aopc-plugin 版本形如 x.y.z", /^\d+\.\d+\.\d+$/.test(ver), ver);
+  check(".zcode-plugin 与 .aopc-plugin 一致", JSON.parse(read(".zcode-plugin/plugin.json")).version === ver, JSON.stringify([ver, JSON.parse(read(".zcode-plugin/plugin.json")).version]));
+  check("server.mjs VERSION 一致", read("server.mjs").match(/const VERSION = "([^"]+)"/)?.[1] === ver, read("server.mjs").match(/const VERSION = "([^"]+)"/)?.[1]);
+  check("panel.js App version 一致", read("panel/panel.js").match(/version: "([^"]+)"/)?.[1] === ver, read("panel/panel.js").match(/version: "([^"]+)"/)?.[1]);
+  check("panel.html 内嵌 version 一致", read("panel.html").match(/name: "selfaware", version: "([^"]+)"/)?.[1] === ver, read("panel.html").match(/name: "selfaware", version: "([^"]+)"/)?.[1]);
+  for (const mf of [path.join(ROOT, "..", "..", ".claude-plugin", "marketplace.json"), path.join(ROOT, "..", "..", "marketplace.json")]) {
+    if (!fs.existsSync(mf)) continue;
+    const m = JSON.parse(fs.readFileSync(mf, "utf8"));
+    let v = null;
+    const walk = (o) => {
+      if (v || !o || typeof o !== "object") return;
+      if (Array.isArray(o)) { for (const x of o) walk(x); return; }
+      if (o.name === "selfaware" && o.version) { v = o.version; return; }
+      for (const x of Object.values(o)) walk(x);
+    };
+    walk(m);
+    check(`marketplace(${path.basename(path.dirname(mf))}/${path.basename(mf)}) 一致`, v === ver, `${v ?? "未找到"} vs ${ver}`);
+  }
+}
+
 // ---------- 汇总 ----------
 
 console.log(`\n结果:${passed} 通过,${failed} 失败`);

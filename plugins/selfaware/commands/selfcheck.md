@@ -28,10 +28,14 @@ argument-hint: ""
 看 `self_usage` 输出的数据来源:provider 实测 → PASS;字节估算 → PASS 但注明「rollout 无 usage 锚点(超长单行场景已被 2.1.0 正则兜底覆盖,理论少见)」;完全无数据 → FAIL。
 
 **C7 · 台账 / 召回 / 进化时间线**
-- `self_mission get` 的台账段:有 awaiting 条目 → 核对 ≥48h 的是否被标记优先回访;有 voided → 确认原因可读;
+- `self_mission get` 的台账段:有 awaiting 条目 → 核对超 24h 未自评的是否带「自评逾期」提示、≥48h 的是否被标记优先回访(3.6.0 起 structured 带 `selfReviewDue`);有 voided → 确认原因可读;
 - `self_recall`(query 用当前使命关键词):确认知识库/playbook 源可命中或明确无命中;
-- `self_state` 的 `evolution`:modelChanges/rulesByFile 可读(数字可为 0,新装正常)。
-三项皆真 → PASS。
+- `self_state` 的 `evolution`:modelChanges/rulesByFile 可读(数字可为 0,新装正常);
+- `self_state` 的 `opsScripts`:已登记/未登记标记可读(登记簿兼容裸数组与 `{scripts:[...]}` 两种格式)。
+四项皆真 → PASS。
+
+**C8 · 版本一致性(3.7.0 起,防版本漂移复发)**
+若能定位插件源目录(本仓库 `plugins/selfaware/` 或安装缓存目录):读取 `.aopc-plugin/plugin.json`、`.zcode-plugin/plugin.json`、`server.mjs` 的 `VERSION`、`panel/panel.js` 的 App version、仓库两个 `marketplace.json` 中 selfaware 条目,五处应完全一致 → PASS;任何一处不一致 → FAIL(列出全部值——历史上 v3.1.0/v3.7.0 都栽在双 manifest 漂移)。定位不到插件源 → SKIP。
 
 ## 汇报格式
 
@@ -44,7 +48,8 @@ C4 派发名:...(记录可用名)
 C5 九工具:...
 C6 预算来源:...
 C7 台账/召回/进化时间线:...
-结论:<N/7 通过;待修事项列表>
+C8 版本一致性:...(五处值列表或 SKIP)
+结论:<N/8 通过;待修事项列表>
 ```
 
 自检本身不做任何修复、不改任何文件;发现 FAIL 项留给用户决定是否排查。若 `self_state` 显示的插件版本与本命令预期(≥2.9.0)不符,在结论里注明「插件版本较旧,部分检查项可能不适用」。
