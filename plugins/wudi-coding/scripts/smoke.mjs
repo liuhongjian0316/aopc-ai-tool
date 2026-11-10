@@ -164,8 +164,8 @@ async function protocolTests() {
     check(`tools/list: 工具数 ≥ 17（实际 ${list.length}）`, list.length >= 17);
     check("tools/list: 全部有 inputSchema", list.every((t) => t.inputSchema?.type === "object"));
     const uiBound = list.filter((t) => t?._meta?.ui?.surface === "wudi");
-    check("tools/list: Gen UI 绑定 7 个（+ wudi_tokens_compare）", uiBound.length === 7);
-    check("tools/list: 关键工具在列", ["wudi_deploy", "wudi_rollback", "wudi_doctor", "wudi_deploy_logs", "wudi_env_set", "wudi_design_tokens_set", "wudi_figma_fetch"].every((n) => list.some((t) => t.name === n)));
+    check("tools/list: Gen UI 绑定 8 个（+ wudi_tokens_compare / wudi_architecture）", uiBound.length === 8);
+    check("tools/list: 关键工具在列", ["wudi_deploy", "wudi_rollback", "wudi_doctor", "wudi_deploy_logs", "wudi_env_set", "wudi_design_tokens_set", "wudi_figma_fetch", "wudi_architecture"].every((n) => list.some((t) => t.name === n)));
 
     const resList = await s.call("resources/list", {});
     check("resources/list: 面板资源", resList?.result?.resources?.[0]?.uri === "ui://wudi-coding/panel.html" && String(resList.result.resources[0].mimeType).includes("profile=mcp-app"));
@@ -329,6 +329,31 @@ async function protocolTests() {
         JSON.stringify(statProjects.map((x) => [x.name, x.designCount])));
       check("projects_list: 画布统计不串项目（当前=0）",
         (statProjects.find((x) => x.isCurrent)?.designCount ?? -1) === 0);
+      /* ---- 架构页：静态扫描 ---- */
+      const archProj = join(workdir, "archproj");
+      await mkdir(join(archProj, "src", "components"), { recursive: true });
+      await writeFile(join(archProj, "package.json"), JSON.stringify({
+        name: "arch-proj", version: "1.0.0",
+        scripts: { dev: "vite", build: "vite build", test: "vitest run" },
+        dependencies: { react: "^18.2.0", vite: "^5.0.0" },
+        workspaces: ["packages/*"],
+      }, null, 2));
+      await writeFile(join(archProj, "docker-compose.yml"), 'services:\n  web:\n    image: nginx:alpine\n    ports:\n      - "8080:80"\n');
+      await writeFile(join(archProj, "Dockerfile"), "FROM nginx\n");
+      await writeFile(join(archProj, "README.md"), "# arch\n");
+      await writeFile(join(archProj, "src", "main.ts"), "export const x = 1;\n");
+      await writeFile(join(archProj, "src", "components", "App.tsx"), "export default 1;\n");
+      r = await s.call("tools/call", { name: "wudi_architecture", arguments: { root: archProj } });
+      const archSc = r?.result?.structuredContent ?? {};
+      check("architecture: 框架识别（React/Vite）", !errOf(r) && (archSc.frameworks ?? []).includes("React") && (archSc.frameworks ?? []).includes("Vite"), JSON.stringify(archSc.frameworks));
+      check("architecture: 语言统计含 TypeScript", (archSc.languages ?? []).some((l) => l.name === "TypeScript" && l.files >= 2), JSON.stringify(archSc.languages));
+      check("architecture: 顶层模块含 src", (archSc.modules ?? []).some((m) => m.name === "src" && m.files >= 2), JSON.stringify(archSc.modules));
+      check("architecture: 关键文件 + compose 服务解析",
+        (archSc.entries ?? []).some((e) => e.name === "package.json")
+        && (archSc.entries ?? []).some((e) => e.name === "Dockerfile")
+        && (archSc.compose?.services ?? []).some((x) => x.name === "web" && x.ports === "8080:80"),
+        JSON.stringify({ entries: archSc.entries, compose: archSc.compose }));
+      check("architecture: 文本摘要可读", textOf(r).includes("架构总览") && textOf(r).includes("技术栈"));
     } finally {
       await rm(outside, { recursive: true, force: true });
     }

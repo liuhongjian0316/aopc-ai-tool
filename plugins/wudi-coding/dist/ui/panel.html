@@ -313,6 +313,26 @@ details.fold > summary::before { content: "▸"; font-size: 10px; }
 details.fold[open] > summary::before { content: "▾"; }
 details.fold[open] > summary { margin-bottom: 10px; color: var(--text-2); }
 details.fold[open] > summary:hover { color: var(--text); }
+
+/* ---------- 架构页（v0.39.0） ---------- */
+.langbar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--bg-inset); margin: 2px 0 10px; }
+.langbar i { display: block; height: 100%; }
+.langlist { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 12px; color: var(--text-2); }
+.langlist span { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); }
+.langlist span > i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.langlist b { color: var(--text); font-weight: 700; }
+.langlist em { color: var(--text-dim); font-style: normal; }
+.mod { padding: 12px 14px; }
+.mod-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.mod-head b { font-size: 13px; color: var(--text); font-weight: 750; }
+.mod-head .chip { margin-left: auto; }
+.mod-path { font-size: 11px; color: var(--text-dim); word-break: break-all; margin-bottom: 8px; }
+.mod-langs { display: flex; flex-wrap: wrap; gap: 5px; }
+.entrychips { display: flex; flex-wrap: wrap; gap: 6px; }
+.entrychips .chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sec { margin-bottom: 12px; }
+.sec-title { font-size: 11.5px; font-weight: 700; color: var(--text-dim); margin-bottom: 10px; letter-spacing: .06em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
+.sec-title .line { flex: 1; height: 1px; background: var(--border); }
 </style>
 </head>
 <body>
@@ -485,7 +505,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.38.9" },
+    { name: "wudi-coding", version: "0.39.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -512,6 +532,7 @@ const EmptyResultSchema = {
     canvasFill: "#dbe4fd",
     canvasBusy: false,
     designs: null,     // wudi_designs_list structuredContent {designs}
+    arch: null,        // wudi_architecture structuredContent（架构页）
     figmaUrl: "",
     opEmbed: null,     // 内嵌 OpenPencil 编辑器会话 {path}（overlay 层，不参与 render 循环）
     opFrameOrigin: "", // 内嵌编辑器 iframe 的 http origin（wudi 协同桥）
@@ -618,6 +639,7 @@ const EmptyResultSchema = {
   const ICONS = {
     projects: '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 2A1.5 1.5 0 0 1 3 .5h4A1.5 1.5 0 0 1 8.5 2v4A1.5 1.5 0 0 1 7 7.5H3A1.5 1.5 0 0 1 1.5 6V2Zm7 8A1.5 1.5 0 0 1 10 8.5h4A1.5 1.5 0 0 1 15.5 10v4a1.5 1.5 0 0 1-1.5 1.5h-4A1.5 1.5 0 0 1 8.5 14v-4ZM1.5 10A1.5 1.5 0 0 1 3 8.5h4A1.5 1.5 0 0 1 8.5 10v4A1.5 1.5 0 0 1 7 15.5H3A1.5 1.5 0 0 1 1.5 14v-4Zm7-8A1.5 1.5 0 0 1 10 .5h4A1.5 1.5 0 0 1 15.5 2v4A1.5 1.5 0 0 1 14 7.5h-4A1.5 1.5 0 0 1 8.5 6V2Z"/></svg>',
     overview: '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a6.5 6.5 0 1 0 6.5 6.5h-1.6A4.9 4.9 0 1 1 8 3.1V1.5Zm1.5 0v4.7l3.3-3.4A6.5 6.5 0 0 0 9.5 1.5Z"/></svg>',
+    arch: '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><rect x="6" y="1" width="4" height="3" rx="1"/><rect x="1" y="9" width="4" height="3" rx="1"/><rect x="11" y="9" width="4" height="3" rx="1"/><rect x="7.4" y="4" width="1.2" height="3"/><rect x="3.6" y="6.4" width="8.8" height="1.2"/><rect x="3.4" y="7.6" width="1.2" height="1.6"/><rect x="11.4" y="7.6" width="1.2" height="1.6"/></svg>',
     deploys: '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 .8c2.6 1.3 4.4 3.9 4.4 7.4l-2.6 2.6c.2-2.6-.3-5-1.8-7.3-.2-.3-.6-.3-.8 0C5.7 5.8 5.2 8.2 5.4 10.8L2.8 8.2C2.8 4.7 5.4 2.1 8 .8ZM5.6 11.4c.5 1 .9 2 1 3.1-.9.6-1.9 1-3 1.2-.4.1-.7-.3-.6-.6.3-1.1 1-2.4 2.6-3.7Zm4.8 0c1.6 1.3 2.3 2.6 2.6 3.7.1.4-.2.7-.6.6-1.1-.2-2.1-.6-3-1.2.1-1.1.5-2.1 1-3.1Z"/></svg>',
     design: '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 0 0 0 14c.9 0 1.5-.7 1.5-1.5 0-.4-.15-.75-.4-1-.24-.26-.4-.6-.4-1 0-.83.67-1.5 1.5-1.5h1.3A3.6 3.6 0 0 0 15 6.4C15 3.4 11.9 1 8 1ZM3.5 8a1.3 1.3 0 1 1 0-2.6 1.3 1.3 0 0 1 0 2.6Zm3-3.5a1.3 1.3 0 1 1 0-2.6 1.3 1.3 0 0 1 0 2.6Zm4.5.5a1.3 1.3 0 1 1 0-2.6 1.3 1.3 0 0 1 0 2.6Z"/></svg>',
     docs: '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M3 1.5A1.5 1.5 0 0 1 4.5 0h5L14 4.5v10A1.5 1.5 0 0 1 12.5 16h-8A1.5 1.5 0 0 1 3 14.5v-13ZM9.5 1.2V4a.5.5 0 0 0 .5.5h2.8L9.5 1.2ZM5 7.5h6v1.2H5V7.5Zm0 3h6v1.2H5v-1.2Z"/></svg>',
@@ -638,6 +660,7 @@ const EmptyResultSchema = {
     const navTabs = [
       ["projects", "项目", ICONS.projects, (state.projects?.projects ?? []).length || ""],
       ["overview", "总览", ICONS.overview, ""],
+      ["arch", "架构", ICONS.arch, ""],
       ["deploys", "部署", ICONS.deploys, ""],
       ["design", "设计", ICONS.design, ""],
       ["docs", "文档", ICONS.docs, (state.data?.docs ?? []).length || ""],
@@ -650,6 +673,7 @@ const EmptyResultSchema = {
     if (state.view === "projects" && !state.drill) body = renderProjects();
     else if (state.drill) body = renderDrill();
     else body = state.tab === "overview" ? renderOverview(state.data?.project ?? null)
+      : state.tab === "arch" ? renderArch()
       : state.tab === "deploys" ? renderDeploys()
       : state.tab === "design" ? renderDesign()
       : renderDocs();
@@ -680,6 +704,7 @@ const EmptyResultSchema = {
         state.tab = b.dataset.tab === "projects" ? state.tab : b.dataset.tab;
         state.notice = null;
         if (state.tab === "design" && state.view === "detail") loadDesign();
+        if (state.tab === "arch" && state.view === "detail") loadArch();
         if (state.view === "projects") loadProjects();
         render();
         saveWidgetState();
@@ -689,6 +714,7 @@ const EmptyResultSchema = {
       state.drill = null;
       loadAll();
       if (state.view === "detail" && state.tab === "design") loadDesign();
+      if (state.view === "detail" && state.tab === "arch") loadArch();
     });
     document.getElementById("btn-back")?.addEventListener("click", () => { state.drill = null; render(); saveWidgetState(); });
     document.getElementById("btn-back-projects")?.addEventListener("click", () => {
@@ -922,6 +948,65 @@ const EmptyResultSchema = {
           <div class="muted" style="margin-top:10px">创建后自动进入编辑器，无需任何额外配置</div>
         </div>`;
     return canvasSection;
+  }
+
+  /* ---------- 架构页：技术栈 / 语言 / 模块 / 关键文件 / 服务（静态扫描，只读） ---------- */
+  const LANG_COLORS = ["#4f7cff", "#e8a33d", "#3fbf8f", "#b06df0", "#e2605f", "#5bb7d6", "#9a9a9a", "#c9b458"];
+  function renderArch() {
+    const a = state.arch;
+    if (!a) return `<div class="card"><h3>项目架构<span class="line"></span></h3><div class="muted">正在扫描项目结构…</div></div>`;
+    if (a.error) return `<div class="card"><h3>项目架构<span class="line"></span></h3><div class="muted">扫描失败：${esc(a.error)}</div></div>`;
+    const langs = a.languages ?? [];
+    const frameworks = a.frameworks ?? [];
+    const pms = a.packageManagers ?? [];
+    const modules = a.modules ?? [];
+    const entries = a.entries ?? [];
+    const scripts = a.scripts ?? [];
+    const related = a.related ?? {};
+    const chips = [...frameworks, ...pms].slice(0, 12);
+    const langBar = langs.length
+      ? `<div class="langbar">${langs.slice(0, 8).map((l, i) => `<i style="width:${Math.max(2, l.pct)}%;background:${LANG_COLORS[i % LANG_COLORS.length]}" title="${esc(l.name)} ${l.files} 文件"></i>`).join("")}</div>
+        <div class="langlist">${langs.slice(0, 8).map((l, i) => `<span><i style="background:${LANG_COLORS[i % LANG_COLORS.length]}"></i>${esc(l.name)} <b>${l.files}</b><em>${l.pct}%</em></span>`).join("")}</div>`
+      : `<div class="muted">未扫描到源码文件（可能都在依赖/产物目录里）。</div>`;
+    const moduleCards = modules.length
+      ? `<div class="grid">${modules.slice(0, 12).map((m) => `
+          <div class="card mod">
+            <div class="mod-head"><b>${esc(m.name)}</b><span class="chip">${m.files} 文件</span></div>
+            <div class="mod-path mono">${esc(m.path)}</div>
+            ${(m.languages ?? []).length ? `<div class="mod-langs">${m.languages.map((l) => `<span class="chip">${esc(l)}</span>`).join("")}</div>` : ""}
+          </div>`).join("")}</div>`
+      : `<div class="muted">没有可展示的顶层目录。</div>`;
+    const entryChips = entries.length
+      ? entries.map((e) => `<span class="chip mono">${esc(e.name)}</span>`).join("")
+      : `<span class="muted">未发现关键配置文件</span>`;
+    const services = a.compose?.services ?? [];
+    return `
+      <div class="banner">
+        <div class="row"><h2>${esc(a.name || "项目")}</h2><span class="chip">${a.scanned?.files ?? 0} 个源码文件${a.scanned?.truncated ? "（已截断）" : ""}</span></div>
+        <div class="meta">${chips.length ? chips.map((c) => `<span class="chip">${esc(c)}</span>`).join("") : '<span class="chip">未识别技术栈</span>'}</div>
+      </div>
+      <div class="card"><h3>语言分布<span class="line"></span></h3>${langBar}</div>
+      <div class="sec"><div class="sec-title">顶层模块<span class="line"></span></div>${moduleCards}</div>
+      <div class="grid" style="margin-top:12px">
+        <div class="card"><h3>关键文件<span class="line"></span></h3><div class="entrychips">${entryChips}</div></div>
+        <div class="card"><h3>关联资产<span class="line"></span></h3>
+          <div class="kv">
+            <span class="k">画布</span><span class="v plain">${related.designs ?? 0} 个</span>
+            <span class="k">文档</span><span class="v plain">${related.docs ?? 0} 份</span>
+            <span class="k">环境</span><span class="v plain">${(related.envs ?? []).join("、") || "未配置"}</span>
+            <span class="k">部署根</span><span class="v">${esc(related.deployRoot || "—")}</span>
+            <span class="k">健康检查</span><span class="v">${esc(related.healthCheck || "—")}</span>
+          </div>
+        </div>
+      </div>
+      ${services.length ? `<div class="card" style="margin-top:12px"><h3>服务<span style="text-transform:none">（${esc(a.compose.file)}）</span><span class="line"></span></h3>
+        <div class="entrychips">${services.map((s) => `<span class="chip mono">${esc(s.name)}${s.image ? ` · ${esc(s.image)}` : ""}${s.ports ? ` · ${esc(s.ports)}` : ""}</span>`).join("")}</div>
+      </div>` : ""}
+      ${scripts.length ? `<div class="card" style="margin-top:12px"><h3>脚本<span class="line"></span></h3>
+        <div class="entrychips">${scripts.map((s) => `<span class="chip mono">${esc(s.name)}<span class="muted"> · ${esc(s.command)}</span></span>`).join("")}</div>
+      </div>` : ""}
+      ${(a.workspaces ?? []).length ? `<div class="card" style="margin-top:12px"><h3>Monorepo workspaces<span class="line"></span></h3><div class="entrychips">${a.workspaces.map((w) => `<span class="chip mono">${esc(w)}</span>`).join("")}</div></div>` : ""}
+      <div class="muted" style="margin-top:10px">扫描于 ${esc(fmtTime(a.generatedAt))} · 只读静态扫描（跳过 node_modules / dist 等目录），点右上「刷新」重新扫描</div>`;
   }
 
   function renderDocs() {
@@ -1171,7 +1256,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.38.9" },
+              hostInfo: { name: "wudi-workbench", version: "0.39.0" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -1384,7 +1469,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
         state.projectRoot = p.isCurrent ? "" : p.path;
         state.view = "detail";
         state.tab = "overview";
-        if (!DEMO) { state.data = null; state.history = null; state.designs = null; }
+        if (!DEMO) { state.data = null; state.history = null; state.designs = null; state.arch = null; }
         render();
         saveWidgetState();
         loadAll();
@@ -1652,6 +1737,17 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
     if (state.tab === "design" && state.view === "detail") render();
   }
 
+  async function loadArch() {
+    if (DEMO) return;
+    try {
+      const res = await callTool("wudi_architecture", rootArg());
+      state.arch = struct(res);
+    } catch (err) {
+      state.arch = { error: String(err.message ?? err).slice(0, 400) };
+    }
+    if (state.tab === "arch" && state.view === "detail") render();
+  }
+
   async function loadAll() {
     if (DEMO) return;
     setBusy(true);
@@ -1703,6 +1799,39 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
         { name: "ui.fig", path: ".wudi/designs/ui.fig", format: "fig（可编辑）", sizeKB: 128.4, updatedAt: iso(30) },
         { name: "landing.fig", path: ".wudi/designs/landing.fig", format: "fig（可编辑）", sizeKB: 42.1, updatedAt: iso(1800) },
       ],
+    };
+    state.arch = {
+      name: "zongheng-app",
+      root: "/Users/me/code/zongheng-app",
+      scanned: { files: 386, truncated: false },
+      frameworks: ["SwiftUI", "Vue", "Vite", "Pinia"],
+      packageManagers: ["pnpm"],
+      languages: [
+        { name: "TypeScript", files: 162, pct: 42 },
+        { name: "Swift", files: 96, pct: 25 },
+        { name: "Vue", files: 48, pct: 12 },
+        { name: "CSS", files: 40, pct: 10 },
+        { name: "JSON", files: 24, pct: 6 },
+        { name: "Markdown", files: 16, pct: 5 },
+      ],
+      modules: [
+        { name: "src", path: "/Users/me/code/zongheng-app/src", files: 184, languages: ["TypeScript", "Vue", "CSS"] },
+        { name: "ios", path: "/Users/me/code/zongheng-app/ios", files: 112, languages: ["Swift", "Objective-C"] },
+        { name: "packages", path: "/Users/me/code/zongheng-app/packages", files: 54, languages: ["TypeScript"] },
+        { name: "docs", path: "/Users/me/code/zongheng-app/docs", files: 18, languages: ["Markdown"] },
+        { name: "scripts", path: "/Users/me/code/zongheng-app/scripts", files: 9, languages: ["Shell", "TypeScript"] },
+      ],
+      entries: [
+        { name: "package.json" }, { name: "vite.config.ts" }, { name: "tsconfig.json" },
+        { name: "Podfile" }, { name: "docker-compose.yml" }, { name: "README.md" },
+      ],
+      scripts: [
+        { name: "dev", command: "vite" }, { name: "build", command: "vite build" }, { name: "test", command: "vitest run" },
+      ],
+      workspaces: ["packages/*"],
+      compose: { file: "docker-compose.yml", services: [{ name: "web", image: "nginx:alpine", ports: "8080:80" }, { name: "api", image: "zongheng/api:latest", ports: "3000:3000" }] },
+      related: { docs: 6, designs: 9, envs: ["staging", "prod"], deployRoot: "/srv/zongheng", healthCheck: "http://127.0.0.1:8080/healthz" },
+      generatedAt: iso(2),
     };
   }
 

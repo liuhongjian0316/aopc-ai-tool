@@ -427,6 +427,17 @@ plugins/wudi-coding/
   - 面板**主动打开编辑器**：收到 `get_design_status` 的 `live:false` 或「编辑器未打开」失败结果时，自动打开该画布编辑器——Agent 稍后重试即可写入了。
 - 注意：本机 homebrew Node 24 依赖损坏（libsimdjson 缺失），openpencil 的 web 构建暂不可用；本次服务端补丁直接应用于 vendored dist（与源码补丁一致）。
 
+## 新增「架构」tab（v0.39.0）
+
+- 项目内容页签：**项目 / 总览 / 架构 / 部署 / 设计 / 文档**。
+- 新工具 `wudi_architecture {root?}`（只读静态扫描，上限 4000 文件，跳过 node_modules/dist/.git 等）：
+  - 语言占比（按扩展名统计，含 TypeScript/Swift/Vue/CSS…）；
+  - 框架与包管理器识别（package.json 依赖 + go.mod / pom.xml / Podfile / pubspec / Gemfile 等）；
+  - 顶层模块（文件数 + 主要语言）、关键配置文件、docker-compose 服务（名称/镜像/端口）、npm scripts、monorepo workspaces；
+  - 关联资产（画布数、文档数、环境、部署根、健康检查）。
+- 面板架构页：技术栈 chips + 语言分布条 + 模块卡片 + 关键文件/关联资产 + 服务与脚本；右上「刷新」重新扫描。
+- smoke +5（145 全绿）：React/Vite 识别、TypeScript 统计、src 模块、关键文件与 compose 服务解析、文本摘要。
+
 ## 编辑器已打开仍报「未打开」（v0.38.7）
 
 - **现象**：编辑器明明已打开（面板状态「已连接 · 已自动适应视图」），Agent 的设计工具仍报「设计稿编辑器未打开」；编辑器自己的 HostBar 一直显示「连接中」。

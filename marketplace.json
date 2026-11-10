@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.38.9",
+      "version": "0.39.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,16 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.39.0",
+          "date": "2026-11-10",
+          "changes": [
+            "新增「架构」tab：项目内容页签变为 项目 / 总览 / 架构 / 部署 / 设计 / 文档",
+            "wudi_architecture 工具（只读静态扫描）：语言占比、框架与包管理器识别、顶层模块（文件数+语言）、关键配置文件、docker-compose 服务与 npm scripts、monorepo workspaces、关联画布/文档/环境/部署根",
+            "架构页：技术栈 chips + 语言分布条 + 模块卡片 + 关键文件/关联资产 + 服务与脚本；右上「刷新」可重新扫描，扫描上限 4000 文件并跳过 node_modules/dist 等目录",
+            "smoke +5（145 全绿）：React/Vite 识别、TypeScript 统计、src 模块、关键文件与 compose 服务解析、文本摘要"
+          ]
+        },
         {
           "version": "0.38.9",
           "date": "2026-11-10",

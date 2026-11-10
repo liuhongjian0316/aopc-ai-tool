@@ -307,3 +307,23 @@ details.fold > summary::before { content: "▸"; font-size: 10px; }
 details.fold[open] > summary::before { content: "▾"; }
 details.fold[open] > summary { margin-bottom: 10px; color: var(--text-2); }
 details.fold[open] > summary:hover { color: var(--text); }
+
+/* ---------- 架构页（v0.39.0） ---------- */
+.langbar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--bg-inset); margin: 2px 0 10px; }
+.langbar i { display: block; height: 100%; }
+.langlist { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 12px; color: var(--text-2); }
+.langlist span { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); }
+.langlist span > i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.langlist b { color: var(--text); font-weight: 700; }
+.langlist em { color: var(--text-dim); font-style: normal; }
+.mod { padding: 12px 14px; }
+.mod-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.mod-head b { font-size: 13px; color: var(--text); font-weight: 750; }
+.mod-head .chip { margin-left: auto; }
+.mod-path { font-size: 11px; color: var(--text-dim); word-break: break-all; margin-bottom: 8px; }
+.mod-langs { display: flex; flex-wrap: wrap; gap: 5px; }
+.entrychips { display: flex; flex-wrap: wrap; gap: 6px; }
+.entrychips .chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sec { margin-bottom: 12px; }
+.sec-title { font-size: 11.5px; font-weight: 700; color: var(--text-dim); margin-bottom: 10px; letter-spacing: .06em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
+.sec-title .line { flex: 1; height: 1px; background: var(--border); }

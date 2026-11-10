@@ -245,6 +245,15 @@ export const TOOLS = [
     },
   },
   {
+    name: "wudi_architecture",
+    description: "项目架构总览（静态扫描，只读）：语言占比、框架/包管理器、顶层模块、关键入口文件、docker-compose 服务与 npm scripts、monorepo workspaces。工作台「架构」页的数据源，也可让 Agent 快速了解项目结构。",
+    _meta: UI_META,
+    inputSchema: {
+      type: "object",
+      properties: { root: { type: "string", description: "项目根路径（缺省为当前工作区；工作台多项目内容页传入）" } },
+    },
+  },
+  {
     name: "wudi_docs_register",
     description: "登记/更新一份项目文档到 .wudi/docs.json（工作台文档库可见）。path 相对项目根。",
     inputSchema: {
@@ -588,6 +597,8 @@ export async function callTool(name, args = {}) {
         return toolProjectInit(args);
       case "wudi_status":
         return await toolStatus(args);
+      case "wudi_architecture":
+        return toolArchitecture(args);
       case "wudi_docs_register":
         return toolDocsRegister(args);
       case "wudi_ssh_ping":
@@ -1591,6 +1602,267 @@ function toolDesignList() {
     ? files.map((f) => `- ${f.path}（${f.sizeKB} KB，${f.updatedAt.slice(0, 16).replace("T", " ")}）`).join("\n")
     : "（目录为空）";
   return ok(`设计产物（.wudi/design/，新→旧）：\n${lines}`, { files });
+}
+
+/* ================= 架构总览（静态扫描，只读） ================= */
+
+const ARCH_SKIP_DIRS = new Set([
+  ".git", ".wudi", ".hg", ".svn", "node_modules", "dist", "build", "out", "target",
+  "Pods", ".next", ".nuxt", ".output", "coverage", ".turbo", ".cache", "__pycache__",
+  ".venv", "venv", ".idea", ".vscode", "DerivedData", ".gradle", ".dart_tool",
+]);
+
+const ARCH_LANGS = {
+  ts: "TypeScript", tsx: "TypeScript", mts: "TypeScript", cts: "TypeScript",
+  js: "JavaScript", jsx: "JavaScript", mjs: "JavaScript", cjs: "JavaScript",
+  vue: "Vue", svelte: "Svelte", astro: "Astro", dart: "Dart",
+  go: "Go", java: "Java", kt: "Kotlin", kts: "Kotlin", swift: "Swift",
+  m: "Objective-C", mm: "Objective-C", py: "Python", rs: "Rust", rb: "Ruby",
+  php: "PHP", cs: "C#", c: "C/C++", h: "C/C++", cpp: "C/C++", cc: "C/C++", hpp: "C/C++",
+  css: "CSS", scss: "SCSS", less: "Less", html: "HTML", htm: "HTML",
+  json: "JSON", md: "Markdown", mdx: "Markdown", yml: "YAML", yaml: "YAML",
+  sh: "Shell", sql: "SQL", fig: "Figma", pen: "Pen",
+};
+
+const ARCH_ENTRY_NAMES = new Set([
+  "package.json", "tsconfig.json", "jsconfig.json", "vite.config.ts", "vite.config.js",
+  "next.config.js", "next.config.mjs", "next.config.ts", "nuxt.config.ts",
+  "svelte.config.js", "astro.config.mjs", "tailwind.config.js", "tailwind.config.ts",
+  "go.mod", "go.sum", "pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle",
+  "Cargo.toml", "pubspec.yaml", "Podfile", "Gemfile", "composer.json",
+  "requirements.txt", "pyproject.toml", "setup.py", "Pipfile",
+  "Dockerfile", "docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml",
+  "README.md", "README.zh-CN.md", ".env.example", "Makefile",
+]);
+
+const ARCH_FRAMEWORK_DEPS = [
+  ["next", "Next.js"], ["nuxt", "Nuxt"], ["@remix-run/react", "Remix"], ["astro", "Astro"],
+  ["vue", "Vue"], ["react", "React"], ["svelte", "Svelte"], ["solid-js", "Solid"],
+  ["@angular/core", "Angular"], ["@nestjs/core", "NestJS"], ["express", "Express"], ["koa", "Koa"],
+  ["fastify", "Fastify"], ["hono", "Hono"], ["electron", "Electron"],
+  ["react-native", "React Native"], ["expo", "Expo"], ["@tarojs/taro", "Taro"], ["uni-app", "uni-app"],
+  ["vite", "Vite"], ["webpack", "Webpack"], ["pinia", "Pinia"], ["redux", "Redux"],
+  ["tailwindcss", "Tailwind CSS"], ["element-plus", "Element Plus"], ["antd", "Ant Design"],
+  ["@vant/weapp", "Vant Weapp"], ["tdesign-miniprogram", "TDesign"],
+];
+
+/** package.json：依赖、脚本、workspaces（容错读取）。 */
+function archPackage(root) {
+  try {
+    const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf-8"));
+    const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
+    const scripts = Object.entries(pkg.scripts ?? {}).slice(0, 10)
+      .map(([name, command]) => ({ name, command: String(command).slice(0, 120) }));
+    const ws = Array.isArray(pkg.workspaces) ? pkg.workspaces
+      : Array.isArray(pkg.workspaces?.packages) ? pkg.workspaces.packages : [];
+    return { name: pkg.name ?? "", version: pkg.version ?? "", deps, scripts, workspaces: ws.map(String) };
+  } catch {
+    return null;
+  }
+}
+
+/** 框架识别：package.json 依赖 + 各生态标志文件。 */
+function archFrameworks(root, deps) {
+  const found = [];
+  const add = (name) => { if (name && !found.includes(name)) found.push(name); };
+  for (const [dep, label] of ARCH_FRAMEWORK_DEPS) if (deps[dep]) add(label);
+  try {
+    const goMod = readFileSync(join(root, "go.mod"), "utf-8");
+    if (goMod.includes("gin-gonic/gin")) add("Gin");
+    else if (goMod.includes("labstack/echo")) add("Echo");
+    else if (goMod.includes("gofiber/fiber")) add("Fiber");
+    else add("Go Modules");
+  } catch { /* 无 go.mod */ }
+  try {
+    if (/spring-boot/.test(readFileSync(join(root, "pom.xml"), "utf-8"))) add("Spring Boot");
+  } catch { /* 无 pom.xml */ }
+  try {
+    if (/flutter/i.test(readFileSync(join(root, "pubspec.yaml"), "utf-8"))) add("Flutter");
+  } catch { /* 无 pubspec */ }
+  try {
+    if (readFileSync(join(root, "Podfile"), "utf-8")) add("iOS / CocoaPods");
+  } catch { /* 无 Podfile */ }
+  try {
+    if (/rails/i.test(readFileSync(join(root, "Gemfile"), "utf-8"))) add("Rails");
+  } catch { /* 无 Gemfile */ }
+  return found.slice(0, 10);
+}
+
+/** 包管理器/构建工具：按锁文件与生态文件识别。 */
+function archPackageManagers(root) {
+  const found = [];
+  const has = (f) => existsSync(join(root, f));
+  if (has("pnpm-lock.yaml") || has("pnpm-workspace.yaml")) found.push("pnpm");
+  if (has("yarn.lock")) found.push("yarn");
+  if (has("bun.lockb") || has("bun.lock")) found.push("bun");
+  if (has("package-lock.json")) found.push("npm");
+  if (has("go.mod")) found.push("go modules");
+  if (has("pom.xml")) found.push("Maven");
+  if (has("build.gradle") || has("build.gradle.kts")) found.push("Gradle");
+  if (has("Podfile")) found.push("CocoaPods");
+  if (has("pubspec.yaml")) found.push("pub");
+  if (has("Cargo.toml")) found.push("Cargo");
+  if (has("requirements.txt") || has("pyproject.toml") || has("Pipfile")) found.push("pip/poetry");
+  if (has("Gemfile")) found.push("Bundler");
+  if (has("composer.json")) found.push("Composer");
+  return found;
+}
+
+/** 目录扫描：语言计数 + 顶层模块 + 关键文件（跳过依赖/产物目录，上限 4000 文件）。 */
+function archScan(root) {
+  const languages = new Map();
+  const modules = [];
+  const entries = [];
+  let files = 0;
+  let truncated = false;
+  const take = (name, bucket) => {
+    const ext = name.includes(".") ? name.split(".").pop().toLowerCase() : "";
+    const lang = ARCH_LANGS[ext];
+    if (!lang) return;
+    languages.set(lang, (languages.get(lang) ?? 0) + 1);
+    if (bucket) bucket.set(lang, (bucket.get(lang) ?? 0) + 1);
+  };
+  const walkDepth = (dir, depth, mod) => {
+    if (files >= 4000) { truncated = true; return; }
+    let ents;
+    try { ents = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of ents) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) {
+        if (ARCH_SKIP_DIRS.has(e.name) || e.name.startsWith(".") || depth >= 3) continue;
+        walkDepth(p, depth + 1, mod);
+        continue;
+      }
+      if (!e.isFile()) continue;
+      const ext = e.name.split(".").pop()?.toLowerCase() ?? "";
+      if (!ARCH_LANGS[ext]) continue;
+      files++;
+      mod.files++;
+      take(e.name, mod.langs);
+      if (files >= 4000) { truncated = true; return; }
+    }
+  };
+  let rootEntries;
+  try { rootEntries = readdirSync(root, { withFileTypes: true }); } catch { return { languages, modules, entries, files, truncated }; }
+  for (const e of rootEntries) {
+    if (e.isFile()) {
+      if (ARCH_ENTRY_NAMES.has(e.name)) entries.push({ name: e.name, path: join(root, e.name) });
+      take(e.name);
+    } else if (e.isDirectory() && !ARCH_SKIP_DIRS.has(e.name) && !e.name.startsWith(".")) {
+      const mod = { name: e.name, path: join(root, e.name), files: 0, langs: new Map() };
+      modules.push(mod);
+      walkDepth(mod.path, 1, mod);
+    }
+  }
+  return { languages, modules, entries, files, truncated };
+}
+
+/** docker-compose：行式解析 services 名称 / 镜像 / 端口（容错，不引 YAML 依赖）。 */
+function archCompose(root) {
+  for (const name of ["docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"]) {
+    const file = join(root, name);
+    if (!existsSync(file)) continue;
+    let lines = [];
+    try { lines = readFileSync(file, "utf-8").split("\n").slice(0, 300); } catch { continue; }
+    const services = [];
+    let inServices = false;
+    let cur = null;
+    for (const raw of lines) {
+      const line = raw.replace(/\s+#.*$/, "");
+      if (/^services:\s*$/.test(line)) { inServices = true; continue; }
+      if (inServices && /^\S/.test(line)) inServices = false;
+      if (!inServices) continue;
+      const head = /^ {2}([A-Za-z0-9._-]+):\s*$/.exec(line);
+      if (head) { cur = { name: head[1], image: "", ports: "" }; services.push(cur); continue; }
+      if (!cur) continue;
+      const image = /^\s+image:\s*["']?([^"'\s]+)/.exec(line);
+      if (image) cur.image = image[1];
+      const port = /^\s+-\s*["']?([0-9.:-]+:[0-9.:-]+)["']?/.exec(line);
+      if (port) cur.ports = cur.ports ? `${cur.ports}, ${port[1]}` : port[1];
+    }
+    return { file: name, services };
+  }
+  return null;
+}
+
+/** 该项目画布数（集中存储 .wudi/<项目>/designs 下的 .fig/.pen）。 */
+function archDesignCount(root) {
+  try {
+    const dir = join(store.projectRoot(), ".wudi", store.projectBaseName(root), "designs");
+    return readdirSync(dir).filter((f) => /\.(fig|pen)$/i.test(f)).length;
+  } catch {
+    return 0;
+  }
+}
+
+function toolArchitecture(args: any = {}) {
+  let root;
+  try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
+  const project = store.loadProjectAt(root);
+  const pkg = archPackage(root);
+  const deps = pkg?.deps ?? {};
+  const frameworks = archFrameworks(root, deps);
+  const packageManagers = archPackageManagers(root);
+  const scan = archScan(root);
+  const compose = archCompose(root);
+  const langTotal = [...scan.languages.values()].reduce((a, b) => a + b, 0) || 1;
+  const languages = [...scan.languages.entries()]
+    .map(([name, count]) => ({ name, files: count, pct: Math.round((count / langTotal) * 100) }))
+    .sort((a, b) => b.files - a.files);
+  const modules = scan.modules
+    .map((m) => ({
+      name: m.name,
+      path: m.path,
+      files: m.files,
+      languages: [...m.langs.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n]) => n),
+    }))
+    .sort((a, b) => b.files - a.files);
+  const docs = store.loadDocsAt(root) ?? [];
+  const envs = Array.isArray(project?.envs) ? project.envs.map((e: any) => e.name) : [];
+  const name = project?.name || pkg?.name || store.projectBaseName(root);
+  const related = {
+    docs: docs.length,
+    designs: archDesignCount(root),
+    envs: envs.length ? envs : project?.deployRoot ? ["default"] : [],
+    deployRoot: project?.deployRoot ?? "",
+    healthCheck: project?.healthCheck?.url ?? "",
+  };
+  const structured = {
+    root,
+    name,
+    techStack: project?.techStack ?? "",
+    scanned: { files: scan.files, truncated: scan.truncated },
+    languages,
+    frameworks,
+    packageManagers,
+    modules,
+    entries: scan.entries,
+    scripts: pkg?.scripts ?? [],
+    workspaces: pkg?.workspaces ?? [],
+    compose,
+    related,
+    generatedAt: new Date().toISOString(),
+  };
+  const stack = frameworks.length ? frameworks.join(" / ") : project?.techStack || "（未识别）";
+  const langs = languages.slice(0, 6).map((l) => `${l.name} ${l.files}（${l.pct}%）`).join("、") || "（无源码文件）";
+  const mods = modules.slice(0, 10).map((m) => `${m.name}（${m.files} 文件${m.languages.length ? `：${m.languages.join("/")}` : ""}）`).join("、") || "（无顶层目录）";
+  const ents = scan.entries.map((e) => e.name).join("、") || "（无关键文件）";
+  const services = compose?.services?.length
+    ? compose.services.map((s) => `${s.name}${s.image ? `（${s.image}${s.ports ? `，${s.ports}` : ""}）` : ""}`).join("、")
+    : "";
+  const lines = [
+    `═══ 架构总览：${name} ═══`,
+    `技术栈：${stack}${packageManagers.length ? `｜包管理 ${packageManagers.join(" / ")}` : ""}`,
+    `语言：${langs}`,
+    `模块：${mods}`,
+    `关键文件：${ents}`,
+  ];
+  if (services) lines.push(`服务（${compose.file}）：${services}`);
+  if (pkg?.scripts?.length) lines.push(`脚本：${pkg.scripts.map((s) => s.name).join("、")}`);
+  if (pkg?.workspaces?.length) lines.push(`Monorepo workspaces：${pkg.workspaces.join("、")}`);
+  lines.push(`关联：画布 ${related.designs}｜文档 ${related.docs}｜环境 ${related.envs.join("、") || "未配置"}`);
+  if (scan.truncated) lines.push(`（扫描达到 4000 文件上限，统计为依据样本的下限）`);
+  return ok(lines.join("\n"), structured);
 }
 
 /* ================= 项目注册表（跨项目管理） ================= */

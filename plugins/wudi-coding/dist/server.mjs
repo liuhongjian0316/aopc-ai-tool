@@ -1345,6 +1345,15 @@ var TOOLS = [
     }
   },
   {
+    name: "wudi_architecture",
+    description: "\u9879\u76EE\u67B6\u6784\u603B\u89C8\uFF08\u9759\u6001\u626B\u63CF\uFF0C\u53EA\u8BFB\uFF09\uFF1A\u8BED\u8A00\u5360\u6BD4\u3001\u6846\u67B6/\u5305\u7BA1\u7406\u5668\u3001\u9876\u5C42\u6A21\u5757\u3001\u5173\u952E\u5165\u53E3\u6587\u4EF6\u3001docker-compose \u670D\u52A1\u4E0E npm scripts\u3001monorepo workspaces\u3002\u5DE5\u4F5C\u53F0\u300C\u67B6\u6784\u300D\u9875\u7684\u6570\u636E\u6E90\uFF0C\u4E5F\u53EF\u8BA9 Agent \u5FEB\u901F\u4E86\u89E3\u9879\u76EE\u7ED3\u6784\u3002",
+    _meta: UI_META,
+    inputSchema: {
+      type: "object",
+      properties: { root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF1B\u5DE5\u4F5C\u53F0\u591A\u9879\u76EE\u5185\u5BB9\u9875\u4F20\u5165\uFF09" } }
+    }
+  },
+  {
     name: "wudi_docs_register",
     description: "\u767B\u8BB0/\u66F4\u65B0\u4E00\u4EFD\u9879\u76EE\u6587\u6863\u5230 .wudi/docs.json\uFF08\u5DE5\u4F5C\u53F0\u6587\u6863\u5E93\u53EF\u89C1\uFF09\u3002path \u76F8\u5BF9\u9879\u76EE\u6839\u3002",
     inputSchema: {
@@ -1687,6 +1696,8 @@ async function callTool(name, args = {}) {
         return toolProjectInit(args);
       case "wudi_status":
         return await toolStatus(args);
+      case "wudi_architecture":
+        return toolArchitecture(args);
       case "wudi_docs_register":
         return toolDocsRegister(args);
       case "wudi_ssh_ping":
@@ -2620,6 +2631,380 @@ function toolDesignList() {
   return ok(`\u8BBE\u8BA1\u4EA7\u7269\uFF08.wudi/design/\uFF0C\u65B0\u2192\u65E7\uFF09\uFF1A
 ${lines}`, { files });
 }
+var ARCH_SKIP_DIRS = /* @__PURE__ */ new Set([
+  ".git",
+  ".wudi",
+  ".hg",
+  ".svn",
+  "node_modules",
+  "dist",
+  "build",
+  "out",
+  "target",
+  "Pods",
+  ".next",
+  ".nuxt",
+  ".output",
+  "coverage",
+  ".turbo",
+  ".cache",
+  "__pycache__",
+  ".venv",
+  "venv",
+  ".idea",
+  ".vscode",
+  "DerivedData",
+  ".gradle",
+  ".dart_tool"
+]);
+var ARCH_LANGS = {
+  ts: "TypeScript",
+  tsx: "TypeScript",
+  mts: "TypeScript",
+  cts: "TypeScript",
+  js: "JavaScript",
+  jsx: "JavaScript",
+  mjs: "JavaScript",
+  cjs: "JavaScript",
+  vue: "Vue",
+  svelte: "Svelte",
+  astro: "Astro",
+  dart: "Dart",
+  go: "Go",
+  java: "Java",
+  kt: "Kotlin",
+  kts: "Kotlin",
+  swift: "Swift",
+  m: "Objective-C",
+  mm: "Objective-C",
+  py: "Python",
+  rs: "Rust",
+  rb: "Ruby",
+  php: "PHP",
+  cs: "C#",
+  c: "C/C++",
+  h: "C/C++",
+  cpp: "C/C++",
+  cc: "C/C++",
+  hpp: "C/C++",
+  css: "CSS",
+  scss: "SCSS",
+  less: "Less",
+  html: "HTML",
+  htm: "HTML",
+  json: "JSON",
+  md: "Markdown",
+  mdx: "Markdown",
+  yml: "YAML",
+  yaml: "YAML",
+  sh: "Shell",
+  sql: "SQL",
+  fig: "Figma",
+  pen: "Pen"
+};
+var ARCH_ENTRY_NAMES = /* @__PURE__ */ new Set([
+  "package.json",
+  "tsconfig.json",
+  "jsconfig.json",
+  "vite.config.ts",
+  "vite.config.js",
+  "next.config.js",
+  "next.config.mjs",
+  "next.config.ts",
+  "nuxt.config.ts",
+  "svelte.config.js",
+  "astro.config.mjs",
+  "tailwind.config.js",
+  "tailwind.config.ts",
+  "go.mod",
+  "go.sum",
+  "pom.xml",
+  "build.gradle",
+  "build.gradle.kts",
+  "settings.gradle",
+  "Cargo.toml",
+  "pubspec.yaml",
+  "Podfile",
+  "Gemfile",
+  "composer.json",
+  "requirements.txt",
+  "pyproject.toml",
+  "setup.py",
+  "Pipfile",
+  "Dockerfile",
+  "docker-compose.yml",
+  "docker-compose.yaml",
+  "compose.yml",
+  "compose.yaml",
+  "README.md",
+  "README.zh-CN.md",
+  ".env.example",
+  "Makefile"
+]);
+var ARCH_FRAMEWORK_DEPS = [
+  ["next", "Next.js"],
+  ["nuxt", "Nuxt"],
+  ["@remix-run/react", "Remix"],
+  ["astro", "Astro"],
+  ["vue", "Vue"],
+  ["react", "React"],
+  ["svelte", "Svelte"],
+  ["solid-js", "Solid"],
+  ["@angular/core", "Angular"],
+  ["@nestjs/core", "NestJS"],
+  ["express", "Express"],
+  ["koa", "Koa"],
+  ["fastify", "Fastify"],
+  ["hono", "Hono"],
+  ["electron", "Electron"],
+  ["react-native", "React Native"],
+  ["expo", "Expo"],
+  ["@tarojs/taro", "Taro"],
+  ["uni-app", "uni-app"],
+  ["vite", "Vite"],
+  ["webpack", "Webpack"],
+  ["pinia", "Pinia"],
+  ["redux", "Redux"],
+  ["tailwindcss", "Tailwind CSS"],
+  ["element-plus", "Element Plus"],
+  ["antd", "Ant Design"],
+  ["@vant/weapp", "Vant Weapp"],
+  ["tdesign-miniprogram", "TDesign"]
+];
+function archPackage(root) {
+  try {
+    const pkg = JSON.parse(readFileSync2(join3(root, "package.json"), "utf-8"));
+    const deps = { ...pkg.dependencies ?? {}, ...pkg.devDependencies ?? {} };
+    const scripts = Object.entries(pkg.scripts ?? {}).slice(0, 10).map(([name, command]) => ({ name, command: String(command).slice(0, 120) }));
+    const ws = Array.isArray(pkg.workspaces) ? pkg.workspaces : Array.isArray(pkg.workspaces?.packages) ? pkg.workspaces.packages : [];
+    return { name: pkg.name ?? "", version: pkg.version ?? "", deps, scripts, workspaces: ws.map(String) };
+  } catch {
+    return null;
+  }
+}
+function archFrameworks(root, deps) {
+  const found = [];
+  const add = (name) => {
+    if (name && !found.includes(name)) found.push(name);
+  };
+  for (const [dep, label] of ARCH_FRAMEWORK_DEPS) if (deps[dep]) add(label);
+  try {
+    const goMod = readFileSync2(join3(root, "go.mod"), "utf-8");
+    if (goMod.includes("gin-gonic/gin")) add("Gin");
+    else if (goMod.includes("labstack/echo")) add("Echo");
+    else if (goMod.includes("gofiber/fiber")) add("Fiber");
+    else add("Go Modules");
+  } catch {
+  }
+  try {
+    if (/spring-boot/.test(readFileSync2(join3(root, "pom.xml"), "utf-8"))) add("Spring Boot");
+  } catch {
+  }
+  try {
+    if (/flutter/i.test(readFileSync2(join3(root, "pubspec.yaml"), "utf-8"))) add("Flutter");
+  } catch {
+  }
+  try {
+    if (readFileSync2(join3(root, "Podfile"), "utf-8")) add("iOS / CocoaPods");
+  } catch {
+  }
+  try {
+    if (/rails/i.test(readFileSync2(join3(root, "Gemfile"), "utf-8"))) add("Rails");
+  } catch {
+  }
+  return found.slice(0, 10);
+}
+function archPackageManagers(root) {
+  const found = [];
+  const has = (f) => existsSync3(join3(root, f));
+  if (has("pnpm-lock.yaml") || has("pnpm-workspace.yaml")) found.push("pnpm");
+  if (has("yarn.lock")) found.push("yarn");
+  if (has("bun.lockb") || has("bun.lock")) found.push("bun");
+  if (has("package-lock.json")) found.push("npm");
+  if (has("go.mod")) found.push("go modules");
+  if (has("pom.xml")) found.push("Maven");
+  if (has("build.gradle") || has("build.gradle.kts")) found.push("Gradle");
+  if (has("Podfile")) found.push("CocoaPods");
+  if (has("pubspec.yaml")) found.push("pub");
+  if (has("Cargo.toml")) found.push("Cargo");
+  if (has("requirements.txt") || has("pyproject.toml") || has("Pipfile")) found.push("pip/poetry");
+  if (has("Gemfile")) found.push("Bundler");
+  if (has("composer.json")) found.push("Composer");
+  return found;
+}
+function archScan(root) {
+  const languages = /* @__PURE__ */ new Map();
+  const modules = [];
+  const entries = [];
+  let files = 0;
+  let truncated = false;
+  const take = (name, bucket) => {
+    const ext = name.includes(".") ? name.split(".").pop().toLowerCase() : "";
+    const lang = ARCH_LANGS[ext];
+    if (!lang) return;
+    languages.set(lang, (languages.get(lang) ?? 0) + 1);
+    if (bucket) bucket.set(lang, (bucket.get(lang) ?? 0) + 1);
+  };
+  const walkDepth = (dir, depth, mod) => {
+    if (files >= 4e3) {
+      truncated = true;
+      return;
+    }
+    let ents;
+    try {
+      ents = readdirSync2(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of ents) {
+      const p = join3(dir, e.name);
+      if (e.isDirectory()) {
+        if (ARCH_SKIP_DIRS.has(e.name) || e.name.startsWith(".") || depth >= 3) continue;
+        walkDepth(p, depth + 1, mod);
+        continue;
+      }
+      if (!e.isFile()) continue;
+      const ext = e.name.split(".").pop()?.toLowerCase() ?? "";
+      if (!ARCH_LANGS[ext]) continue;
+      files++;
+      mod.files++;
+      take(e.name, mod.langs);
+      if (files >= 4e3) {
+        truncated = true;
+        return;
+      }
+    }
+  };
+  let rootEntries;
+  try {
+    rootEntries = readdirSync2(root, { withFileTypes: true });
+  } catch {
+    return { languages, modules, entries, files, truncated };
+  }
+  for (const e of rootEntries) {
+    if (e.isFile()) {
+      if (ARCH_ENTRY_NAMES.has(e.name)) entries.push({ name: e.name, path: join3(root, e.name) });
+      take(e.name);
+    } else if (e.isDirectory() && !ARCH_SKIP_DIRS.has(e.name) && !e.name.startsWith(".")) {
+      const mod = { name: e.name, path: join3(root, e.name), files: 0, langs: /* @__PURE__ */ new Map() };
+      modules.push(mod);
+      walkDepth(mod.path, 1, mod);
+    }
+  }
+  return { languages, modules, entries, files, truncated };
+}
+function archCompose(root) {
+  for (const name of ["docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"]) {
+    const file = join3(root, name);
+    if (!existsSync3(file)) continue;
+    let lines = [];
+    try {
+      lines = readFileSync2(file, "utf-8").split("\n").slice(0, 300);
+    } catch {
+      continue;
+    }
+    const services = [];
+    let inServices = false;
+    let cur = null;
+    for (const raw of lines) {
+      const line = raw.replace(/\s+#.*$/, "");
+      if (/^services:\s*$/.test(line)) {
+        inServices = true;
+        continue;
+      }
+      if (inServices && /^\S/.test(line)) inServices = false;
+      if (!inServices) continue;
+      const head = /^ {2}([A-Za-z0-9._-]+):\s*$/.exec(line);
+      if (head) {
+        cur = { name: head[1], image: "", ports: "" };
+        services.push(cur);
+        continue;
+      }
+      if (!cur) continue;
+      const image = /^\s+image:\s*["']?([^"'\s]+)/.exec(line);
+      if (image) cur.image = image[1];
+      const port = /^\s+-\s*["']?([0-9.:-]+:[0-9.:-]+)["']?/.exec(line);
+      if (port) cur.ports = cur.ports ? `${cur.ports}, ${port[1]}` : port[1];
+    }
+    return { file: name, services };
+  }
+  return null;
+}
+function archDesignCount(root) {
+  try {
+    const dir = join3(projectRoot(), ".wudi", projectBaseName(root), "designs");
+    return readdirSync2(dir).filter((f) => /\.(fig|pen)$/i.test(f)).length;
+  } catch {
+    return 0;
+  }
+}
+function toolArchitecture(args = {}) {
+  let root;
+  try {
+    root = toolRoot(args);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  const project = loadProjectAt(root);
+  const pkg = archPackage(root);
+  const deps = pkg?.deps ?? {};
+  const frameworks = archFrameworks(root, deps);
+  const packageManagers = archPackageManagers(root);
+  const scan = archScan(root);
+  const compose = archCompose(root);
+  const langTotal = [...scan.languages.values()].reduce((a, b) => a + b, 0) || 1;
+  const languages = [...scan.languages.entries()].map(([name2, count]) => ({ name: name2, files: count, pct: Math.round(count / langTotal * 100) })).sort((a, b) => b.files - a.files);
+  const modules = scan.modules.map((m) => ({
+    name: m.name,
+    path: m.path,
+    files: m.files,
+    languages: [...m.langs.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n]) => n)
+  })).sort((a, b) => b.files - a.files);
+  const docs = loadDocsAt(root) ?? [];
+  const envs = Array.isArray(project?.envs) ? project.envs.map((e) => e.name) : [];
+  const name = project?.name || pkg?.name || projectBaseName(root);
+  const related = {
+    docs: docs.length,
+    designs: archDesignCount(root),
+    envs: envs.length ? envs : project?.deployRoot ? ["default"] : [],
+    deployRoot: project?.deployRoot ?? "",
+    healthCheck: project?.healthCheck?.url ?? ""
+  };
+  const structured = {
+    root,
+    name,
+    techStack: project?.techStack ?? "",
+    scanned: { files: scan.files, truncated: scan.truncated },
+    languages,
+    frameworks,
+    packageManagers,
+    modules,
+    entries: scan.entries,
+    scripts: pkg?.scripts ?? [],
+    workspaces: pkg?.workspaces ?? [],
+    compose,
+    related,
+    generatedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  const stack = frameworks.length ? frameworks.join(" / ") : project?.techStack || "\uFF08\u672A\u8BC6\u522B\uFF09";
+  const langs = languages.slice(0, 6).map((l) => `${l.name} ${l.files}\uFF08${l.pct}%\uFF09`).join("\u3001") || "\uFF08\u65E0\u6E90\u7801\u6587\u4EF6\uFF09";
+  const mods = modules.slice(0, 10).map((m) => `${m.name}\uFF08${m.files} \u6587\u4EF6${m.languages.length ? `\uFF1A${m.languages.join("/")}` : ""}\uFF09`).join("\u3001") || "\uFF08\u65E0\u9876\u5C42\u76EE\u5F55\uFF09";
+  const ents = scan.entries.map((e) => e.name).join("\u3001") || "\uFF08\u65E0\u5173\u952E\u6587\u4EF6\uFF09";
+  const services = compose?.services?.length ? compose.services.map((s) => `${s.name}${s.image ? `\uFF08${s.image}${s.ports ? `\uFF0C${s.ports}` : ""}\uFF09` : ""}`).join("\u3001") : "";
+  const lines = [
+    `\u2550\u2550\u2550 \u67B6\u6784\u603B\u89C8\uFF1A${name} \u2550\u2550\u2550`,
+    `\u6280\u672F\u6808\uFF1A${stack}${packageManagers.length ? `\uFF5C\u5305\u7BA1\u7406 ${packageManagers.join(" / ")}` : ""}`,
+    `\u8BED\u8A00\uFF1A${langs}`,
+    `\u6A21\u5757\uFF1A${mods}`,
+    `\u5173\u952E\u6587\u4EF6\uFF1A${ents}`
+  ];
+  if (services) lines.push(`\u670D\u52A1\uFF08${compose.file}\uFF09\uFF1A${services}`);
+  if (pkg?.scripts?.length) lines.push(`\u811A\u672C\uFF1A${pkg.scripts.map((s) => s.name).join("\u3001")}`);
+  if (pkg?.workspaces?.length) lines.push(`Monorepo workspaces\uFF1A${pkg.workspaces.join("\u3001")}`);
+  lines.push(`\u5173\u8054\uFF1A\u753B\u5E03 ${related.designs}\uFF5C\u6587\u6863 ${related.docs}\uFF5C\u73AF\u5883 ${related.envs.join("\u3001") || "\u672A\u914D\u7F6E"}`);
+  if (scan.truncated) lines.push(`\uFF08\u626B\u63CF\u8FBE\u5230 4000 \u6587\u4EF6\u4E0A\u9650\uFF0C\u7EDF\u8BA1\u4E3A\u4F9D\u636E\u6837\u672C\u7684\u4E0B\u9650\uFF09`);
+  return ok(lines.join("\n"), structured);
+}
 function toolProjectsList() {
   const root = projectRoot();
   try {
@@ -3325,7 +3710,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.38.9" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.39.0" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());
