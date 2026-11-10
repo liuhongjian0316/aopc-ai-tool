@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.41.0",
+      "version": "0.42.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,16 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.42.0",
+          "date": "2026-11-11",
+          "changes": [
+            "新增 wudi_page_from_design：由画布 .fig 快速生成页面 —— format=jsx 走 OpenPencil export_design（JSX + Tailwind 语义结构）；vue/html 走 export_svg 整页 SVG 包页面骨架（视觉 1:1；Vue 用 v-html + scoped 样式）",
+            "输出默认 generated/<画布名>.<ext>（相对项目根），扩展名必须与格式一致；已存在需 overwrite:true；路径限制在项目根内",
+            "设计页每个画布卡新增「生成页面」；编辑器顶栏新增「生成页面」；弹窗可选格式与输出路径，生成前自动打开编辑器并等待连接（最多 15s）",
+            "实测：假编辑器 WS 端到端验证 jsx/html/vue 三种输出落盘、覆盖保护、非法格式/扩展名拒绝；smoke 165 全绿（+5）"
+          ]
+        },
         {
           "version": "0.41.0",
           "date": "2026-11-11",

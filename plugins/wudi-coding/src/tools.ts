@@ -6,7 +6,7 @@
  * 状态存储：项目根 .wudi/（见 src/store.ts）；SSH 执行：src/ssh.ts（系统命令，仅密钥认证）。
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import * as store from "./store";
 import { sshRun, localRun, uploadFile, sshPing, sshConfig } from "./ssh";
 import { figmaToken, parseFigmaRef, fetchFigmaStructure, fetchFigmaImages, extractStyles } from "./figma";
@@ -280,6 +280,22 @@ export const TOOLS = [
         root: { type: "string", description: "项目根路径（缺省为当前工作区）" },
       },
       required: ["confirm"],
+    },
+  },
+  {
+    name: "wudi_page_from_design",
+    description: "由画布 .fig 快速生成页面：format=jsx 用 OpenPencil export_design 导出 JSX + Tailwind 类名（语义结构）；vue/html 用整页 SVG 包页面骨架（视觉 1:1）。输出默认 generated/<画布名>.<ext>，不覆盖已有文件（overwrite:true 可覆盖）。需要该画布编辑器已打开。",
+    _meta: UI_META,
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "画布路径，如 .wudi/<项目>/designs/ui.fig" },
+        format: { type: "string", enum: ["jsx", "vue", "html"], description: "输出格式，默认 jsx" },
+        output: { type: "string", description: "输出路径（相对项目根，扩展名需与 format 一致），默认 generated/<画布名>.<ext>" },
+        overwrite: { type: "boolean", description: "输出存在时是否覆盖，默认 false" },
+        root: { type: "string", description: "项目根路径（缺省为当前工作区）" },
+      },
+      required: ["path"],
     },
   },
   {
@@ -632,6 +648,8 @@ export async function callTool(name, args = {}) {
         return toolArchPlan(args);
       case "wudi_arch_scaffold":
         return toolArchScaffold(args);
+      case "wudi_page_from_design":
+        return await toolPageFromDesign(args);
       case "wudi_docs_register":
         return toolDocsRegister(args);
       case "wudi_ssh_ping":
@@ -2786,6 +2804,108 @@ function toolArchScaffold(args: any = {}) {
     "Agent 可继续按方案实现页面/模块，并用 wudi_architecture 复查结构。",
   ].filter(Boolean).join("\n");
   return ok(lines, summary);
+}
+
+/* ================= 由设计稿（.fig）快速生成页面 ================= */
+
+const PAGE_FORMATS = new Set(["jsx", "vue", "html"]);
+
+/** 相对工作区的 posix 路径（openpencil 子进程以工作区为根）。 */
+function relFromWorkspace(absPath) {
+  return relative(store.projectRoot(), absPath).split(sep).join("/");
+}
+
+/**
+ * 由画布生成页面：
+ * - jsx：OpenPencil 原生 export_design（JSX + Tailwind 类名，语义结构）
+ * - vue / html：export_svg 整页 SVG 包一层页面骨架，视觉 1:1，适合快速落地/预览
+ * 需要该画布的编辑器已打开（上游 export 走面板 RPC）。
+ */
+async function toolPageFromDesign(args: any = {}) {
+  let root;
+  let figFile;
+  let figBase;
+  try {
+    root = toolRoot(args);
+    const r = resolveDesignFile(String(args?.path ?? ""), root);
+    figFile = r.file;
+    figBase = r.base.replace(/\.(fig|pen)$/i, "");
+  } catch (err: any) {
+    return fail(String(err?.message ?? err));
+  }
+  if (!existsSync(figFile)) return fail(`设计稿不存在：${args?.path}`);
+  const format = String(args?.format ?? "jsx").trim().toLowerCase();
+  if (!PAGE_FORMATS.has(format)) return fail(`不支持的 format：${format}（可选 jsx / vue / html）`);
+  const outRel = (String(args?.output ?? "").trim().replace(/^\/+/, "") || `generated/${figBase}.${format}`).replace(/\\/g, "/");
+  if (outRel.includes("..") || /^[A-Za-z]:/.test(outRel)) return fail(`非法输出路径：${outRel}`);
+  const outAbs = resolve(root, outRel);
+  if (!outAbs.startsWith(resolve(root) + "/")) return fail(`输出路径必须在项目根内：${outRel}`);
+  const ext = outRel.split(".").pop()?.toLowerCase() ?? "";
+  if (ext !== format) return fail(`输出文件扩展名必须是 .${format}：${outRel}`);
+  if (existsSync(outAbs) && args?.overwrite !== true) {
+    return fail(`输出文件已存在：${outRel}（传 overwrite: true 覆盖）`);
+  }
+  const figRel = relFromWorkspace(figFile);
+  /* 登记活动设计稿（editor 起来即加载；已打开时幂等） */
+  try {
+    await openpencilCall(undefined, "open_design", { path: figRel });
+  } catch { /* 编辑器未连接时由后续 export 给出明确错误 */ }
+
+  if (format === "jsx") {
+    const relOut = relFromWorkspace(outAbs);
+    try {
+      const res = await openpencilCall(undefined, "export_design", {
+        format: "jsx",
+        path: relOut,
+        overwrite: args?.overwrite === true,
+      });
+      const sc = res?.structuredContent ?? {};
+      const written = sc.path ?? sc.file ?? relOut;
+      const bytes = existsSync(outAbs) ? statSync(outAbs).size : 0;
+      return ok(
+        `已由 ${figRel} 生成 React 页面（JSX + Tailwind）\n- 输出：${written}${bytes ? `（${(bytes / 1024).toFixed(1)} KB）` : ""}\n- 下一步：把组件挂到路由/页面，运行项目即可看到；需要拆分组件或补交互时让 Agent 继续。`,
+        { path: written, format, source: figRel, bytes }
+      );
+    } catch (err: any) {
+      return fail(`生成 JSX 失败：${String(err?.message ?? err).slice(0, 500)}（请先在「设计」页打开该画布编辑器再重试）`);
+    }
+  }
+
+  /* vue / html：整页 SVG 包页面骨架（1:1 视觉） */
+  let svg = "";
+  try {
+    const res = await openpencilCall(undefined, "export_svg", {});
+    svg = String(res?.structuredContent?.svg ?? "");
+    if (!svg) {
+      /* 上游 export_svg 以文本 JSON 返回（无 structuredContent） */
+      try {
+        const parsed = JSON.parse(res?.content?.[0]?.text ?? "{}");
+        svg = String(parsed?.svg ?? "");
+      } catch { /* 非 JSON 文本 */ }
+    }
+    if (!svg) throw new Error("export_svg 未返回内容（画布可能为空，或编辑器未连接）");
+  } catch (err: any) {
+    return fail(`导出画布失败：${String(err?.message ?? err).slice(0, 500)}（请先在「设计」页打开该画布编辑器再重试）`);
+  }
+  svg = svg.replace(/<\?xml[^>]*\?>\s*/i, "");
+  const header = `<!-- 由 ${figRel} 生成 · ${new Date().toISOString()} -->`;
+  let content;
+  if (format === "html") {
+    content = `${header}\n<!doctype html>\n<html lang="zh-CN">\n<head>\n<meta charset="utf-8" />\n<meta name="viewport" content="width=device-width, initial-scale=1" />\n<title>${figBase}</title>\n<style>html,body{margin:0;padding:0;background:#fff}body{display:flex;justify-content:center}.op-page{width:100%;max-width:1440px;padding:24px;box-sizing:border-box}.op-page svg{width:100%;height:auto;display:block}</style>\n</head>\n<body>\n<div class="op-page">\n${svg}\n</div>\n</body>\n</html>\n`;
+  } else {
+    const jsSvg = svg.replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
+    content = `${header}\n<script setup lang="ts">\nconst svg = \`${jsSvg}\`;\n</script>\n\n<template>\n  <div class="op-page" v-html="svg" />\n</template>\n\n<style scoped>\n.op-page { width: 100%; max-width: 1440px; margin: 0 auto; padding: 24px; box-sizing: border-box; }\n.op-page :deep(svg) { width: 100%; height: auto; display: block; }\n</style>\n`;
+  }
+  try {
+    mkdirSync(_dirname(outAbs), { recursive: true });
+    writeFileSync(outAbs, content);
+  } catch (err: any) {
+    return fail(`写入页面失败：${String(err?.message ?? err)}`);
+  }
+  return ok(
+    `已由 ${figRel} 生成${format === "html" ? " HTML 页面" : " Vue 页面"}（整页 SVG，视觉 1:1）\n- 输出：${outRel}（${(Buffer.byteLength(content) / 1024).toFixed(1)} KB）\n- 提示：需要语义化组件/可交互代码时，用 format=jsx 生成 JSX 后再拆分组件。`,
+    { path: outRel, format, source: figRel, bytes: Buffer.byteLength(content) }
+  );
 }
 
 /* ================= 项目注册表（跨项目管理） ================= */

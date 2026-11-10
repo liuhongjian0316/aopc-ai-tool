@@ -427,6 +427,17 @@ plugins/wudi-coding/
   - 面板**主动打开编辑器**：收到 `get_design_status` 的 `live:false` 或「编辑器未打开」失败结果时，自动打开该画布编辑器——Agent 稍后重试即可写入了。
 - 注意：本机 homebrew Node 24 依赖损坏（libsimdjson 缺失），openpencil 的 web 构建暂不可用；本次服务端补丁直接应用于 vendored dist（与源码补丁一致）。
 
+## 由画布快速生成页面（v0.42.0）
+
+- **`wudi_page_from_design {path, format, output?, overwrite?}`**：直接把 `.fig` 画布变成页面代码。
+  - `format=jsx`：OpenPencil 原生 `export_design`，输出 **JSX + Tailwind 类名**（有语义结构，便于继续拆组件）。
+  - `format=vue`：整页 SVG 包 Vue SFC（`v-html` + scoped 样式），**视觉 1:1**，适合快速落地/预览。
+  - `format=html`：整页 SVG 包独立 HTML，双击即可打开。
+- 默认输出 `generated/<画布名>.<ext>`（相对项目根）；扩展名必须与格式一致；已存在需 `overwrite:true`；路径限制在项目根内。
+- 面板入口：设计页每个画布卡「生成页面」、编辑器顶栏「生成页面」；弹窗选格式与输出路径，生成前自动打开该画布编辑器并等待连接（≤15s）。
+- 原理：`export_design`/`export_svg` 走编辑器面板 RPC（需编辑器已连接），SVG 导出结果以文本 JSON 返回，已在工具内兼容解析。
+- 验证：假编辑器 WS 端到端验证三种输出落盘、覆盖保护、非法格式/扩展名拒绝；smoke **165 项全绿**（+5）。
+
 ## 架构目录 + 技术栈组合（v0.41.0）
 
 - **架构目录**：方案与文档统一存到 `<工作区>/.wudi/<项目名>/architecture/`：

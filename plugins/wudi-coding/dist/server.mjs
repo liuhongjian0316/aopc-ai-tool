@@ -7,7 +7,7 @@ import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // src/tools.ts
 import { existsSync as existsSync3, mkdirSync as mkdirSync2, readdirSync as readdirSync2, readFileSync as readFileSync2, renameSync as renameSync2, rmSync as rmSync2, statSync, writeFileSync as writeFileSync2 } from "node:fs";
-import { join as join3, resolve as resolve3 } from "node:path";
+import { join as join3, relative, resolve as resolve3, sep } from "node:path";
 
 // src/store.ts
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -1414,6 +1414,22 @@ var TOOLS = [
     }
   },
   {
+    name: "wudi_page_from_design",
+    description: "\u7531\u753B\u5E03 .fig \u5FEB\u901F\u751F\u6210\u9875\u9762\uFF1Aformat=jsx \u7528 OpenPencil export_design \u5BFC\u51FA JSX + Tailwind \u7C7B\u540D\uFF08\u8BED\u4E49\u7ED3\u6784\uFF09\uFF1Bvue/html \u7528\u6574\u9875 SVG \u5305\u9875\u9762\u9AA8\u67B6\uFF08\u89C6\u89C9 1:1\uFF09\u3002\u8F93\u51FA\u9ED8\u8BA4 generated/<\u753B\u5E03\u540D>.<ext>\uFF0C\u4E0D\u8986\u76D6\u5DF2\u6709\u6587\u4EF6\uFF08overwrite:true \u53EF\u8986\u76D6\uFF09\u3002\u9700\u8981\u8BE5\u753B\u5E03\u7F16\u8F91\u5668\u5DF2\u6253\u5F00\u3002",
+    _meta: UI_META,
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "\u753B\u5E03\u8DEF\u5F84\uFF0C\u5982 .wudi/<\u9879\u76EE>/designs/ui.fig" },
+        format: { type: "string", enum: ["jsx", "vue", "html"], description: "\u8F93\u51FA\u683C\u5F0F\uFF0C\u9ED8\u8BA4 jsx" },
+        output: { type: "string", description: "\u8F93\u51FA\u8DEF\u5F84\uFF08\u76F8\u5BF9\u9879\u76EE\u6839\uFF0C\u6269\u5C55\u540D\u9700\u4E0E format \u4E00\u81F4\uFF09\uFF0C\u9ED8\u8BA4 generated/<\u753B\u5E03\u540D>.<ext>" },
+        overwrite: { type: "boolean", description: "\u8F93\u51FA\u5B58\u5728\u65F6\u662F\u5426\u8986\u76D6\uFF0C\u9ED8\u8BA4 false" },
+        root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF09" }
+      },
+      required: ["path"]
+    }
+  },
+  {
     name: "wudi_docs_register",
     description: "\u767B\u8BB0/\u66F4\u65B0\u4E00\u4EFD\u9879\u76EE\u6587\u6863\u5230 .wudi/docs.json\uFF08\u5DE5\u4F5C\u53F0\u6587\u6863\u5E93\u53EF\u89C1\uFF09\u3002path \u76F8\u5BF9\u9879\u76EE\u6839\u3002",
     inputSchema: {
@@ -1762,6 +1778,8 @@ async function callTool(name, args = {}) {
         return toolArchPlan(args);
       case "wudi_arch_scaffold":
         return toolArchScaffold(args);
+      case "wudi_page_from_design":
+        return await toolPageFromDesign(args);
       case "wudi_docs_register":
         return toolDocsRegister(args);
       case "wudi_ssh_ping":
@@ -4765,6 +4783,125 @@ function toolArchScaffold(args = {}) {
   ].filter(Boolean).join("\n");
   return ok(lines, summary);
 }
+var PAGE_FORMATS = /* @__PURE__ */ new Set(["jsx", "vue", "html"]);
+function relFromWorkspace(absPath) {
+  return relative(projectRoot(), absPath).split(sep).join("/");
+}
+async function toolPageFromDesign(args = {}) {
+  let root;
+  let figFile;
+  let figBase;
+  try {
+    root = toolRoot(args);
+    const r = resolveDesignFile(String(args?.path ?? ""), root);
+    figFile = r.file;
+    figBase = r.base.replace(/\.(fig|pen)$/i, "");
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  if (!existsSync3(figFile)) return fail(`\u8BBE\u8BA1\u7A3F\u4E0D\u5B58\u5728\uFF1A${args?.path}`);
+  const format = String(args?.format ?? "jsx").trim().toLowerCase();
+  if (!PAGE_FORMATS.has(format)) return fail(`\u4E0D\u652F\u6301\u7684 format\uFF1A${format}\uFF08\u53EF\u9009 jsx / vue / html\uFF09`);
+  const outRel = (String(args?.output ?? "").trim().replace(/^\/+/, "") || `generated/${figBase}.${format}`).replace(/\\/g, "/");
+  if (outRel.includes("..") || /^[A-Za-z]:/.test(outRel)) return fail(`\u975E\u6CD5\u8F93\u51FA\u8DEF\u5F84\uFF1A${outRel}`);
+  const outAbs = resolve3(root, outRel);
+  if (!outAbs.startsWith(resolve3(root) + "/")) return fail(`\u8F93\u51FA\u8DEF\u5F84\u5FC5\u987B\u5728\u9879\u76EE\u6839\u5185\uFF1A${outRel}`);
+  const ext = outRel.split(".").pop()?.toLowerCase() ?? "";
+  if (ext !== format) return fail(`\u8F93\u51FA\u6587\u4EF6\u6269\u5C55\u540D\u5FC5\u987B\u662F .${format}\uFF1A${outRel}`);
+  if (existsSync3(outAbs) && args?.overwrite !== true) {
+    return fail(`\u8F93\u51FA\u6587\u4EF6\u5DF2\u5B58\u5728\uFF1A${outRel}\uFF08\u4F20 overwrite: true \u8986\u76D6\uFF09`);
+  }
+  const figRel = relFromWorkspace(figFile);
+  try {
+    await openpencilCall(void 0, "open_design", { path: figRel });
+  } catch {
+  }
+  if (format === "jsx") {
+    const relOut = relFromWorkspace(outAbs);
+    try {
+      const res = await openpencilCall(void 0, "export_design", {
+        format: "jsx",
+        path: relOut,
+        overwrite: args?.overwrite === true
+      });
+      const sc = res?.structuredContent ?? {};
+      const written = sc.path ?? sc.file ?? relOut;
+      const bytes = existsSync3(outAbs) ? statSync(outAbs).size : 0;
+      return ok(
+        `\u5DF2\u7531 ${figRel} \u751F\u6210 React \u9875\u9762\uFF08JSX + Tailwind\uFF09
+- \u8F93\u51FA\uFF1A${written}${bytes ? `\uFF08${(bytes / 1024).toFixed(1)} KB\uFF09` : ""}
+- \u4E0B\u4E00\u6B65\uFF1A\u628A\u7EC4\u4EF6\u6302\u5230\u8DEF\u7531/\u9875\u9762\uFF0C\u8FD0\u884C\u9879\u76EE\u5373\u53EF\u770B\u5230\uFF1B\u9700\u8981\u62C6\u5206\u7EC4\u4EF6\u6216\u8865\u4EA4\u4E92\u65F6\u8BA9 Agent \u7EE7\u7EED\u3002`,
+        { path: written, format, source: figRel, bytes }
+      );
+    } catch (err) {
+      return fail(`\u751F\u6210 JSX \u5931\u8D25\uFF1A${String(err?.message ?? err).slice(0, 500)}\uFF08\u8BF7\u5148\u5728\u300C\u8BBE\u8BA1\u300D\u9875\u6253\u5F00\u8BE5\u753B\u5E03\u7F16\u8F91\u5668\u518D\u91CD\u8BD5\uFF09`);
+    }
+  }
+  let svg = "";
+  try {
+    const res = await openpencilCall(void 0, "export_svg", {});
+    svg = String(res?.structuredContent?.svg ?? "");
+    if (!svg) {
+      try {
+        const parsed = JSON.parse(res?.content?.[0]?.text ?? "{}");
+        svg = String(parsed?.svg ?? "");
+      } catch {
+      }
+    }
+    if (!svg) throw new Error("export_svg \u672A\u8FD4\u56DE\u5185\u5BB9\uFF08\u753B\u5E03\u53EF\u80FD\u4E3A\u7A7A\uFF0C\u6216\u7F16\u8F91\u5668\u672A\u8FDE\u63A5\uFF09");
+  } catch (err) {
+    return fail(`\u5BFC\u51FA\u753B\u5E03\u5931\u8D25\uFF1A${String(err?.message ?? err).slice(0, 500)}\uFF08\u8BF7\u5148\u5728\u300C\u8BBE\u8BA1\u300D\u9875\u6253\u5F00\u8BE5\u753B\u5E03\u7F16\u8F91\u5668\u518D\u91CD\u8BD5\uFF09`);
+  }
+  svg = svg.replace(/<\?xml[^>]*\?>\s*/i, "");
+  const header = `<!-- \u7531 ${figRel} \u751F\u6210 \xB7 ${(/* @__PURE__ */ new Date()).toISOString()} -->`;
+  let content;
+  if (format === "html") {
+    content = `${header}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${figBase}</title>
+<style>html,body{margin:0;padding:0;background:#fff}body{display:flex;justify-content:center}.op-page{width:100%;max-width:1440px;padding:24px;box-sizing:border-box}.op-page svg{width:100%;height:auto;display:block}</style>
+</head>
+<body>
+<div class="op-page">
+${svg}
+</div>
+</body>
+</html>
+`;
+  } else {
+    const jsSvg = svg.replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
+    content = `${header}
+<script setup lang="ts">
+const svg = \`${jsSvg}\`;
+</script>
+
+<template>
+  <div class="op-page" v-html="svg" />
+</template>
+
+<style scoped>
+.op-page { width: 100%; max-width: 1440px; margin: 0 auto; padding: 24px; box-sizing: border-box; }
+.op-page :deep(svg) { width: 100%; height: auto; display: block; }
+</style>
+`;
+  }
+  try {
+    mkdirSync2(_dirname(outAbs), { recursive: true });
+    writeFileSync2(outAbs, content);
+  } catch (err) {
+    return fail(`\u5199\u5165\u9875\u9762\u5931\u8D25\uFF1A${String(err?.message ?? err)}`);
+  }
+  return ok(
+    `\u5DF2\u7531 ${figRel} \u751F\u6210${format === "html" ? " HTML \u9875\u9762" : " Vue \u9875\u9762"}\uFF08\u6574\u9875 SVG\uFF0C\u89C6\u89C9 1:1\uFF09
+- \u8F93\u51FA\uFF1A${outRel}\uFF08${(Buffer.byteLength(content) / 1024).toFixed(1)} KB\uFF09
+- \u63D0\u793A\uFF1A\u9700\u8981\u8BED\u4E49\u5316\u7EC4\u4EF6/\u53EF\u4EA4\u4E92\u4EE3\u7801\u65F6\uFF0C\u7528 format=jsx \u751F\u6210 JSX \u540E\u518D\u62C6\u5206\u7EC4\u4EF6\u3002`,
+    { path: outRel, format, source: figRel, bytes: Buffer.byteLength(content) }
+  );
+}
 function toolProjectsList() {
   const root = projectRoot();
   try {
@@ -5470,7 +5607,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.41.0" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.42.0" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());

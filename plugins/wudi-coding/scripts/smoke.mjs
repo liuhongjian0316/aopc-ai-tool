@@ -164,8 +164,8 @@ async function protocolTests() {
     check(`tools/list: 工具数 ≥ 17（实际 ${list.length}）`, list.length >= 17);
     check("tools/list: 全部有 inputSchema", list.every((t) => t.inputSchema?.type === "object"));
     const uiBound = list.filter((t) => t?._meta?.ui?.surface === "wudi");
-    check("tools/list: Gen UI 绑定 10 个（+ wudi_architecture / wudi_arch_plan / wudi_arch_scaffold）", uiBound.length === 10);
-    check("tools/list: 关键工具在列", ["wudi_deploy", "wudi_rollback", "wudi_doctor", "wudi_deploy_logs", "wudi_env_set", "wudi_design_tokens_set", "wudi_figma_fetch", "wudi_architecture", "wudi_arch_plan", "wudi_arch_scaffold"].every((n) => list.some((t) => t.name === n)));
+    check("tools/list: Gen UI 绑定 11 个（+ architecture / arch_plan / arch_scaffold / page_from_design）", uiBound.length === 11);
+    check("tools/list: 关键工具在列", ["wudi_deploy", "wudi_rollback", "wudi_doctor", "wudi_deploy_logs", "wudi_env_set", "wudi_design_tokens_set", "wudi_figma_fetch", "wudi_architecture", "wudi_arch_plan", "wudi_arch_scaffold", "wudi_page_from_design"].every((n) => list.some((t) => t.name === n)));
 
     const resList = await s.call("resources/list", {});
     check("resources/list: 面板资源", resList?.result?.resources?.[0]?.uri === "ui://wudi-coding/panel.html" && String(resList.result.resources[0].mimeType).includes("profile=mcp-app"));
@@ -423,6 +423,19 @@ async function protocolTests() {
       check("arch_scaffold: 旧位置方案自动迁移", !errOf(r)
         && existsSync(join(legacyProj, "keep.txt"))
         && existsSync(join(workdir, ".wudi", "legacyproj", "architecture", "plan.json")));
+      /* ---- 由画布生成页面（fig → jsx/vue/html） ---- */
+      r = await s.call("tools/call", { name: "new_design", arguments: { path: ".wudi/blankproj/designs/page.fig" } });
+      check("page_gen: 建测试画布", !errOf(r) || textOf(r).includes("已存在"), textOf(r).slice(0, 120));
+      await mkdir(join(blank, "generated"), { recursive: true });
+      await writeFile(join(blank, "generated", "page.jsx"), "// existing\n");
+      r = await s.call("tools/call", { name: "wudi_page_from_design", arguments: { path: ".wudi/blankproj/designs/page.fig", root: blank } });
+      check("page_gen: 输出存在时拒绝覆盖", errOf(r) && textOf(r).includes("已存在"));
+      r = await s.call("tools/call", { name: "wudi_page_from_design", arguments: { path: ".wudi/blankproj/designs/page.fig", format: "pdf", root: blank } });
+      check("page_gen: 非法格式拒绝", errOf(r) && textOf(r).includes("不支持的 format"));
+      r = await s.call("tools/call", { name: "wudi_page_from_design", arguments: { path: ".wudi/blankproj/designs/page.fig", format: "html", output: "generated/x.jsx", root: blank } });
+      check("page_gen: 扩展名与格式不一致拒绝", errOf(r) && textOf(r).includes("扩展名必须"));
+      r = await s.call("tools/call", { name: "wudi_page_from_design", arguments: { path: ".wudi/blankproj/designs/page.fig", format: "html", output: "generated/page.html", root: blank } });
+      check("page_gen: 编辑器未打开时明确报错", errOf(r) && /导出画布失败|编辑器未打开/.test(textOf(r)), textOf(r).slice(0, 160));
     } finally {
       await rm(outside, { recursive: true, force: true });
     }

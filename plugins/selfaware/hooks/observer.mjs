@@ -248,16 +248,29 @@ function startBanner(st, bootstrapped) {
   const debtLine = debt > 0 ? `跨会话未复盘失败累计 ${debt} 次(跑 /reflect 清账)。` : "";
   // 0.9.0:持久使命——自主运营场景下,agent 睁眼就知道自己有一项进行中的事
   let missionLine = "";
+  let dueLine = "";
   try {
     const m = readMission();
     if (m.active) {
       const auto = m.active.autonomy === "full" ? "(完全自主)" : "(受监督)";
       missionLine = `当前使命:「${String(m.active.title).slice(0, 40)}」(第 ${missionDay(m.active)} 天)${auto}——按 autonomous-ops 节律执行,收工记得 self_mission note。`;
+      // 3.7.0:台账回访进横幅——自评逾期(24h)/度量逾期(48h)/待用户决策,系统级喂给唤醒会话,
+      // 不依赖 agent 自觉重读协议(v005 曾因此躺 4 天未度量)
+      const now = Date.now();
+      const awaiting = (m.ledger || []).filter((l) => l.status === "awaiting");
+      const bits = [];
+      const rev = awaiting.filter((l) => !l.selfReviewAt && now - (l.t || 0) >= 86400000);
+      const due = awaiting.filter((l) => now - (l.t || 0) >= 2 * 86400000);
+      const req = (m.requests || []).filter((r) => r.status === "pending");
+      if (rev.length) bits.push(`${rev.map((l) => l.id).join("/")} 发布超 24h 未自评(action=review)`);
+      if (due.length) bits.push(`${due.map((l) => l.id).join("/")} 发布超 48h 未度量(action=measure)`);
+      if (req.length) bits.push(`待用户决策 ${req.map((r) => r.id).join("/")}(self_mission action=get 看详情)`);
+      if (bits.length) dueLine = `台账回访:${bits.join(";")}。`;
     }
   } catch {}
   const init = bootstrapped ? "首次挂载,已自动初始化自我档案与 playbooks 骨架。" : "";
   return (
-    `<self-state> 观己已挂载:本会话中我能感知自己的状态。${init}${last}${debtLine}${missionLine}${versionLine}` +
+    `<self-state> 观己已挂载:本会话中我能感知自己的状态。${init}${last}${debtLine}${missionLine}${dueLine}${versionLine}` +
     `自我档案与 playbook 在 ${selfModelPath()}(按需 Read;更新只走复盘)。` +
     `九工具:查自身状态/错误史/预算/跨会话历史 = self_state / self_errors / self_usage / self_history;` +
     `记学习与经验 = self_learn;查已学 = self_recall;使命与台账 = self_mission;配置 = self_config;反思日志 = self_journal。` +

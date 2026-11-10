@@ -506,7 +506,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.41.0" },
+    { name: "wudi-coding", version: "0.42.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -951,7 +951,7 @@ const EmptyResultSchema = {
         <div class="pname">${esc(String(d.name).replace(/\.(fig|pen)$/i, ""))}</div>
         <div class="ppath">${esc(d.path)} · ${esc(String(d.sizeKB))} KB</div>
         <div class="stats"><span class="chip accent">${esc(d.format)}</span>${state.opEmbed?.path === d.path ? '<span class="chip">编辑中</span>' : ""}</div>
-        <div class="foot">${esc(fmtTime(d.updatedAt))}<span style="flex:1"></span><b class="cta-inline">进入画布 →</b></div>
+        <div class="foot">${esc(fmtTime(d.updatedAt))}<span style="flex:1"></span><button class="link-act" data-cv-page="${esc(d.path)}" title="由画布生成页面">生成页面</button><b class="cta-inline">进入画布 →</b></div>
         <button class="cv-del" data-cv-delete="${esc(d.path)}" title="删除此画布">×</button>
         <button class="cv-ren" data-cv-rename="${esc(d.path)}" title="重命名此画布">✎</button>
       </div>`).join("");
@@ -965,7 +965,7 @@ const EmptyResultSchema = {
         </div>
       </div>`;
     const canvasSection = canvases.length
-      ? `<div class="card"><h3 style="color:var(--accent-strong)">项目画布<span class="line"></span><span class="muted" style="text-transform:none;letter-spacing:0">存储于工作区 .wudi/designs/（按项目分目录）</span></h3>
+      ? `<div class="card"><h3 style="color:var(--accent-strong)">项目画布<span class="line"></span><span class="muted" style="text-transform:none;letter-spacing:0">存储于工作区 .wudi/&lt;项目名&gt;/designs/</span></h3>
           <div class="grid">${canvasCards}</div>
           ${state.canvasCreateOpen ? createRow : `<div class="btnrow" style="margin-top:10px"><button class="btn" id="btn-cv-create-toggle">＋ 新建画布</button><span class="muted">一个画布容纳项目的全部 UI 设计：网站 / 移动端 / 平板各建画板</span></div>`}
         </div>`
@@ -1275,6 +1275,72 @@ const EmptyResultSchema = {
     });
   }
 
+  /* ---------- 由画布生成页面（fig → JSX / Vue / HTML） ---------- */
+  function pageDialog(figPath) {
+    return new Promise((resolvePromise) => {
+      const base = String(figPath).split("/").pop().replace(/\.(fig|pen)$/i, "");
+      const overlay = document.createElement("div");
+      overlay.className = "overlay";
+      overlay.innerHTML = `<div class="dialog" style="width:min(480px, calc(100vw - 40px))">
+        <h3>由画布生成页面</h3>
+        <div class="kv" style="grid-template-columns:72px 1fr;margin-top:8px">
+          <span class="k">画布</span><span class="v mono">${esc(figPath)}</span>
+          <span class="k">格式</span><span class="v"><select id="pg-format" style="${INPUT_CSS}">
+            <option value="jsx">React JSX（Tailwind，语义结构）</option>
+            <option value="vue">Vue SFC（整页 SVG，视觉 1:1）</option>
+            <option value="html">HTML（整页 SVG，视觉 1:1）</option>
+          </select></span>
+          <span class="k">输出</span><span class="v"><input id="pg-output" style="${INPUT_CSS}" value="generated/${esc(base)}.jsx"></span>
+        </div>
+        <div class="muted" style="margin-top:8px">生成前会自动打开该画布的编辑器（导出需要编辑器连接）。JSX 便于继续拆组件；Vue/HTML 用 SVG 保证与设计稿 1:1。</div>
+        <div class="btnrow"><button class="btn" id="pg-cancel">取消</button><button class="btn primary" id="pg-ok">生成</button></div>
+      </div>`;
+      document.body.appendChild(overlay);
+      const fmt = overlay.querySelector("#pg-format");
+      const out = overlay.querySelector("#pg-output");
+      fmt.addEventListener("change", () => { out.value = `generated/${base}.${fmt.value}`; });
+      const close = (v) => { overlay.remove(); resolvePromise(v); };
+      overlay.querySelector("#pg-cancel").addEventListener("click", () => close(null));
+      overlay.querySelector("#pg-ok").addEventListener("click", () => close({ format: fmt.value, output: out.value.trim() }));
+    });
+  }
+
+  /** 轮询 get_design_status，直到编辑器 WS 连接（live=true）。 */
+  async function waitDesignLive(timeoutMs = 15000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      try {
+        const st = await callTool("get_design_status", {});
+        if (st?.structuredContent?.live === true) return true;
+      } catch { /* 编辑器尚未就绪 */ }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    return false;
+  }
+
+  async function pageFromCanvas(figPath) {
+    const opts = await pageDialog(figPath);
+    if (!opts) return;
+    if (DEMO) {
+      state.notice = { kind: "ok", text: "演示模式：不会真的生成文件" };
+      render();
+      return;
+    }
+    state.notice = { kind: "ok", text: "正在准备编辑器并生成页面…" };
+    render();
+    try {
+      if (!state.opEmbed || state.opEmbed.path !== figPath) await openOpEmbed(figPath);
+      const live = await waitDesignLive(15000);
+      if (!live) throw new Error("编辑器尚未连接（画布加载超时），请稍后重试");
+      const res = await callTool("wudi_page_from_design", { path: figPath, format: opts.format, output: opts.output, ...rootArg() });
+      const sc = struct(res);
+      state.notice = { kind: "ok", text: `页面已生成：${sc?.path ?? opts.output}` };
+    } catch (err) {
+      state.notice = { kind: "err", text: `生成页面失败：${String(err.message ?? err).slice(0, 400)}` };
+    }
+    render();
+  }
+
   /* ---------- 内嵌 OpenPencil 编辑器（overlay + 宿主协议 shim） ----------
    * 编辑器本体（vendor 官方 dist 的 loader + bundle 资产）经 wudi 协同桥 HTTP 端点 /openpencil/frame
    * 加载进 iframe；loader 按官方架构走 MCP App 协议连 window.parent —— 这里由面板扮演宿主：
@@ -1349,12 +1415,17 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
         <span id="op-status" class="muted"></span>
         <span style="flex:1"></span>
         <button class="btn" id="op-layer-fit" title="缩放到全部内容（调用编辑器 zoomToFit）">适应视图</button>
+        <button class="btn" id="op-layer-page" title="由当前画布生成页面（JSX / Vue / HTML）">生成页面</button>
         <button class="btn" id="op-layer-reload" title="重新加载编辑器">重载</button>
         <button class="btn danger" id="op-layer-close">关闭编辑器</button>
       </div>
       <div class="op-frame-holder"></div>`;
     document.body.appendChild(layer);
     layer.querySelector("#op-layer-close").addEventListener("click", () => closeOpEmbed());
+    layer.querySelector("#op-layer-page").addEventListener("click", () => {
+      const path = state.opEmbed?.path;
+      if (path) void pageFromCanvas(path);
+    });
     layer.querySelector("#op-layer-fit").addEventListener("click", () => {
       const frame = document.getElementById("op-frame");
       if (frame) opAutoFit(frame);
@@ -1396,7 +1467,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.41.0" },
+              hostInfo: { name: "wudi-workbench", version: "0.42.0" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -1822,6 +1893,13 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
     /* 项目画布卡：进入该画布 */
     $root().querySelectorAll("[data-cv-open]").forEach((card) =>
       card.addEventListener("click", () => openOpEmbed(card.dataset.cvOpen))
+    );
+    /* 由画布生成页面（fig → JSX / Vue / HTML） */
+    $root().querySelectorAll("[data-cv-page]").forEach((b) =>
+      b.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        await pageFromCanvas(b.dataset.cvPage);
+      })
     );
     /* 画布重命名 / 删除（CRUD 的改与删） */
     $root().querySelectorAll("[data-cv-rename]").forEach((b) =>
