@@ -19,7 +19,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.43.1" },
+    { name: "wudi-coding", version: "0.44.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -54,6 +54,10 @@ const EmptyResultSchema = {
     archOptions: {},   // 技术栈组合选项（styling/ui/state/router/test）
     archName: "",      // 向导里的项目名（避免重渲染丢失输入）
     archBusy: false,   // 生成方案 / 写入骨架进行中
+    dev: null,         // wudi_dev_actions structuredContent（开发页）
+    devSelected: "",   // 选中的开发进程 id
+    devBusy: false,    // 启动/停止进行中
+    devTimer: null,    // 开发页轮询定时器
     figmaUrl: "",
     opEmbed: null,     // 内嵌 OpenPencil 编辑器会话 {path}（overlay 层，不参与 render 循环）
     opFrameOrigin: "", // 内嵌编辑器 iframe 的 http origin（wudi 协同桥）
@@ -183,6 +187,7 @@ const EmptyResultSchema = {
     projects: '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 2A1.5 1.5 0 0 1 3 .5h4A1.5 1.5 0 0 1 8.5 2v4A1.5 1.5 0 0 1 7 7.5H3A1.5 1.5 0 0 1 1.5 6V2Zm7 8A1.5 1.5 0 0 1 10 8.5h4A1.5 1.5 0 0 1 15.5 10v4a1.5 1.5 0 0 1-1.5 1.5h-4A1.5 1.5 0 0 1 8.5 14v-4ZM1.5 10A1.5 1.5 0 0 1 3 8.5h4A1.5 1.5 0 0 1 8.5 10v4A1.5 1.5 0 0 1 7 15.5H3A1.5 1.5 0 0 1 1.5 14v-4Zm7-8A1.5 1.5 0 0 1 10 .5h4A1.5 1.5 0 0 1 15.5 2v4A1.5 1.5 0 0 1 14 7.5h-4A1.5 1.5 0 0 1 8.5 6V2Z"/></svg>',
     overview: '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a6.5 6.5 0 1 0 6.5 6.5h-1.6A4.9 4.9 0 1 1 8 3.1V1.5Zm1.5 0v4.7l3.3-3.4A6.5 6.5 0 0 0 9.5 1.5Z"/></svg>',
     arch: '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><rect x="6" y="1" width="4" height="3" rx="1"/><rect x="1" y="9" width="4" height="3" rx="1"/><rect x="11" y="9" width="4" height="3" rx="1"/><rect x="7.4" y="4" width="1.2" height="3"/><rect x="3.6" y="6.4" width="8.8" height="1.2"/><rect x="3.4" y="7.6" width="1.2" height="1.6"/><rect x="11.4" y="7.6" width="1.2" height="1.6"/></svg>',
+    dev: '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.9c0-.5.4-.9.9-.9h10.2c.5 0 .9.4.9.9v10.2c0 .5-.4.9-.9.9H2.9a.9.9 0 0 1-.9-.9V2.9Zm2.2 2.4-.8.8 2.2 2.2-2.2 2.2.8.8 3-3-3-3Zm4 5.3h3.3V9.4H8.2v1.2Z"/></svg>',
     deploys: '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 .8c2.6 1.3 4.4 3.9 4.4 7.4l-2.6 2.6c.2-2.6-.3-5-1.8-7.3-.2-.3-.6-.3-.8 0C5.7 5.8 5.2 8.2 5.4 10.8L2.8 8.2C2.8 4.7 5.4 2.1 8 .8ZM5.6 11.4c.5 1 .9 2 1 3.1-.9.6-1.9 1-3 1.2-.4.1-.7-.3-.6-.6.3-1.1 1-2.4 2.6-3.7Zm4.8 0c1.6 1.3 2.3 2.6 2.6 3.7.1.4-.2.7-.6.6-1.1-.2-2.1-.6-3-1.2.1-1.1.5-2.1 1-3.1Z"/></svg>',
     design: '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 0 0 0 14c.9 0 1.5-.7 1.5-1.5 0-.4-.15-.75-.4-1-.24-.26-.4-.6-.4-1 0-.83.67-1.5 1.5-1.5h1.3A3.6 3.6 0 0 0 15 6.4C15 3.4 11.9 1 8 1ZM3.5 8a1.3 1.3 0 1 1 0-2.6 1.3 1.3 0 0 1 0 2.6Zm3-3.5a1.3 1.3 0 1 1 0-2.6 1.3 1.3 0 0 1 0 2.6Zm4.5.5a1.3 1.3 0 1 1 0-2.6 1.3 1.3 0 0 1 0 2.6Z"/></svg>',
     docs: '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M3 1.5A1.5 1.5 0 0 1 4.5 0h5L14 4.5v10A1.5 1.5 0 0 1 12.5 16h-8A1.5 1.5 0 0 1 3 14.5v-13ZM9.5 1.2V4a.5.5 0 0 0 .5.5h2.8L9.5 1.2ZM5 7.5h6v1.2H5V7.5Zm0 3h6v1.2H5v-1.2Z"/></svg>',
@@ -198,11 +203,13 @@ const EmptyResultSchema = {
   }
 
   function renderInner() {
+    if (state.devTimer) { clearTimeout(state.devTimer); state.devTimer = null; }
     const inProject = state.view === "detail" && !state.drill;
     /* 项目内容导航只在选中项目后出现；landing / 下钻页不显示内容页签 */
     const navTabs = [
       ["projects", "项目", ICONS.projects, (state.projects?.projects ?? []).length || ""],
       ["overview", "总览", ICONS.overview, ""],
+      ["dev", "开发", ICONS.dev, ""],
       ["arch", "架构", ICONS.arch, ""],
       ["deploys", "部署", ICONS.deploys, ""],
       ["design", "设计", ICONS.design, ""],
@@ -216,6 +223,7 @@ const EmptyResultSchema = {
     if (state.view === "projects" && !state.drill) body = renderProjects();
     else if (state.drill) body = renderDrill();
     else body = state.tab === "overview" ? renderOverview(state.data?.project ?? null)
+      : state.tab === "dev" ? renderDev()
       : state.tab === "arch" ? renderArch()
       : state.tab === "deploys" ? renderDeploys()
       : state.tab === "design" ? renderDesign()
@@ -248,6 +256,7 @@ const EmptyResultSchema = {
         state.notice = null;
         if (state.tab === "design" && state.view === "detail") loadDesign();
         if (state.tab === "arch" && state.view === "detail") loadArch();
+        if (state.tab === "dev" && state.view === "detail") loadDev();
         if (state.view === "projects") loadProjects();
         render();
         saveWidgetState();
@@ -258,6 +267,7 @@ const EmptyResultSchema = {
       loadAll();
       if (state.view === "detail" && state.tab === "design") loadDesign();
       if (state.view === "detail" && state.tab === "arch") loadArch();
+      if (state.view === "detail" && state.tab === "dev") loadDev();
     });
     document.getElementById("btn-back")?.addEventListener("click", () => { state.drill = null; render(); saveWidgetState(); });
     document.getElementById("btn-back-projects")?.addEventListener("click", () => {
@@ -270,6 +280,12 @@ const EmptyResultSchema = {
     });
     bindActions();
     bindArchActions();
+    bindDevActions();
+    /* 开发页轮询：有运行中进程时每 2.5s 刷新状态与日志 */
+    if (state.view === "detail" && state.tab === "dev" && !DEMO &&
+        (state.dev?.processes ?? []).some((p) => p.status === "running" || p.status === "starting")) {
+      state.devTimer = setTimeout(() => loadDev(), 2500);
+    }
     reportSize();
   }
 
@@ -492,6 +508,142 @@ const EmptyResultSchema = {
           <div class="muted" style="margin-top:10px">创建后自动进入编辑器，无需任何额外配置</div>
         </div>`;
     return canvasSection;
+  }
+
+  /* ---------- 开发页：启动开发服务器 / 安装构建测试 / 日志 ---------- */
+  function devStatusText(p) {
+    if (!p) return "";
+    if (p.status === "running") return "运行中";
+    if (p.status === "starting") return "启动中";
+    if (p.status === "exited") return `已退出${p.exitCode !== null && p.exitCode !== undefined ? `（code ${p.exitCode}）` : ""}`;
+    if (p.status === "failed") return "启动失败";
+    return p.status;
+  }
+  function renderDev() {
+    const d = state.dev;
+    if (!d) return `<div class="card"><h3>开发<span class="line"></span></h3><div class="muted">正在读取开发动作…</div></div>`;
+    if (d.error) return `<div class="card"><h3>开发<span class="line"></span></h3><div class="muted">读取失败：${esc(d.error)}</div></div>`;
+    const actions = d.actions ?? [];
+    const procs = d.processes ?? [];
+    const selected = procs.find((p) => p.id === state.devSelected) ?? procs.find((p) => p.kind === "server") ?? procs[0] ?? null;
+    const serverActions = actions.filter((a) => a.kind === "server");
+    const taskActions = actions.filter((a) => a.kind !== "server");
+    const runningServer = procs.find((p) => p.kind === "server" && (p.status === "running" || p.status === "starting"));
+    const busy = state.devBusy ? "disabled" : "";
+    const serverCard = runningServer
+      ? `<div class="kv">
+          <span class="k">状态</span><span class="v plain">${esc(devStatusText(runningServer))} · pid ${runningServer.pid || "-"}</span>
+          <span class="k">命令</span><span class="v">${esc(runningServer.command)}</span>
+          ${runningServer.url ? `<span class="k">地址</span><span class="v"><button class="link-act" data-dev-open="${esc(runningServer.url)}">${esc(runningServer.url)}</button></span>` : ""}
+        </div>
+        <div class="btnrow" style="margin-top:8px">
+          <button class="btn danger" data-dev-stop="${esc(runningServer.id)}" ${busy}>停止</button>
+          <button class="btn" data-dev-restart="${esc(runningServer.id)}" ${busy}>重启</button>
+          <button class="btn" id="btn-dev-refresh" ${busy}>刷新状态</button>
+        </div>`
+      : `<div class="muted" style="margin-bottom:8px">${serverActions.length ? "选择动作启动开发服务器，输出与访问地址会自动显示。" : "未发现开发服务器动作（需要 package.json scripts / go.mod / Makefile 等）。"}</div>
+        <div class="btnrow">
+          ${serverActions.map((a) => `<button class="btn primary" data-dev-run="${esc(a.id)}" ${busy}>启动：${esc(a.label)}</button>`).join("")}
+          <button class="btn" id="btn-dev-refresh" ${busy}>刷新状态</button>
+        </div>`;
+    const taskButtons = taskActions.map((a) => {
+      const proc = procs.find((x) => x.name === a.id);
+      const running = proc && (proc.status === "running" || proc.status === "starting");
+      return `<button class="btn" data-dev-run="${esc(a.id)}" ${running ? "disabled" : ""}>${running ? "运行中…" : esc(a.label)}</button>`;
+    }).join("");
+    const procLabel = (p) => actions.find((a) => a.id === p.name)?.label ?? p.name;
+    const procButtons = procs.map((p) =>
+      `<button class="btn ${selected?.id === p.id ? "primary" : ""}" data-dev-select="${esc(p.id)}">${esc(procLabel(p))} · ${esc(devStatusText(p))}</button>`
+    ).join("");
+    const logBox = selected
+      ? `<pre class="dev-log mono" id="dev-log">${esc((selected.tail ?? []).join("\n") || "（暂无输出）")}</pre>
+         <div class="btnrow" style="margin-top:8px">
+           <span class="muted">${esc(selected.command)}${selected.exitCode !== null && selected.exitCode !== undefined ? ` · 退出码 ${selected.exitCode}` : ""}</span>
+           <span style="flex:1"></span>
+           <button class="btn" data-dev-stop="${esc(selected.id)}" ${selected.status === "running" ? "" : "disabled"}>停止此进程</button>
+         </div>`
+      : `<div class="muted">还没有运行过任何进程。启动开发服务器或运行上面的任务后，这里会显示实时日志。</div>`;
+    return `
+      <div class="card"><h3>开发服务器<span class="line"></span></h3>${serverCard}</div>
+      ${taskActions.length ? `<div class="card" style="margin-top:12px"><h3>任务与脚本<span class="line"></span></h3>
+        <div class="entrychips">${taskButtons}</div>
+        <div class="muted" style="margin-top:8px">安装依赖 / 构建 / 测试均可一键运行；失败会显示退出码与日志。</div>
+      </div>` : ""}
+      <div class="card" style="margin-top:12px"><h3>进程与日志<span class="line"></span></h3>
+        ${procs.length ? `<div class="entrychips" style="margin-bottom:8px">${procButtons}</div>` : ""}
+        ${logBox}
+      </div>`;
+  }
+
+  async function loadDev() {
+    if (DEMO) return;
+    try {
+      state.dev = struct(await callTool("wudi_dev_actions", rootArg()));
+    } catch (err) {
+      state.dev = { error: String(err.message ?? err).slice(0, 300), actions: [], processes: [] };
+    }
+    if (state.tab === "dev" && state.view === "detail") render();
+  }
+
+  function bindDevActions() {
+    $root().querySelectorAll("[data-dev-run]").forEach((b) => b.addEventListener("click", async () => {
+      if (state.devBusy) return;
+      state.devBusy = true;
+      render();
+      try {
+        await callTool("wudi_dev_run", { name: b.dataset.devRun, ...rootArg() });
+        state.notice = { kind: "ok", text: `已启动：${b.dataset.devRun}` };
+      } catch (err) {
+        state.notice = { kind: "err", text: `启动失败：${String(err.message ?? err).slice(0, 400)}` };
+      }
+      state.devBusy = false;
+      await loadDev();
+    }));
+    $root().querySelectorAll("[data-dev-stop]").forEach((b) => b.addEventListener("click", async () => {
+      if (state.devBusy || !b.dataset.devStop) return;
+      state.devBusy = true;
+      render();
+      try {
+        await callTool("wudi_dev_stop", { id: b.dataset.devStop, ...rootArg() });
+        state.notice = { kind: "ok", text: "已发送停止信号" };
+      } catch (err) {
+        state.notice = { kind: "err", text: `停止失败：${String(err.message ?? err).slice(0, 300)}` };
+      }
+      state.devBusy = false;
+      await loadDev();
+    }));
+    $root().querySelectorAll("[data-dev-restart]").forEach((b) => b.addEventListener("click", async () => {
+      if (state.devBusy) return;
+      const proc = (state.dev?.processes ?? []).find((p) => p.id === b.dataset.devRestart);
+      if (!proc) return;
+      state.devBusy = true;
+      render();
+      try {
+        await callTool("wudi_dev_stop", { id: proc.id, ...rootArg() });
+        await new Promise((r) => setTimeout(r, 600));
+        await callTool("wudi_dev_run", { name: proc.name, ...rootArg() });
+        state.notice = { kind: "ok", text: "已重启" };
+      } catch (err) {
+        state.notice = { kind: "err", text: `重启失败：${String(err.message ?? err).slice(0, 300)}` };
+      }
+      state.devBusy = false;
+      await loadDev();
+    }));
+    $root().querySelectorAll("[data-dev-select]").forEach((b) => b.addEventListener("click", () => {
+      state.devSelected = b.dataset.devSelect;
+      render();
+    }));
+    $root().querySelectorAll("[data-dev-open]").forEach((b) => b.addEventListener("click", async () => {
+      const url = b.dataset.devOpen;
+      if (!url) return;
+      try { await app.openLink?.({ url }); }
+      catch { state.notice = { kind: "err", text: `无法打开：${url}` }; render(); }
+    }));
+    document.getElementById("btn-dev-refresh")?.addEventListener("click", () => loadDev());
+    requestAnimationFrame(() => {
+      const box = document.getElementById("dev-log");
+      if (box) box.scrollTop = box.scrollHeight;
+    });
   }
 
   /* ---------- 架构页：技术栈 / 语言 / 模块 / 关键文件 / 服务（静态扫描，只读） ---------- */
@@ -1018,7 +1170,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.43.1" },
+              hostInfo: { name: "wudi-workbench", version: "0.44.0" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -1349,7 +1501,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
         state.projectRoot = p.isCurrent ? "" : p.path;
         state.view = "detail";
         state.tab = "overview";
-        if (!DEMO) { state.data = null; state.history = null; state.designs = null; state.arch = null; state.archPlan = null; state.archWizard = false; }
+        if (!DEMO) { state.data = null; state.history = null; state.designs = null; state.arch = null; state.archPlan = null; state.archWizard = false; state.dev = null; state.devSelected = ""; }
         render();
         saveWidgetState();
         loadAll();
@@ -1725,6 +1877,26 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
         registeredDocs: [".wudi/zongheng-app/docs/architecture.md", ".wudi/zongheng-app/docs/development.md", ".wudi/zongheng-app/docs/deploy.md"],
       },
       generatedAt: iso(2),
+    };
+    state.dev = {
+      actions: [
+        { id: "install", label: "安装依赖", command: "pnpm install", kind: "task" },
+        { id: "script:dev", label: "开发服务器", command: "pnpm dev", kind: "server" },
+        { id: "script:build", label: "构建", command: "pnpm build", kind: "task" },
+        { id: "script:test", label: "测试", command: "pnpm test", kind: "task" },
+        { id: "script:lint", label: "代码检查", command: "pnpm lint", kind: "task" },
+      ],
+      processes: [
+        { id: "dev-demo-1", name: "script:dev", command: "pnpm dev", status: "running", pid: 43210, kind: "server", port: 5173, url: "http://localhost:5173", startedAt: iso(8), exitCode: null, tail: [
+          "> zongheng-app@0.1.0 dev",
+          "> vite",
+          "",
+          "  VITE v6.0.0  ready in 320 ms",
+          "",
+          "  ➜  Local:   http://localhost:5173/",
+          "  ➜  Network: use --host to expose",
+        ] },
+      ],
     };
   }
 

@@ -427,6 +427,20 @@ plugins/wudi-coding/
   - 面板**主动打开编辑器**：收到 `get_design_status` 的 `live:false` 或「编辑器未打开」失败结果时，自动打开该画布编辑器——Agent 稍后重试即可写入了。
 - 注意：本机 homebrew Node 24 依赖损坏（libsimdjson 缺失），openpencil 的 web 构建暂不可用；本次服务端补丁直接应用于 vendored dist（与源码补丁一致）。
 
+## 新增「开发」tab（v0.44.0）
+
+- 页签：**项目 / 总览 / 开发 / 架构 / 部署 / 设计 / 文档**。
+- 后端进程管理（MCP server 内常驻）：
+  - `wudi_dev_actions`：识别可用动作 —— package.json scripts（按 pnpm/yarn/bun/npm）、go.mod（tidy/run/test/build）、pubspec（flutter）、requirements/app/main.py（uvicorn）、Makefile（run/build），并返回运行中进程。
+  - `wudi_dev_run {name|command}`：后台启动（进程组、环形日志 300 行、自动从输出识别 `http://host:port`）；自定义命令需 `confirm: true`。
+  - `wudi_dev_stop {id|all}`：SIGTERM 进程组，3s 后 SIGKILL 兜底；server 退出时自动清理子进程。
+  - `wudi_dev_logs {id, lines}`：最近输出 + 状态/端口/退出码。
+- 面板开发页：
+  - 开发服务器卡片：启动 / 停止 / 重启 / 刷新状态，显示 pid、命令、访问地址（点击打开）。
+  - 任务与脚本：安装依赖 / 构建 / 测试 / lint 等一键运行，运行中禁用重复触发。
+  - 进程与日志：进程切换、实时日志（运行中每 2.5s 轮询，自动滚底）、退出码。
+- 实测：长驻进程启动 → URL 识别 → 停止；smoke **174 项全绿**（+5）。
+
 ## 部署与文档目录化（v0.43.1）
 
 - **文档**：索引改为 `<工作区>/.wudi/<项目名>/docs/index.json`；文档文件同目录（`architecture.md` / `development.md` / `deploy.md` / `api.md`）。

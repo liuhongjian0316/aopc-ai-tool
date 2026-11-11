@@ -8,6 +8,7 @@ import { fileURLToPath as fileURLToPath2 } from "node:url";
 // src/tools.ts
 import { existsSync as existsSync3, mkdirSync as mkdirSync2, readdirSync as readdirSync2, readFileSync as readFileSync2, renameSync as renameSync2, rmSync as rmSync2, statSync, writeFileSync as writeFileSync2 } from "node:fs";
 import { join as join3, relative, resolve as resolve3, sep } from "node:path";
+import { spawn as spawn2 } from "node:child_process";
 
 // src/store.ts
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -1530,6 +1531,52 @@ var TOOLS = [
     }
   },
   {
+    name: "wudi_dev_actions",
+    description: "\u5217\u51FA\u9879\u76EE\u53EF\u7528\u7684\u5F00\u53D1\u52A8\u4F5C\uFF08package.json scripts / go / flutter / python / Makefile\uFF09\uFF1A\u5B89\u88C5\u3001\u5F00\u53D1\u670D\u52A1\u5668\u3001\u6784\u5EFA\u3001\u6D4B\u8BD5\u7B49\uFF0C\u5E76\u8FD4\u56DE\u8FD0\u884C\u4E2D\u8FDB\u7A0B\u72B6\u6001\u3002\u5DE5\u4F5C\u53F0\u300C\u5F00\u53D1\u300D\u9875\u7684\u6570\u636E\u6E90\u3002",
+    inputSchema: { type: "object", properties: { root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF09" } } }
+  },
+  {
+    name: "wudi_dev_run",
+    description: "\u542F\u52A8\u5F00\u53D1\u52A8\u4F5C\u6216\u81EA\u5B9A\u4E49\u547D\u4EE4\uFF08\u540E\u53F0\u5E38\u9A7B\uFF0C\u8F93\u51FA\u8FDB\u73AF\u5F62\u65E5\u5FD7\uFF09\u3002name \u7528 wudi_dev_actions \u7684 id\uFF1B\u81EA\u5B9A\u4E49 command \u9700 confirm: true\u3002",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "\u52A8\u4F5C id\uFF08\u5982 script:dev / install / build / test\uFF09" },
+        command: { type: "string", description: "\u81EA\u5B9A\u4E49\u547D\u4EE4\uFF08\u9700 confirm: true\uFF09" },
+        confirm: { type: "boolean", description: "\u81EA\u5B9A\u4E49\u547D\u4EE4\u786E\u8BA4" },
+        kind: { type: "string", enum: ["server", "task"], description: "\u81EA\u5B9A\u4E49\u547D\u4EE4\u7C7B\u578B" },
+        port: { type: "number", description: "\u5DF2\u77E5\u7AEF\u53E3\uFF08\u7528\u4E8E\u751F\u6210\u8BBF\u95EE\u5730\u5740\uFF09" },
+        root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF09" }
+      }
+    }
+  },
+  {
+    name: "wudi_dev_stop",
+    description: "\u505C\u6B62\u5F00\u53D1\u8FDB\u7A0B\uFF08\u6309 id/name\uFF0C\u6216 all: true \u505C\u6B62\u8BE5\u9879\u76EE\u7684\u5168\u90E8\u8FDB\u7A0B\uFF09\u3002",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "\u8FDB\u7A0B id" },
+        name: { type: "string", description: "\u52A8\u4F5C id/\u540D\u79F0\uFF08\u53EF\u66FF\u4EE3 id\uFF09" },
+        all: { type: "boolean", description: "\u505C\u6B62\u8BE5\u9879\u76EE\u5168\u90E8\u8FDB\u7A0B" },
+        root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF09" }
+      }
+    }
+  },
+  {
+    name: "wudi_dev_logs",
+    description: "\u8BFB\u53D6\u5F00\u53D1\u8FDB\u7A0B\u6700\u8FD1\u8F93\u51FA\uFF08\u9ED8\u8BA4 80 \u884C\uFF09\uFF0C\u542B\u72B6\u6001\u3001\u7AEF\u53E3\u4E0E\u8BBF\u95EE\u5730\u5740\u3002",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "\u8FDB\u7A0B id" },
+        name: { type: "string", description: "\u52A8\u4F5C id/\u540D\u79F0\uFF08\u53EF\u66FF\u4EE3 id\uFF09" },
+        lines: { type: "number", description: "\u8FD4\u56DE\u884C\u6570\uFF0C\u9ED8\u8BA4 80" },
+        root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF09" }
+      }
+    }
+  },
+  {
     name: "wudi_docs_register",
     description: "\u767B\u8BB0/\u66F4\u65B0\u4E00\u4EFD\u9879\u76EE\u6587\u6863\u5230 .wudi/docs.json\uFF08\u5DE5\u4F5C\u53F0\u6587\u6863\u5E93\u53EF\u89C1\uFF09\u3002path \u76F8\u5BF9\u9879\u76EE\u6839\u3002",
     inputSchema: {
@@ -1880,6 +1927,14 @@ async function callTool(name, args = {}) {
         return toolArchScaffold(args);
       case "wudi_page_from_design":
         return await toolPageFromDesign(args);
+      case "wudi_dev_actions":
+        return toolDevActions(args);
+      case "wudi_dev_run":
+        return toolDevRun(args);
+      case "wudi_dev_stop":
+        return toolDevStop(args);
+      case "wudi_dev_logs":
+        return toolDevLogs(args);
       case "wudi_docs_register":
         return toolDocsRegister(args);
       case "wudi_ssh_ping":
@@ -5314,6 +5369,290 @@ const svg = \`${jsSvg}\`;
     { path: outRel, format, source: figRel, bytes: Buffer.byteLength(content) }
   );
 }
+var DEV_PROCS = /* @__PURE__ */ new Map();
+var DEV_SEQ = 0;
+var DEV_MAX_LOG = 300;
+function devPm(root) {
+  const has = (f) => existsSync3(join3(root, f));
+  if (has("pnpm-lock.yaml") || has("pnpm-workspace.yaml")) return "pnpm";
+  if (has("yarn.lock")) return "yarn";
+  if (has("bun.lockb") || has("bun.lock")) return "bun";
+  return "npm";
+}
+function devNodeScripts(root) {
+  try {
+    const pkg = JSON.parse(readFileSync2(join3(root, "package.json"), "utf-8"));
+    return pkg.scripts && typeof pkg.scripts === "object" ? pkg.scripts : {};
+  } catch {
+    return {};
+  }
+}
+function devActionLabel(script) {
+  const map = {
+    dev: "\u5F00\u53D1\u670D\u52A1\u5668",
+    start: "\u542F\u52A8\u670D\u52A1",
+    serve: "\u542F\u52A8\u670D\u52A1",
+    preview: "\u9884\u89C8\u6784\u5EFA\u4EA7\u7269",
+    build: "\u6784\u5EFA",
+    test: "\u6D4B\u8BD5",
+    lint: "\u4EE3\u7801\u68C0\u67E5",
+    "start:dev": "\u5F00\u53D1\u670D\u52A1\u5668"
+  };
+  return map[script] ?? `\u8FD0\u884C ${script}`;
+}
+function devRunCommand(pm, script) {
+  if (pm === "yarn") return `yarn ${script}`;
+  if (pm === "pnpm") return `pnpm ${script}`;
+  if (pm === "bun") return `bun run ${script}`;
+  return `npm run ${script}`;
+}
+function devInstallCommand(pm) {
+  if (pm === "yarn") return "yarn";
+  if (pm === "pnpm") return "pnpm install";
+  if (pm === "bun") return "bun install";
+  return "npm install";
+}
+function devActionsFor(root) {
+  const actions = [];
+  const has = (f) => existsSync3(join3(root, f));
+  const scripts = devNodeScripts(root);
+  const pm = devPm(root);
+  if (Object.keys(scripts).length) {
+    if (!has("node_modules")) actions.push({ id: "install", label: "\u5B89\u88C5\u4F9D\u8D56", command: devInstallCommand(pm), kind: "task" });
+    for (const script of Object.keys(scripts).slice(0, 20)) {
+      const kind = /^(dev|start|serve|watch)|start:dev/i.test(script) ? "server" : "task";
+      actions.push({ id: `script:${script}`, script, label: devActionLabel(script), command: devRunCommand(pm, script), kind });
+    }
+    return actions;
+  }
+  if (has("go.mod")) {
+    actions.push({ id: "install", label: "\u6574\u7406\u4F9D\u8D56", command: "go mod tidy", kind: "task" });
+    actions.push({ id: "run", label: "\u8FD0\u884C\u670D\u52A1", command: "go run ./cmd/server", kind: "server", port: 8080 });
+    actions.push({ id: "test", label: "\u6D4B\u8BD5", command: "go test ./...", kind: "task" });
+    actions.push({ id: "build", label: "\u6784\u5EFA", command: "go build -o bin/server ./cmd/server", kind: "task" });
+    return actions;
+  }
+  if (has("pubspec.yaml")) {
+    actions.push({ id: "install", label: "\u83B7\u53D6\u4F9D\u8D56", command: "flutter pub get", kind: "task" });
+    actions.push({ id: "run", label: "\u8FD0\u884C App", command: "flutter run", kind: "server" });
+    actions.push({ id: "test", label: "\u6D4B\u8BD5", command: "flutter test", kind: "task" });
+    return actions;
+  }
+  if (has("requirements.txt") || has("pyproject.toml")) {
+    if (has("requirements.txt")) actions.push({ id: "install", label: "\u5B89\u88C5\u4F9D\u8D56", command: "pip install -r requirements.txt", kind: "task" });
+    if (has("app/main.py")) {
+      actions.push({ id: "run", label: "\u8FD0\u884C\u670D\u52A1", command: "uvicorn app.main:app --reload", kind: "server", port: 8e3 });
+      actions.push({ id: "test", label: "\u6D4B\u8BD5", command: "pytest -q", kind: "task" });
+    }
+    return actions;
+  }
+  if (has("Makefile")) {
+    actions.push({ id: "run", label: "\u8FD0\u884C\uFF08make run\uFF09", command: "make run", kind: "server" });
+    actions.push({ id: "build", label: "\u6784\u5EFA\uFF08make build\uFF09", command: "make build", kind: "task" });
+  }
+  return actions;
+}
+function devProcSummary(p, tailLines = 30) {
+  return {
+    id: p.id,
+    name: p.name,
+    command: p.command,
+    status: p.status,
+    pid: p.pid ?? 0,
+    startedAt: p.startedAt,
+    endedAt: p.endedAt ?? "",
+    exitCode: p.exitCode ?? null,
+    port: p.port ?? 0,
+    url: p.url ?? "",
+    kind: p.kind,
+    tail: p.logs.slice(-tailLines)
+  };
+}
+function devListFor(root) {
+  const rr = resolve3(root);
+  return [...DEV_PROCS.values()].filter((p) => p.root === rr).map((p) => devProcSummary(p));
+}
+function devAppend(p, chunk) {
+  for (const rawLine of String(chunk).split(/\r?\n/)) {
+    const line = rawLine.trimEnd();
+    if (!line) continue;
+    p.logs.push(line.slice(0, 600));
+    if (p.logs.length > DEV_MAX_LOG) p.logs.splice(0, p.logs.length - DEV_MAX_LOG);
+    const urlMatch = line.match(/https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]):(\d+)/i);
+    if (urlMatch) {
+      p.port = Number(urlMatch[1]);
+      p.url = urlMatch[0].replace("0.0.0.0", "localhost");
+    }
+  }
+}
+function devStart(root, action) {
+  const key = `${resolve3(root)}::${action.id}`;
+  const existing = DEV_PROCS.get(key);
+  if (existing && (existing.status === "running" || existing.status === "starting")) return { proc: existing, reused: true };
+  const id = `dev-${++DEV_SEQ}-${Date.now().toString(36)}`;
+  const proc = {
+    key,
+    id,
+    root: resolve3(root),
+    name: action.id,
+    command: action.command,
+    kind: action.kind ?? "task",
+    logs: [],
+    status: "starting",
+    pid: null,
+    startedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    exitCode: null,
+    port: action.port ?? 0,
+    url: ""
+  };
+  const child = spawn2(action.command, {
+    cwd: proc.root,
+    shell: true,
+    detached: true,
+    env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  proc.pid = child.pid ?? null;
+  proc.status = "running";
+  child.stdout.on("data", (c) => devAppend(proc, c));
+  child.stderr.on("data", (c) => devAppend(proc, c));
+  child.on("exit", (code, signal) => {
+    proc.status = "exited";
+    proc.exitCode = code;
+    proc.endedAt = (/* @__PURE__ */ new Date()).toISOString();
+    if (signal) proc.logs.push(`[wudi] \u8FDB\u7A0B\u7ED3\u675F\uFF1A${signal}`);
+  });
+  child.on("error", (err) => {
+    proc.status = "failed";
+    proc.exitCode = -1;
+    proc.endedAt = (/* @__PURE__ */ new Date()).toISOString();
+    proc.logs.push(`[wudi] \u542F\u52A8\u5931\u8D25\uFF1A${String(err?.message ?? err)}`);
+  });
+  DEV_PROCS.set(key, proc);
+  return { proc, reused: false };
+}
+function devStop(proc) {
+  if (!proc || proc.status !== "running" && proc.status !== "starting") return false;
+  try {
+    if (proc.pid) process.kill(-proc.pid, "SIGTERM");
+  } catch {
+    try {
+      if (proc.pid) process.kill(proc.pid, "SIGTERM");
+    } catch {
+    }
+  }
+  proc.logs.push("[wudi] \u5DF2\u53D1\u9001\u505C\u6B62\u4FE1\u53F7");
+  const timer = setTimeout(() => {
+    if (proc.status === "running" && proc.pid) {
+      try {
+        process.kill(-proc.pid, "SIGKILL");
+      } catch {
+      }
+    }
+  }, 3e3);
+  timer.unref?.();
+  return true;
+}
+process.on("exit", () => {
+  for (const p of DEV_PROCS.values()) {
+    if (p.pid && (p.status === "running" || p.status === "starting")) {
+      try {
+        process.kill(-p.pid, "SIGTERM");
+      } catch {
+      }
+    }
+  }
+});
+function toolDevActions(args = {}) {
+  let root;
+  try {
+    root = toolRoot(args);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  const actions = devActionsFor(root);
+  const processes = devListFor(root);
+  const text = [
+    `\u2550\u2550\u2550 \u5F00\u53D1\u52A8\u4F5C\uFF1A${projectBaseName(root)} \u2550\u2550\u2550`,
+    actions.length ? actions.map((a) => `- ${a.label}\uFF1A\`${a.command}\`\uFF08${a.kind === "server" ? "\u5E38\u9A7B" : "\u4EFB\u52A1"}\uFF09`).join("\n") : "\uFF08\u672A\u53D1\u73B0\u53EF\u7528\u52A8\u4F5C\uFF1A\u9700\u8981 package.json / go.mod / pubspec.yaml / Makefile \u7B49\uFF09",
+    processes.length ? `\u8FDB\u7A0B\uFF1A
+${processes.map((p) => `- ${p.name} \xB7 ${p.status} \xB7 pid ${p.pid || "-"}${p.url ? ` \xB7 ${p.url}` : ""}`).join("\n")}` : "\uFF08\u65E0\u8FD0\u884C\u4E2D\u7684\u8FDB\u7A0B\uFF09"
+  ].join("\n\n");
+  return ok(text, { root, actions, processes });
+}
+function toolDevRun(args = {}) {
+  let root;
+  try {
+    root = toolRoot(args);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  const name = String(args.name ?? "").trim();
+  const rawCommand = String(args.command ?? "").trim();
+  const actions = devActionsFor(root);
+  let action = null;
+  if (name) {
+    action = actions.find((a) => a.id === name || a.script === name || a.label === name);
+    if (!action) return fail(`\u672A\u77E5\u52A8\u4F5C\uFF1A${name}\uFF08\u53EF\u9009\uFF1A${actions.map((a) => a.id).join("\u3001") || "\u65E0"}\uFF09`);
+  } else if (rawCommand) {
+    const matched = actions.find((a) => a.command === rawCommand);
+    if (matched) action = matched;
+    else if (args.confirm === true) {
+      action = { id: `custom:${rawCommand.slice(0, 40)}`, label: rawCommand, command: rawCommand, kind: args.kind === "server" ? "server" : "task", port: args.port };
+    } else {
+      return fail("\u81EA\u5B9A\u4E49\u547D\u4EE4\u9700\u8981\u786E\u8BA4\uFF1A\u4F20 confirm: true\uFF0C\u6216\u4F7F\u7528 wudi_dev_actions \u8FD4\u56DE\u7684\u52A8\u4F5C name\u3002");
+    }
+  } else {
+    const fallback = actions.find((a) => a.kind === "server") ?? actions[0];
+    if (!fallback) return fail("\u6CA1\u6709\u53EF\u8FD0\u884C\u7684\u5F00\u53D1\u52A8\u4F5C\uFF08\u672A\u53D1\u73B0 package.json / go.mod / pubspec.yaml / Makefile\uFF09\u3002");
+    action = fallback;
+  }
+  if (String(action.command).length > 500) return fail("\u547D\u4EE4\u8FC7\u957F\u3002");
+  const { proc, reused } = devStart(root, action);
+  return ok(
+    `${reused ? "\u5DF2\u5728\u8FD0\u884C" : "\u5DF2\u542F\u52A8"}\uFF1A${action.label}\uFF08${proc.status}\uFF09
+- \u547D\u4EE4\uFF1A${proc.command}
+- PID\uFF1A${proc.pid ?? "-"}
+${proc.url ? `- \u5730\u5740\uFF1A${proc.url}
+` : ""}\u7528 wudi_dev_logs \u67E5\u770B\u8F93\u51FA\uFF0Cwudi_dev_stop \u505C\u6B62\u3002`,
+    { process: devProcSummary(proc) }
+  );
+}
+function toolDevStop(args = {}) {
+  let root;
+  try {
+    root = toolRoot(args);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  const id = String(args.id ?? args.name ?? "").trim();
+  const rr = resolve3(root);
+  const targets = [...DEV_PROCS.values()].filter((p) => p.root === rr && (args.all === true || !id || p.id === id || p.name === id));
+  if (!targets.length) return fail("\u6CA1\u6709\u5339\u914D\u7684\u8FD0\u884C\u8FDB\u7A0B\u3002");
+  const stopped = [];
+  for (const p of targets) {
+    if (devStop(p)) stopped.push(p.id);
+  }
+  return ok(`\u5DF2\u53D1\u9001\u505C\u6B62\u4FE1\u53F7\uFF1A${stopped.join("\u3001") || "\uFF08\u65E0\u8FD0\u884C\u4E2D\u8FDB\u7A0B\uFF09"}`, { stopped, processes: devListFor(root) });
+}
+function toolDevLogs(args = {}) {
+  let root;
+  try {
+    root = toolRoot(args);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  const id = String(args.id ?? args.name ?? "").trim();
+  const lines = Math.min(500, Math.max(1, Number(args.lines ?? 80)));
+  const rr = resolve3(root);
+  const proc = [...DEV_PROCS.values()].find((p) => p.root === rr && (id ? p.id === id || p.name === id : true)) ?? null;
+  if (!proc) return fail(`\u6CA1\u6709\u627E\u5230\u8FDB\u7A0B${id ? `\uFF1A${id}` : ""}\uFF08\u5148\u7528 wudi_dev_actions \u67E5\u770B\uFF09\u3002`);
+  return ok(
+    `\u2550\u2550\u2550 ${proc.name} \xB7 ${proc.status}${proc.url ? ` \xB7 ${proc.url}` : ""} \u2550\u2550\u2550
+${proc.logs.slice(-lines).join("\n") || "\uFF08\u6682\u65E0\u8F93\u51FA\uFF09"}`,
+    { process: devProcSummary(proc, lines) }
+  );
+}
 function toolProjectsList() {
   const root = projectRoot();
   try {
@@ -6019,7 +6358,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.43.1" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.44.0" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());

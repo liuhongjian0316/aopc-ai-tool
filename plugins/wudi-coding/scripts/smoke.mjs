@@ -335,7 +335,7 @@ async function protocolTests() {
       await mkdir(join(archProj, "src", "components"), { recursive: true });
       await writeFile(join(archProj, "package.json"), JSON.stringify({
         name: "arch-proj", version: "1.0.0",
-        scripts: { dev: "vite", build: "vite build", test: "vitest run" },
+        scripts: { dev: "vite", build: "vite build", test: "vitest run", hello: "node -e \"console.log('dev-hello')\"" },
         dependencies: { react: "^18.2.0", vite: "^5.0.0" },
         workspaces: ["packages/*"],
       }, null, 2));
@@ -455,6 +455,28 @@ async function protocolTests() {
       check("page_gen: 扩展名与格式不一致拒绝", errOf(r) && textOf(r).includes("扩展名必须"));
       r = await s.call("tools/call", { name: "wudi_page_from_design", arguments: { path: ".wudi/blankproj/designs/page.fig", format: "html", output: "generated/page.html", root: blank } });
       check("page_gen: 编辑器未打开时明确报错", errOf(r) && /导出画布失败|编辑器未打开/.test(textOf(r)), textOf(r).slice(0, 160));
+      /* ---- 开发页：动作 / 启动 / 日志 / 停止 ---- */
+      r = await s.call("tools/call", { name: "wudi_dev_actions", arguments: { root: archProj } });
+      const devActs = r?.result?.structuredContent?.actions ?? [];
+      check("dev: 动作识别（install + scripts）",
+        devActs.some((a) => a.id === "install") && devActs.some((a) => a.id === "script:dev" && a.kind === "server") && devActs.some((a) => a.id === "script:build"),
+        JSON.stringify(devActs.map((a) => a.id)));
+      r = await s.call("tools/call", { name: "wudi_dev_run", arguments: { name: "script:hello", root: archProj } });
+      const devProc = r?.result?.structuredContent?.process ?? {};
+      check("dev: 启动任务进程", !errOf(r) && devProc.status === "running" && devProc.pid > 0, JSON.stringify(devProc));
+      let devLog = null;
+      for (let i = 0; i < 20; i++) {
+        await new Promise((r2) => setTimeout(r2, 200));
+        r = await s.call("tools/call", { name: "wudi_dev_logs", arguments: { id: devProc.id, root: archProj } });
+        devLog = r?.result?.structuredContent?.process ?? null;
+        if (devLog && devLog.status === "exited") break;
+      }
+      check("dev: 日志捕获与退出码", !!devLog && devLog.exitCode === 0
+        && (devLog.tail ?? []).some((line) => String(line).includes("dev-hello")), JSON.stringify(devLog));
+      r = await s.call("tools/call", { name: "wudi_dev_run", arguments: { command: "node -e \"console.log('nope')\"", root: archProj } });
+      check("dev: 自定义命令需确认", errOf(r) && textOf(r).includes("confirm"));
+      r = await s.call("tools/call", { name: "wudi_dev_stop", arguments: { all: true, root: archProj } });
+      check("dev: 停止接口可用", !errOf(r));
     } finally {
       await rm(outside, { recursive: true, force: true });
     }

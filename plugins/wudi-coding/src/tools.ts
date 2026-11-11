@@ -7,6 +7,7 @@
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
+import { spawn } from "node:child_process";
 import * as store from "./store";
 import { sshRun, localRun, uploadFile, sshPing, sshConfig } from "./ssh";
 import { figmaToken, parseFigmaRef, fetchFigmaStructure, fetchFigmaImages, extractStyles } from "./figma";
@@ -296,6 +297,52 @@ export const TOOLS = [
         root: { type: "string", description: "项目根路径（缺省为当前工作区）" },
       },
       required: ["path"],
+    },
+  },
+  {
+    name: "wudi_dev_actions",
+    description: "列出项目可用的开发动作（package.json scripts / go / flutter / python / Makefile）：安装、开发服务器、构建、测试等，并返回运行中进程状态。工作台「开发」页的数据源。",
+    inputSchema: { type: "object", properties: { root: { type: "string", description: "项目根路径（缺省为当前工作区）" } } },
+  },
+  {
+    name: "wudi_dev_run",
+    description: "启动开发动作或自定义命令（后台常驻，输出进环形日志）。name 用 wudi_dev_actions 的 id；自定义 command 需 confirm: true。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "动作 id（如 script:dev / install / build / test）" },
+        command: { type: "string", description: "自定义命令（需 confirm: true）" },
+        confirm: { type: "boolean", description: "自定义命令确认" },
+        kind: { type: "string", enum: ["server", "task"], description: "自定义命令类型" },
+        port: { type: "number", description: "已知端口（用于生成访问地址）" },
+        root: { type: "string", description: "项目根路径（缺省为当前工作区）" },
+      },
+    },
+  },
+  {
+    name: "wudi_dev_stop",
+    description: "停止开发进程（按 id/name，或 all: true 停止该项目的全部进程）。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "进程 id" },
+        name: { type: "string", description: "动作 id/名称（可替代 id）" },
+        all: { type: "boolean", description: "停止该项目全部进程" },
+        root: { type: "string", description: "项目根路径（缺省为当前工作区）" },
+      },
+    },
+  },
+  {
+    name: "wudi_dev_logs",
+    description: "读取开发进程最近输出（默认 80 行），含状态、端口与访问地址。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "进程 id" },
+        name: { type: "string", description: "动作 id/名称（可替代 id）" },
+        lines: { type: "number", description: "返回行数，默认 80" },
+        root: { type: "string", description: "项目根路径（缺省为当前工作区）" },
+      },
     },
   },
   {
@@ -650,6 +697,14 @@ export async function callTool(name, args = {}) {
         return toolArchScaffold(args);
       case "wudi_page_from_design":
         return await toolPageFromDesign(args);
+      case "wudi_dev_actions":
+        return toolDevActions(args);
+      case "wudi_dev_run":
+        return toolDevRun(args);
+      case "wudi_dev_stop":
+        return toolDevStop(args);
+      case "wudi_dev_logs":
+        return toolDevLogs(args);
       case "wudi_docs_register":
         return toolDocsRegister(args);
       case "wudi_ssh_ping":
@@ -3066,7 +3121,253 @@ async function toolPageFromDesign(args: any = {}) {
   );
 }
 
+/* ================= 开发过程（启动 / 任务 / 日志） ================= */
+
+const DEV_PROCS = new Map();
+let DEV_SEQ = 0;
+const DEV_MAX_LOG = 300;
+
+function devPm(root) {
+  const has = (f) => existsSync(join(root, f));
+  if (has("pnpm-lock.yaml") || has("pnpm-workspace.yaml")) return "pnpm";
+  if (has("yarn.lock")) return "yarn";
+  if (has("bun.lockb") || has("bun.lock")) return "bun";
+  return "npm";
+}
+
+function devNodeScripts(root) {
+  try {
+    const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf-8"));
+    return pkg.scripts && typeof pkg.scripts === "object" ? pkg.scripts : {};
+  } catch { return {}; }
+}
+
+function devActionLabel(script) {
+  const map = {
+    dev: "开发服务器", start: "启动服务", serve: "启动服务", preview: "预览构建产物",
+    build: "构建", test: "测试", lint: "代码检查", "start:dev": "开发服务器",
+  };
+  return map[script] ?? `运行 ${script}`;
+}
+
+function devRunCommand(pm, script) {
+  if (pm === "yarn") return `yarn ${script}`;
+  if (pm === "pnpm") return `pnpm ${script}`;
+  if (pm === "bun") return `bun run ${script}`;
+  return `npm run ${script}`;
+}
+
+function devInstallCommand(pm) {
+  if (pm === "yarn") return "yarn";
+  if (pm === "pnpm") return "pnpm install";
+  if (pm === "bun") return "bun install";
+  return "npm install";
+}
+
+/** 可运行动作：package.json scripts 优先，其次 go / flutter / python / Makefile。 */
+function devActionsFor(root) {
+  const actions = [];
+  const has = (f) => existsSync(join(root, f));
+  const scripts = devNodeScripts(root);
+  const pm = devPm(root);
+  if (Object.keys(scripts).length) {
+    if (!has("node_modules")) actions.push({ id: "install", label: "安装依赖", command: devInstallCommand(pm), kind: "task" });
+    for (const script of Object.keys(scripts).slice(0, 20)) {
+      const kind = /^(dev|start|serve|watch)|start:dev/i.test(script) ? "server" : "task";
+      actions.push({ id: `script:${script}`, script, label: devActionLabel(script), command: devRunCommand(pm, script), kind });
+    }
+    return actions;
+  }
+  if (has("go.mod")) {
+    actions.push({ id: "install", label: "整理依赖", command: "go mod tidy", kind: "task" });
+    actions.push({ id: "run", label: "运行服务", command: "go run ./cmd/server", kind: "server", port: 8080 });
+    actions.push({ id: "test", label: "测试", command: "go test ./...", kind: "task" });
+    actions.push({ id: "build", label: "构建", command: "go build -o bin/server ./cmd/server", kind: "task" });
+    return actions;
+  }
+  if (has("pubspec.yaml")) {
+    actions.push({ id: "install", label: "获取依赖", command: "flutter pub get", kind: "task" });
+    actions.push({ id: "run", label: "运行 App", command: "flutter run", kind: "server" });
+    actions.push({ id: "test", label: "测试", command: "flutter test", kind: "task" });
+    return actions;
+  }
+  if (has("requirements.txt") || has("pyproject.toml")) {
+    if (has("requirements.txt")) actions.push({ id: "install", label: "安装依赖", command: "pip install -r requirements.txt", kind: "task" });
+    if (has("app/main.py")) {
+      actions.push({ id: "run", label: "运行服务", command: "uvicorn app.main:app --reload", kind: "server", port: 8000 });
+      actions.push({ id: "test", label: "测试", command: "pytest -q", kind: "task" });
+    }
+    return actions;
+  }
+  if (has("Makefile")) {
+    actions.push({ id: "run", label: "运行（make run）", command: "make run", kind: "server" });
+    actions.push({ id: "build", label: "构建（make build）", command: "make build", kind: "task" });
+  }
+  return actions;
+}
+
+function devProcSummary(p, tailLines = 30) {
+  return {
+    id: p.id, name: p.name, command: p.command, status: p.status, pid: p.pid ?? 0,
+    startedAt: p.startedAt, endedAt: p.endedAt ?? "", exitCode: p.exitCode ?? null,
+    port: p.port ?? 0, url: p.url ?? "", kind: p.kind,
+    tail: p.logs.slice(-tailLines),
+  };
+}
+
+function devListFor(root) {
+  const rr = resolve(root);
+  return [...DEV_PROCS.values()].filter((p) => p.root === rr).map((p) => devProcSummary(p));
+}
+
+function devAppend(p, chunk) {
+  for (const rawLine of String(chunk).split(/\r?\n/)) {
+    const line = rawLine.trimEnd();
+    if (!line) continue;
+    p.logs.push(line.slice(0, 600));
+    if (p.logs.length > DEV_MAX_LOG) p.logs.splice(0, p.logs.length - DEV_MAX_LOG);
+    const urlMatch = line.match(/https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]):(\d+)/i);
+    if (urlMatch) { p.port = Number(urlMatch[1]); p.url = urlMatch[0].replace("0.0.0.0", "localhost"); }
+  }
+}
+
+function devStart(root, action) {
+  const key = `${resolve(root)}::${action.id}`;
+  const existing = DEV_PROCS.get(key);
+  if (existing && (existing.status === "running" || existing.status === "starting")) return { proc: existing, reused: true };
+  const id = `dev-${++DEV_SEQ}-${Date.now().toString(36)}`;
+  const proc = {
+    key, id, root: resolve(root), name: action.id, command: action.command, kind: action.kind ?? "task",
+    logs: [], status: "starting", pid: null, startedAt: new Date().toISOString(),
+    exitCode: null, port: action.port ?? 0, url: "",
+  };
+  const child = spawn(action.command, {
+    cwd: proc.root, shell: true, detached: true,
+    env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  proc.pid = child.pid ?? null;
+  proc.status = "running";
+  child.stdout.on("data", (c) => devAppend(proc, c));
+  child.stderr.on("data", (c) => devAppend(proc, c));
+  child.on("exit", (code, signal) => {
+    proc.status = "exited";
+    proc.exitCode = code;
+    proc.endedAt = new Date().toISOString();
+    if (signal) proc.logs.push(`[wudi] 进程结束：${signal}`);
+  });
+  child.on("error", (err) => {
+    proc.status = "failed";
+    proc.exitCode = -1;
+    proc.endedAt = new Date().toISOString();
+    proc.logs.push(`[wudi] 启动失败：${String(err?.message ?? err)}`);
+  });
+  DEV_PROCS.set(key, proc);
+  return { proc, reused: false };
+}
+
+function devStop(proc) {
+  if (!proc || (proc.status !== "running" && proc.status !== "starting")) return false;
+  try {
+    if (proc.pid) process.kill(-proc.pid, "SIGTERM");
+  } catch {
+    try { if (proc.pid) process.kill(proc.pid, "SIGTERM"); } catch { /* ignore */ }
+  }
+  proc.logs.push("[wudi] 已发送停止信号");
+  const timer = setTimeout(() => {
+    if (proc.status === "running" && proc.pid) {
+      try { process.kill(-proc.pid, "SIGKILL"); } catch { /* ignore */ }
+    }
+  }, 3000);
+  timer.unref?.();
+  return true;
+}
+
+/* server 退出时尽量带走子进程（避免残留 dev server） */
+process.on("exit", () => {
+  for (const p of DEV_PROCS.values()) {
+    if (p.pid && (p.status === "running" || p.status === "starting")) {
+      try { process.kill(-p.pid, "SIGTERM"); } catch { /* ignore */ }
+    }
+  }
+});
+
+function toolDevActions(args: any = {}) {
+  let root;
+  try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
+  const actions = devActionsFor(root);
+  const processes = devListFor(root);
+  const text = [
+    `═══ 开发动作：${store.projectBaseName(root)} ═══`,
+    actions.length
+      ? actions.map((a) => `- ${a.label}：\`${a.command}\`（${a.kind === "server" ? "常驻" : "任务"}）`).join("\n")
+      : "（未发现可用动作：需要 package.json / go.mod / pubspec.yaml / Makefile 等）",
+    processes.length
+      ? `进程：\n${processes.map((p) => `- ${p.name} · ${p.status} · pid ${p.pid || "-"}${p.url ? ` · ${p.url}` : ""}`).join("\n")}`
+      : "（无运行中的进程）",
+  ].join("\n\n");
+  return ok(text, { root, actions, processes });
+}
+
+function toolDevRun(args: any = {}) {
+  let root;
+  try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
+  const name = String(args.name ?? "").trim();
+  const rawCommand = String(args.command ?? "").trim();
+  const actions = devActionsFor(root);
+  let action = null;
+  if (name) {
+    action = actions.find((a) => a.id === name || a.script === name || a.label === name);
+    if (!action) return fail(`未知动作：${name}（可选：${actions.map((a) => a.id).join("、") || "无"}）`);
+  } else if (rawCommand) {
+    const matched = actions.find((a) => a.command === rawCommand);
+    if (matched) action = matched;
+    else if (args.confirm === true) {
+      action = { id: `custom:${rawCommand.slice(0, 40)}`, label: rawCommand, command: rawCommand, kind: args.kind === "server" ? "server" : "task", port: args.port };
+    } else {
+      return fail("自定义命令需要确认：传 confirm: true，或使用 wudi_dev_actions 返回的动作 name。");
+    }
+  } else {
+    const fallback = actions.find((a) => a.kind === "server") ?? actions[0];
+    if (!fallback) return fail("没有可运行的开发动作（未发现 package.json / go.mod / pubspec.yaml / Makefile）。");
+    action = fallback;
+  }
+  if (String(action.command).length > 500) return fail("命令过长。");
+  const { proc, reused } = devStart(root, action);
+  return ok(
+    `${reused ? "已在运行" : "已启动"}：${action.label}（${proc.status}）\n- 命令：${proc.command}\n- PID：${proc.pid ?? "-"}\n${proc.url ? `- 地址：${proc.url}\n` : ""}用 wudi_dev_logs 查看输出，wudi_dev_stop 停止。`,
+    { process: devProcSummary(proc) }
+  );
+}
+
+function toolDevStop(args: any = {}) {
+  let root;
+  try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
+  const id = String(args.id ?? args.name ?? "").trim();
+  const rr = resolve(root);
+  const targets = [...DEV_PROCS.values()].filter((p) => p.root === rr && (args.all === true || !id || p.id === id || p.name === id));
+  if (!targets.length) return fail("没有匹配的运行进程。");
+  const stopped = [];
+  for (const p of targets) { if (devStop(p)) stopped.push(p.id); }
+  return ok(`已发送停止信号：${stopped.join("、") || "（无运行中进程）"}`, { stopped, processes: devListFor(root) });
+}
+
+function toolDevLogs(args: any = {}) {
+  let root;
+  try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
+  const id = String(args.id ?? args.name ?? "").trim();
+  const lines = Math.min(500, Math.max(1, Number(args.lines ?? 80)));
+  const rr = resolve(root);
+  const proc = [...DEV_PROCS.values()].find((p) => p.root === rr && (id ? p.id === id || p.name === id : true)) ?? null;
+  if (!proc) return fail(`没有找到进程${id ? `：${id}` : ""}（先用 wudi_dev_actions 查看）。`);
+  return ok(
+    `═══ ${proc.name} · ${proc.status}${proc.url ? ` · ${proc.url}` : ""} ═══\n${proc.logs.slice(-lines).join("\n") || "（暂无输出）"}`,
+    { process: devProcSummary(proc, lines) }
+  );
+}
+
 /* ================= 项目注册表（跨项目管理） ================= */
+
 
 /** 自动把当前工作区登记进注册表（幂等），再返回全部项目概览。 */
 function toolProjectsList() {
