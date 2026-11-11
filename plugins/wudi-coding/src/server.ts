@@ -22,7 +22,7 @@ let opToolsCache = (() => {
   catch { return []; }
 })(); // 静态工具定义（117 个），后台动态刷新
 
-const SERVER_INFO = { name: "wudi-coding", version: "0.43.0" };
+const SERVER_INFO = { name: "wudi-coding", version: "0.43.1" };
 
 /* 只要插件被使用：自动创建 .wudi/ 与最小项目档案（不再有「未建档」状态） */
 try {

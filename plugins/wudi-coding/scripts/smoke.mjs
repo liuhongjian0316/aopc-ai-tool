@@ -423,11 +423,14 @@ async function protocolTests() {
         && (archAfter.related?.healthCheck ?? "").includes("127.0.0.1"),
         JSON.stringify(archAfter.related));
       check("arch_sync: 部署文件随方案生成", existsSync(join(blank, "Dockerfile")) && existsSync(join(blank, "docker-compose.yml")));
+      check("arch_sync: 部署目录 .wudi/<项目名>/deploys（config + history）",
+        existsSync(join(workdir, ".wudi", "blankproj", "deploys", "config.json"))
+        && existsSync(join(workdir, ".wudi", "blankproj", "deploys", "history.json")));
       check("arch_sync: 项目文档落到 .wudi/<项目名>/docs 并登记",
         existsSync(join(workdir, ".wudi", "blankproj", "docs", "architecture.md"))
         && existsSync(join(workdir, ".wudi", "blankproj", "docs", "development.md"))
         && existsSync(join(workdir, ".wudi", "blankproj", "docs", "deploy.md"))
-        && existsSync(join(workdir, ".wudi", "blankproj", "docs.json"))
+        && existsSync(join(workdir, ".wudi", "blankproj", "docs", "index.json"))
         && (archAfter.related?.registeredDocs ?? []).some((d) => String(d.path).includes(".wudi/blankproj/docs/deploy.md")),
         JSON.stringify(archAfter.related?.registeredDocs));
       /* 旧位置 <项目>/.wudi/architecture.json 自动迁移到 architecture/plan.json */

@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.43.0",
+      "version": "0.43.1",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,16 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.43.1",
+          "date": "2026-11-11",
+          "changes": [
+            "部署与文档数据目录化：文档索引 → .wudi/<项目名>/docs/index.json；部署数据 → .wudi/<项目名>/deploys/history.json + deploys/config.json（部署配置快照）",
+            "架构生成/写入骨架时初始化 deploys 目录（history + config）并同步文档索引；旧 docs.json / deploys.json 读取时自动迁移",
+            "修复文档登记被覆盖的问题（registerDocAt 误写旧 docs.json 导致索引只剩一条）",
+            "smoke +1（169 全绿）：deploys 目录（config + history）断言"
+          ]
+        },
         {
           "version": "0.43.0",
           "date": "2026-11-11",

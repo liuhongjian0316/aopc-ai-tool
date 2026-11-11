@@ -7,7 +7,7 @@
  */
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 export function projectRoot() {
   /* 与 openpencil.defaultWorkspaceRoot() 保持同一解析顺序：宿主以项目目录为准 */
@@ -159,6 +159,7 @@ export function saveProjectAt(root, patch) {
     else next[k] = v;
   }
   const file = writeProjectJSONAt(root, "project.json", next);
+  try { writeDeployConfig(root, next); } catch { /* 配置快照失败不阻塞 */ }
   return { project: next, file };
 }
 
@@ -175,6 +176,43 @@ function writeProjectJSONAt(root, name, value) {
   writeFileSync(tmp, JSON.stringify(value, null, 2));
   renameSync(tmp, p);
   return p;
+}
+
+/** 项目级嵌套路径读写：<ws>/.wudi/<项目名>/<rel>。 */
+function readNestedJSON(root, rel, fallback) {
+  const p = join(projectDataDirFor(root), rel);
+  if (!existsSync(p)) return fallback;
+  try {
+    return JSON.parse(readFileSync(p, "utf-8"));
+  } catch (err) {
+    console.error(`[wudi-coding] ${p} 解析失败，使用默认值：${err.message}`);
+    return fallback;
+  }
+}
+
+function writeNestedJSON(root, rel, value) {
+  const p = join(projectDataDirFor(root), rel);
+  mkdirSync(dirname(p), { recursive: true });
+  const tmp = `${p}.tmp-${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(value, null, 2));
+  renameSync(tmp, p);
+  return p;
+}
+
+/** 部署配置快照：<ws>/.wudi/<项目名>/deploys/config.json（档案变化时同步）。 */
+export function writeDeployConfig(root, project) {
+  if (!project) return null;
+  return writeNestedJSON(root, "deploys/config.json", {
+    build: project.build ?? "",
+    package: project.package ?? {},
+    deployRoot: project.deployRoot ?? "",
+    remoteScript: project.remoteScript ?? "",
+    healthCheck: project.healthCheck ?? {},
+    envs: project.envs ?? [],
+    defaultEnv: project.defaultEnv ?? "",
+    deployPolicy: project.deployPolicy ?? "confirm",
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 /* ---------------- 多环境解析 ---------------- */
@@ -319,18 +357,59 @@ export function migrateDesignsFor(root) {
 
 /** 读指定项目根的部署历史（只读，不做僵尸清扫）。 *//** 读指定项目根的部署历史（只读，不做僵尸清扫）。 */
 export function loadDeploysAt(root) {
-  const list = readJSONAt(root, "deploys.json", []);
+  const history = join(projectDataDirFor(root), "deploys", "history.json");
+  if (!existsSync(history)) {
+    /* 旧位置：.wudi/<项目名>/deploys.json 或 <项目根>/.wudi/deploys.json */
+    const legacyList = [
+      join(projectDataDirFor(root), "deploys.json"),
+      join(resolve(root), ".wudi", "deploys.json"),
+    ];
+    for (const legacy of legacyList) {
+      if (!existsSync(legacy)) continue;
+      try {
+        mkdirSync(join(projectDataDirFor(root), "deploys"), { recursive: true });
+        renameSync(legacy, history);
+        break;
+      } catch { /* 尝试下一个 */ }
+    }
+  }
+  const list = existsSync(history) ? readNestedJSON(root, "deploys/history.json", []) : [];
   return Array.isArray(list) ? list : [];
 }
 
-/** 读指定项目根的文档库。 */
+/** 写部署历史：<ws>/.wudi/<项目名>/deploys/history.json */
+function writeDeployHistory(root, list) {
+  return writeNestedJSON(root, "deploys/history.json", list);
+}
+
+/** 读指定项目根的文档库：<ws>/.wudi/<项目名>/docs/index.json（旧 docs.json 自动迁移）。 */
 export function loadDocsAt(root) {
-  const list = readJSONAt(root, "docs.json", []);
+  const index = join(projectDataDirFor(root), "docs", "index.json");
+  if (!existsSync(index)) {
+    const legacyList = [
+      join(projectDataDirFor(root), "docs.json"),
+      join(resolve(root), ".wudi", "docs.json"),
+    ];
+    for (const legacy of legacyList) {
+      if (!existsSync(legacy)) continue;
+      try {
+        mkdirSync(join(projectDataDirFor(root), "docs"), { recursive: true });
+        renameSync(legacy, index);
+        break;
+      } catch { /* 尝试下一个 */ }
+    }
+  }
+  const list = existsSync(index) ? readNestedJSON(root, "docs/index.json", []) : [];
   return Array.isArray(list) ? list : [];
+}
+
+/** 写文档索引：<ws>/.wudi/<项目名>/docs/index.json */
+function writeDocsIndex(root, list) {
+  return writeNestedJSON(root, "docs/index.json", list);
 }
 
 export function loadDeploys() {
-  const list = readJSONAt(projectRoot(), "deploys.json", []);
+  const list = loadDeploysAt(projectRoot());
   // 清扫僵尸记录：进程中断留下的 running 状态，30 分钟无进展视为 aborted
   let changed = false;
   const now = Date.now();
@@ -341,7 +420,7 @@ export function loadDeploys() {
       changed = true;
     }
   }
-  if (changed) writeProjectJSONAt(projectRoot(), "deploys.json", list);
+  if (changed) writeDeployHistory(projectRoot(), list);
   return list;
 }
 
@@ -349,7 +428,7 @@ export function loadDeploys() {
 export function appendDeploy(record) {
   const list = loadDeploys();
   list.unshift(record);
-  writeProjectJSONAt(projectRoot(), "deploys.json", list.slice(0, 50));
+  writeDeployHistory(projectRoot(), list.slice(0, 50));
   return record;
 }
 
@@ -359,7 +438,7 @@ export function updateDeploy(id, patch) {
   const idx = list.findIndex((d) => d.id === id);
   if (idx < 0) return null;
   list[idx] = { ...list[idx], ...patch };
-  writeProjectJSONAt(projectRoot(), "deploys.json", list);
+  writeDeployHistory(projectRoot(), list);
   return list[idx];
 }
 
@@ -380,7 +459,7 @@ export function registerDocAt(root, { path: docPath, type = "doc", title = "", s
     source,
     updatedAt: new Date().toISOString(),
   });
-  writeProjectJSONAt(root, "docs.json", list.slice(0, 100));
+  writeDocsIndex(root, list.slice(0, 100));
   return list[0];
 }
 

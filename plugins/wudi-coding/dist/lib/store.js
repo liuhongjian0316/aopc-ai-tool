@@ -1,7 +1,7 @@
 // src/store.ts
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 function projectRoot() {
   const root = process.env.AOPC_PROJECT_DIR || process.env.AOPC_WORKSPACE_ROOT || process.cwd();
   return resolve(root);
@@ -128,6 +128,10 @@ function saveProjectAt(root, patch) {
     else next[k] = v;
   }
   const file = writeProjectJSONAt(root, "project.json", next);
+  try {
+    writeDeployConfig(root, next);
+  } catch {
+  }
   return { project: next, file };
 }
 function saveProject(patch) {
@@ -141,6 +145,38 @@ function writeProjectJSONAt(root, name, value) {
   writeFileSync(tmp, JSON.stringify(value, null, 2));
   renameSync(tmp, p);
   return p;
+}
+function readNestedJSON(root, rel, fallback) {
+  const p = join(projectDataDirFor(root), rel);
+  if (!existsSync(p)) return fallback;
+  try {
+    return JSON.parse(readFileSync(p, "utf-8"));
+  } catch (err) {
+    console.error(`[wudi-coding] ${p} \u89E3\u6790\u5931\u8D25\uFF0C\u4F7F\u7528\u9ED8\u8BA4\u503C\uFF1A${err.message}`);
+    return fallback;
+  }
+}
+function writeNestedJSON(root, rel, value) {
+  const p = join(projectDataDirFor(root), rel);
+  mkdirSync(dirname(p), { recursive: true });
+  const tmp = `${p}.tmp-${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(value, null, 2));
+  renameSync(tmp, p);
+  return p;
+}
+function writeDeployConfig(root, project) {
+  if (!project) return null;
+  return writeNestedJSON(root, "deploys/config.json", {
+    build: project.build ?? "",
+    package: project.package ?? {},
+    deployRoot: project.deployRoot ?? "",
+    remoteScript: project.remoteScript ?? "",
+    healthCheck: project.healthCheck ?? {},
+    envs: project.envs ?? [],
+    defaultEnv: project.defaultEnv ?? "",
+    deployPolicy: project.deployPolicy ?? "confirm",
+    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+  });
 }
 function resolveEnv(project, envName) {
   const envs = Array.isArray(project?.envs) ? project.envs : [];
@@ -252,15 +288,53 @@ function migrateDesignsFor(root) {
   return moved;
 }
 function loadDeploysAt(root) {
-  const list = readJSONAt(root, "deploys.json", []);
+  const history = join(projectDataDirFor(root), "deploys", "history.json");
+  if (!existsSync(history)) {
+    const legacyList = [
+      join(projectDataDirFor(root), "deploys.json"),
+      join(resolve(root), ".wudi", "deploys.json")
+    ];
+    for (const legacy of legacyList) {
+      if (!existsSync(legacy)) continue;
+      try {
+        mkdirSync(join(projectDataDirFor(root), "deploys"), { recursive: true });
+        renameSync(legacy, history);
+        break;
+      } catch {
+      }
+    }
+  }
+  const list = existsSync(history) ? readNestedJSON(root, "deploys/history.json", []) : [];
   return Array.isArray(list) ? list : [];
+}
+function writeDeployHistory(root, list) {
+  return writeNestedJSON(root, "deploys/history.json", list);
 }
 function loadDocsAt(root) {
-  const list = readJSONAt(root, "docs.json", []);
+  const index = join(projectDataDirFor(root), "docs", "index.json");
+  if (!existsSync(index)) {
+    const legacyList = [
+      join(projectDataDirFor(root), "docs.json"),
+      join(resolve(root), ".wudi", "docs.json")
+    ];
+    for (const legacy of legacyList) {
+      if (!existsSync(legacy)) continue;
+      try {
+        mkdirSync(join(projectDataDirFor(root), "docs"), { recursive: true });
+        renameSync(legacy, index);
+        break;
+      } catch {
+      }
+    }
+  }
+  const list = existsSync(index) ? readNestedJSON(root, "docs/index.json", []) : [];
   return Array.isArray(list) ? list : [];
 }
+function writeDocsIndex(root, list) {
+  return writeNestedJSON(root, "docs/index.json", list);
+}
 function loadDeploys() {
-  const list = readJSONAt(projectRoot(), "deploys.json", []);
+  const list = loadDeploysAt(projectRoot());
   let changed = false;
   const now = Date.now();
   for (const d of list) {
@@ -270,13 +344,13 @@ function loadDeploys() {
       changed = true;
     }
   }
-  if (changed) writeProjectJSONAt(projectRoot(), "deploys.json", list);
+  if (changed) writeDeployHistory(projectRoot(), list);
   return list;
 }
 function appendDeploy(record) {
   const list = loadDeploys();
   list.unshift(record);
-  writeProjectJSONAt(projectRoot(), "deploys.json", list.slice(0, 50));
+  writeDeployHistory(projectRoot(), list.slice(0, 50));
   return record;
 }
 function updateDeploy(id, patch) {
@@ -284,7 +358,7 @@ function updateDeploy(id, patch) {
   const idx = list.findIndex((d) => d.id === id);
   if (idx < 0) return null;
   list[idx] = { ...list[idx], ...patch };
-  writeProjectJSONAt(projectRoot(), "deploys.json", list);
+  writeDeployHistory(projectRoot(), list);
   return list[idx];
 }
 function loadDocs() {
@@ -300,7 +374,7 @@ function registerDocAt(root, { path: docPath, type = "doc", title = "", source =
     source,
     updatedAt: (/* @__PURE__ */ new Date()).toISOString()
   });
-  writeProjectJSONAt(root, "docs.json", list.slice(0, 100));
+  writeDocsIndex(root, list.slice(0, 100));
   return list[0];
 }
 function registerDoc(doc) {
@@ -779,5 +853,6 @@ export {
   setFigmaUrl,
   unhideProjectRoot,
   updateDeploy,
+  writeDeployConfig,
   wudiDir
 };

@@ -427,6 +427,16 @@ plugins/wudi-coding/
   - 面板**主动打开编辑器**：收到 `get_design_status` 的 `live:false` 或「编辑器未打开」失败结果时，自动打开该画布编辑器——Agent 稍后重试即可写入了。
 - 注意：本机 homebrew Node 24 依赖损坏（libsimdjson 缺失），openpencil 的 web 构建暂不可用；本次服务端补丁直接应用于 vendored dist（与源码补丁一致）。
 
+## 部署与文档目录化（v0.43.1）
+
+- **文档**：索引改为 `<工作区>/.wudi/<项目名>/docs/index.json`；文档文件同目录（`architecture.md` / `development.md` / `deploy.md` / `api.md`）。
+- **部署**：数据改为 `<工作区>/.wudi/<项目名>/deploys/`
+  - `history.json` 部署历史
+  - `config.json` 部署配置快照（build / package / deployRoot / healthCheck / envs / deployPolicy）
+- 架构生成、写入骨架时自动初始化 `deploys/` 目录并同步配置快照；旧 `docs.json` / `deploys.json` 读取时自动迁移。
+- 修复文档登记被覆盖的问题（`registerDocAt` 误写旧 `docs.json`，导致索引只剩一条）。
+- 回归：smoke **169 项全绿**（+1）。
+
 ## 架构生成同步部署与文档（v0.43.0）
 
 - **部署同步生成**

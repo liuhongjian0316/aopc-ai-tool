@@ -2749,6 +2749,13 @@ function archSyncDeployAndDocs(root, plan, status = "planned") {
     }
     profile = store.saveProjectAt(root, patch).project;
   } catch { /* 档案写入失败不阻塞方案 */ }
+  /* 部署目录：deploys/config.json + 空 history.json（首次部署前也有数据目录） */
+  try {
+    const deployDir = join(store.projectDataDirFor(root), "deploys");
+    mkdirSync(deployDir, { recursive: true });
+    if (!existsSync(join(deployDir, "history.json"))) writeFileSync(join(deployDir, "history.json"), "[]\n");
+    if (profile) store.writeDeployConfig(root, profile);
+  } catch { /* 部署数据目录失败不阻塞 */ }
 
   const docsDir = join(store.projectDataDirFor(root), "docs");
   mkdirSync(docsDir, { recursive: true });
