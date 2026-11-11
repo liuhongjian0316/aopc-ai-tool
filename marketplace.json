@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.42.0",
+      "version": "0.43.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,17 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.43.0",
+          "date": "2026-11-11",
+          "changes": [
+            "架构生成后同步生成部署与文档：自动预填部署档案（构建命令/产物路径/部署根/健康检查），并生成 Dockerfile、docker-compose.yml、.dockerignore（可容器化预设）",
+            "项目文档落到 <工作区>/.wudi/<项目名>/docs/（architecture.md / development.md / deploy.md，后端另加 api.md），并登记到文档库",
+            "部署历史、文档库、项目档案统一改为项目级存储 <工作区>/.wudi/<项目名>/（project.json / deploys.json / docs.json），旧位置读取时自动迁移",
+            "架构页增强：新增「模块分层」与「交付流程」流程图（纯 CSS），部署与文档卡展示构建/产物/部署根/健康检查与已登记文档；方案页新增交付流程与项目文档清单",
+            "smoke +3（168 全绿）：部署档案预填、部署文件随方案生成、文档落盘与登记、profile 新位置"
+          ]
+        },
         {
           "version": "0.42.0",
           "date": "2026-11-11",

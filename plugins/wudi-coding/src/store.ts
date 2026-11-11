@@ -31,14 +31,21 @@ export function ensureWudiDir() {
  */
 export function ensureProfileAt(root, name = "") {
   const abs = resolve(root);
-  const dir = join(abs, ".wudi");
-  mkdirSync(dir, { recursive: true });
-  const file = join(dir, "project.json");
-  if (!existsSync(file)) {
-    const base = String(name || abs.split("/").filter(Boolean).pop() || "project").trim();
-    const doc = { ...structuredClone(PROJECT_TEMPLATE), name: base };
-    writeFileSync(file, JSON.stringify(doc, null, 2));
+  const file = projectDataPath("project.json", abs);
+  if (existsSync(file)) return file;
+  /* 旧位置 <项目根>/.wudi/project.json → 新位置 <工作区>/.wudi/<项目名>/project.json */
+  const legacy = join(abs, ".wudi", "project.json");
+  if (existsSync(legacy)) {
+    try {
+      mkdirSync(projectDataDirFor(abs), { recursive: true });
+      renameSync(legacy, file);
+      return file;
+    } catch { /* 迁移失败按新档案创建 */ }
   }
+  mkdirSync(projectDataDirFor(abs), { recursive: true });
+  const base = String(name || abs.split("/").filter(Boolean).pop() || "project").trim();
+  const doc = { ...structuredClone(PROJECT_TEMPLATE), name: base };
+  writeFileSync(file, JSON.stringify(doc, null, 2));
   return file;
 }
 
@@ -87,9 +94,25 @@ export const PROJECT_TEMPLATE = {
   notes: "",
 };
 
-/** 读项目档案；不存在返回 null。 */
+/** 项目级数据文件：<工作区>/.wudi/<项目名>/<name>（档案 / 部署历史 / 文档库）。 */
+function projectDataPath(name, root = projectRoot()) {
+  return join(projectDataDirFor(root), name);
+}
+
+/** 读项目级 JSON（旧位置 <项目根>/.wudi/<name> 自动迁移到 .wudi/<项目名>/）。 */
 function readJSONAt(root, name, fallback) {
-  const p = join(resolve(root), ".wudi", name);
+  const abs = resolve(root);
+  const target = projectDataPath(name, abs);
+  if (!existsSync(target)) {
+    const legacy = join(abs, ".wudi", name);
+    if (existsSync(legacy)) {
+      try {
+        mkdirSync(projectDataDirFor(abs), { recursive: true });
+        renameSync(legacy, target);
+      } catch { /* 迁移失败继续读旧位置 */ }
+    }
+  }
+  const p = existsSync(target) ? target : join(abs, ".wudi", name);
   if (!existsSync(p)) return fallback;
   try {
     return JSON.parse(readFileSync(p, "utf-8"));
@@ -113,7 +136,7 @@ export function loadProjectAt(root) {
 }
 
 export function loadProject() {
-  const raw = readJSON("project.json", null);
+  const raw = readJSONAt(projectRoot(), "project.json", null);
   if (!raw) return null;
   // 补齐新增字段的默认值，老档案也能用
   return {
@@ -126,8 +149,8 @@ export function loadProject() {
 }
 
 /** 建立/更新项目档案（浅合并顶层，package/healthCheck 深合并），返回 {project, file}。 */
-export function saveProject(patch) {
-  const current = loadProject() ?? structuredClone(PROJECT_TEMPLATE);
+export function saveProjectAt(root, patch) {
+  const current = loadProjectAt(root) ?? structuredClone(PROJECT_TEMPLATE);
   const next = { ...current };
   for (const [k, v] of Object.entries(patch ?? {})) {
     if (v === undefined) continue;
@@ -135,8 +158,23 @@ export function saveProject(patch) {
     else if (k === "healthCheck") next.healthCheck = { ...current.healthCheck, ...v };
     else next[k] = v;
   }
-  const file = writeJSON("project.json", next);
+  const file = writeProjectJSONAt(root, "project.json", next);
   return { project: next, file };
+}
+
+export function saveProject(patch) {
+  return saveProjectAt(projectRoot(), patch);
+}
+
+/** 原子写项目级 JSON。 */
+function writeProjectJSONAt(root, name, value) {
+  const dir = projectDataDirFor(root);
+  mkdirSync(dir, { recursive: true });
+  const p = join(dir, name);
+  const tmp = `${p}.tmp-${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(value, null, 2));
+  renameSync(tmp, p);
+  return p;
 }
 
 /* ---------------- 多环境解析 ---------------- */
@@ -292,7 +330,7 @@ export function loadDocsAt(root) {
 }
 
 export function loadDeploys() {
-  const list = readJSON("deploys.json", []);
+  const list = readJSONAt(projectRoot(), "deploys.json", []);
   // 清扫僵尸记录：进程中断留下的 running 状态，30 分钟无进展视为 aborted
   let changed = false;
   const now = Date.now();
@@ -303,7 +341,7 @@ export function loadDeploys() {
       changed = true;
     }
   }
-  if (changed) writeJSON("deploys.json", list);
+  if (changed) writeProjectJSONAt(projectRoot(), "deploys.json", list);
   return list;
 }
 
@@ -311,7 +349,7 @@ export function loadDeploys() {
 export function appendDeploy(record) {
   const list = loadDeploys();
   list.unshift(record);
-  writeJSON("deploys.json", list.slice(0, 50));
+  writeProjectJSONAt(projectRoot(), "deploys.json", list.slice(0, 50));
   return record;
 }
 
@@ -321,20 +359,20 @@ export function updateDeploy(id, patch) {
   const idx = list.findIndex((d) => d.id === id);
   if (idx < 0) return null;
   list[idx] = { ...list[idx], ...patch };
-  writeJSON("deploys.json", list);
+  writeProjectJSONAt(projectRoot(), "deploys.json", list);
   return list[idx];
 }
 
 /* ---------------- 文档清单 docs.json ---------------- */
 
 export function loadDocs() {
-  return readJSON("docs.json", []);
+  return readJSONAt(projectRoot(), "docs.json", []);
 }
 
-/** 登记一条文档；同路径覆盖更新。 */
-export function registerDoc({ path: docPath, type = "doc", title = "", source = "" }) {
-  if (!docPath) throw new Error("缺少 path：要登记的文档相对项目根的路径。");
-  const list = loadDocs().filter((d) => d.path !== docPath);
+/** 登记一条文档（指定项目根）；同路径覆盖更新。 */
+export function registerDocAt(root, { path: docPath, type = "doc", title = "", source = "" }) {
+  if (!docPath) throw new Error("缺少 path：要登记的文档路径。");
+  const list = (loadDocsAt(root) ?? []).filter((d) => d.path !== docPath);
   list.unshift({
     path: docPath,
     type,
@@ -342,8 +380,12 @@ export function registerDoc({ path: docPath, type = "doc", title = "", source = 
     source,
     updatedAt: new Date().toISOString(),
   });
-  writeJSON("docs.json", list.slice(0, 100));
+  writeProjectJSONAt(root, "docs.json", list.slice(0, 100));
   return list[0];
+}
+
+export function registerDoc(doc) {
+  return registerDocAt(projectRoot(), doc);
 }
 
 /* ---------------- 设计产物 design/ ---------------- */
@@ -789,17 +831,10 @@ export function registryRemove(idOrPath, wsRoot = projectRoot()) {
 export function registrySummaries(currentRoot = "", wsRoot = projectRoot()) {
   const cur = currentRoot ? resolve(currentRoot) : "";
   return loadRegistry(wsRoot).map((entry) => {
-    const wudi = join(entry.path, ".wudi");
-    const read = (name, fallback) => {
-      try {
-        return JSON.parse(readFileSync(join(wudi, name), "utf-8"));
-      } catch {
-        return fallback;
-      }
-    };
-    const project = read("project.json", null);
-    const deploys = read("deploys.json", []);
-    const docs = read("docs.json", []);
+    /* 通过迁移感知的 loader 读取（旧位置 .wudi/ 自动迁到 .wudi/<项目名>/） */
+    const project = loadProjectAt(entry.path);
+    const deploys = loadDeploysAt(entry.path);
+    const docs = loadDocsAt(entry.path);
     let designCount = 0;
     try {
       /* 画布集中存储：<工作区>/.wudi/<项目>/designs/*.fig|.pen（与设计页列表同一口径）；

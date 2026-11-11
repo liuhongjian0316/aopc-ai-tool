@@ -1878,6 +1878,12 @@ function toolArchitecture(args: any = {}) {
     envs: envs.length ? envs : project?.deployRoot ? ["default"] : [],
     deployRoot: project?.deployRoot ?? "",
     healthCheck: project?.healthCheck?.url ?? "",
+    build: project?.build ?? "",
+    packagePath: project?.package?.type === "docker-image" ? (project?.package?.dockerImage ?? "") : (project?.package?.path ?? ""),
+    packageType: project?.package?.type ?? "dir",
+    deployPolicy: project?.deployPolicy ?? "confirm",
+    docker: existsSync(join(root, "Dockerfile")) || existsSync(join(root, "docker-compose.yml")),
+    registeredDocs: docs.slice(0, 12).map((d: any) => ({ path: d.path, type: d.type ?? "doc" })),
   };
   /* 架构目录：已生成方案/文档时一并返回（面板展示与 Agent 读取入口） */
   let architecture = null;
@@ -1938,6 +1944,8 @@ function toolArchitecture(args: any = {}) {
   if (pkg?.scripts?.length) lines.push(`脚本：${pkg.scripts.map((s) => s.name).join("、")}`);
   if (pkg?.workspaces?.length) lines.push(`Monorepo workspaces：${pkg.workspaces.join("、")}`);
   lines.push(`关联：画布 ${related.designs}｜文档 ${related.docs}｜环境 ${related.envs.join("、") || "未配置"}`);
+  lines.push(`部署：构建 ${related.build || "-"}｜产物 ${related.packagePath || "-"}｜部署根 ${related.deployRoot || "未配置"}${related.docker ? "｜Docker ✓" : ""}`);
+  if (related.registeredDocs.length) lines.push(`项目文档：${related.registeredDocs.map((d) => d.path).join("、")}`);
   if (architecture) {
     lines.push(`架构方案：${architecture.status}｜${architecture.stack.join(" · ") || "（无）"}`);
     lines.push(`架构目录：${architecture.dir}（${architecture.docs.length} 个文档）`);
@@ -2658,6 +2666,121 @@ function archModel(plan, relDir, status, extra = {}) {
   };
 }
 
+/* ---------- 部署与文档同步生成（架构方案的一部分） ---------- */
+
+const ARCH_DEPLOY_META = {
+  "vue-vite": { packagePath: "dist", port: 80, healthPath: "/", docker: "nginx" },
+  "react-vite": { packagePath: "dist", port: 80, healthPath: "/", docker: "nginx" },
+  "next-app": { packagePath: ".next", port: 3000, healthPath: "/", docker: "node-next" },
+  nuxt: { packagePath: ".output", port: 3000, healthPath: "/", docker: "node-nuxt" },
+  "svelte-kit": { packagePath: "build", port: 3000, healthPath: "/", docker: "node-svelte" },
+  static: { packagePath: ".", port: 80, healthPath: "/", docker: "static" },
+  taro: { packagePath: "dist", port: 0, healthPath: "" },
+  "uni-app": { packagePath: "dist", port: 0, healthPath: "" },
+  "native-wechat": { packagePath: "", port: 0, healthPath: "" },
+  flutter: { packagePath: "build", port: 0, healthPath: "" },
+  swiftui: { packagePath: "", port: 0, healthPath: "" },
+  expo: { packagePath: "dist", port: 0, healthPath: "" },
+  nest: { packagePath: "dist", port: 3000, healthPath: "/healthz", docker: "node-ts" },
+  "go-gin": { packagePath: "bin", port: 8080, healthPath: "/healthz", docker: "go" },
+  express: { packagePath: "dist", port: 3000, healthPath: "/healthz", docker: "node-ts" },
+  fastapi: { packagePath: ".", port: 8000, healthPath: "/healthz", docker: "python" },
+  "spring-boot": { packagePath: "target", port: 8080, healthPath: "/healthz", docker: "java" },
+  "pnpm-workspace": { packagePath: "apps/web/dist", port: 80, healthPath: "/", docker: "nginx-workspace" },
+  turbo: { packagePath: "apps/web/dist", port: 80, healthPath: "/", docker: "nginx-workspace" },
+};
+
+/** 生成 Dockerfile / docker-compose.yml / .dockerignore（仅可容器化的 Web 与后端预设）。 */
+function archDeployFiles(plan) {
+  const meta = ARCH_DEPLOY_META[plan.framework];
+  if (!meta?.docker) return [];
+  const port = meta.port || 80;
+  const dockerfile = (() => {
+    switch (meta.docker) {
+      case "nginx":
+        return `FROM node:20-alpine AS build\nWORKDIR /app\nCOPY package*.json ./\nRUN npm install\nCOPY . .\nRUN npm run build\n\nFROM nginx:alpine\nCOPY --from=build /app/${meta.packagePath} /usr/share/nginx/html\nEXPOSE 80\n`;
+      case "nginx-workspace":
+        return `FROM node:20-alpine AS build\nWORKDIR /app\nRUN corepack enable\nCOPY package.json pnpm-lock.yaml* pnpm-workspace.yaml ./ \nCOPY . .\nRUN pnpm install\nRUN pnpm -r build\n\nFROM nginx:alpine\nCOPY --from=build /app/${meta.packagePath} /usr/share/nginx/html\nEXPOSE 80\n`;
+      case "static":
+        return `FROM nginx:alpine\nCOPY . /usr/share/nginx/html\nEXPOSE 80\n`;
+      case "node-next":
+        return `FROM node:20-alpine\nWORKDIR /app\nCOPY package*.json ./\nRUN npm install\nCOPY . .\nRUN npm run build\nEXPOSE ${port}\nCMD ["npm", "run", "start"]\n`;
+      case "node-nuxt":
+        return `FROM node:20-alpine\nWORKDIR /app\nCOPY package*.json ./\nRUN npm install\nCOPY . .\nRUN npm run build\nEXPOSE ${port}\nCMD ["node", ".output/server/index.mjs"]\n`;
+      case "node-svelte":
+        return `FROM node:20-alpine\nWORKDIR /app\nCOPY package*.json ./\nRUN npm install\nCOPY . .\nRUN npm run build\nEXPOSE ${port}\nCMD ["node", "build"]\n`;
+      case "node-ts":
+        return `FROM node:20-alpine\nWORKDIR /app\nCOPY package*.json ./\nRUN npm install\nCOPY . .\nRUN npm run build\nEXPOSE ${port}\nCMD ["node", "dist/main.js"]\n`;
+      case "go":
+        return `FROM golang:1.22-alpine AS build\nWORKDIR /src\nCOPY go.mod go.sum* ./\nRUN go mod download\nCOPY . .\nRUN CGO_ENABLED=0 go build -o /out/server ./cmd/server\n\nFROM alpine:3.20\nWORKDIR /app\nCOPY --from=build /out/server /app/server\nEXPOSE ${port}\nCMD ["/app/server"]\n`;
+      case "python":
+        return `FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt ./\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nEXPOSE ${port}\nCMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "${port}"]\n`;
+      case "java":
+        return `FROM maven:3.9-eclipse-temurin-21 AS build\nWORKDIR /src\nCOPY pom.xml ./\nRUN mvn -q dependency:go-offline\nCOPY . .\nRUN mvn -q package -DskipTests\n\nFROM eclipse-temurin:21-jre\nWORKDIR /app\nCOPY --from=build /src/target/*.jar /app/app.jar\nEXPOSE ${port}\nCMD ["java", "-jar", "/app/app.jar"]\n`;
+      default:
+        return "";
+    }
+  })();
+  if (!dockerfile) return [];
+  const compose = `services:\n  app:\n    build: .\n    ports:\n      - "${port}:${port}"\n    restart: unless-stopped\n`;
+  const ignore = `node_modules\ndist\nbuild\n.next\n.output\n.git\n.wudi\n`;
+  return [
+    ["Dockerfile", "容器镜像（部署用）", dockerfile],
+    ["docker-compose.yml", "本地/服务器编排（部署用）", compose],
+    [".dockerignore", "镜像构建排除项", ignore],
+  ];
+}
+
+/** 架构生成后同步部署档案与项目文档（幂等，只补空字段，不覆盖已有配置）。 */
+function archSyncDeployAndDocs(root, plan, status = "planned") {
+  const base = store.projectBaseName(root);
+  const relData = `.wudi/${base}`;
+  const meta = ARCH_DEPLOY_META[plan.framework] ?? {};
+  let profile = null;
+  try {
+    const current = store.loadProjectAt(root) ?? {};
+    const patch = {};
+    if (!current.build) patch.build = plan.commands?.build ?? "";
+    if (!current.techStack) patch.techStack = (plan.stack ?? []).join(" + ");
+    if (!current.package?.path) patch.package = { type: "dir", path: meta.packagePath || "dist" };
+    if (!current.deployRoot) patch.deployRoot = `/srv/${archSlug(plan.name)}`;
+    if (meta.port && !current.healthCheck?.url) {
+      patch.healthCheck = { url: `http://127.0.0.1:${meta.port}${meta.healthPath || "/"}`, expect: 200, checkFrom: "remote" };
+    }
+    profile = store.saveProjectAt(root, patch).project;
+  } catch { /* 档案写入失败不阻塞方案 */ }
+
+  const docsDir = join(store.projectDataDirFor(root), "docs");
+  mkdirSync(docsDir, { recursive: true });
+  const build = plan.commands?.build ?? "-";
+  const install = plan.commands?.install ?? "-";
+  const dev = plan.commands?.dev ?? "-";
+  const moduleLines = (plan.dirs ?? []).map((d) => `- \`${d}/\``).join("\n") || "- （无额外目录）";
+  const stackLine = (plan.stack ?? []).join(" · ");
+  const dockerLine = meta.docker
+    ? "本项目已生成 `Dockerfile` 与 `docker-compose.yml`：`docker compose up -d --build` 即可本地/服务器运行。"
+    : "本项目为移动端/小程序预设，不使用 Docker；发布请按对应平台流程（应用商店 / 微信开发者工具上传）。";
+  const docs = {
+    "architecture.md": `# ${plan.name} · 架构\n\n> 状态：${status === "scaffolded" ? "骨架已写入" : "已规划"}\n> 技术栈：${stackLine}\n\n完整架构文档见 [../architecture/ARCHITECTURE.md](../architecture/ARCHITECTURE.md)。\n\n## 顶层目录\n\n${moduleLines}\n`,
+    "development.md": `# ${plan.name} · 本地开发\n\n\`\`\`bash\n${install}\n${dev}\n\`\`\`\n\n## 命令\n\n| 用途 | 命令 |\n| --- | --- |\n| 安装 | \`${install}\` |\n| 开发 | \`${dev}\` |\n| 构建 | \`${build}\` |\n\n## 约定\n\n- 新模块按架构文档的分层放置；\n- 提交前先本地构建通过；\n- 架构变更同步更新 ${relData}/architecture/ 并追加 ADR。\n`,
+    "deploy.md": `# ${plan.name} · 部署手册\n\n> 技术栈：${stackLine}\n> 部署根（档案预填）：${profile?.deployRoot || `/srv/${archSlug(plan.name)}`}\n\n## 流水线\n\n1. 构建：\`${build}\`\n2. 打包：\`${meta.packagePath || "dist"}\`（目录产物）\n3. 上传：SSH 传到部署根 releases/\n4. 切换：软链 current → 最新 release\n5. 验证：健康检查 ${profile?.healthCheck?.url ? `\`${profile.healthCheck.url}\`` : "（待配置）"}\n\n${dockerLine}\n\n## 回滚\n\n在「部署」页选择历史 release 执行回滚；必要时手动把 current 软链指回上一版。\n\n## 环境\n\n在「总览」页或 \`wudi_env_set\` 配置 staging / prod 的部署根与健康检查。\n`,
+    ...(plan.kind === "backend"
+      ? { "api.md": `# ${plan.name} · API\n\n> 框架：${plan.frameworkLabel}\n\n## 已实现\n\n| 方法 | 路径 | 说明 |\n| --- | --- | --- |\n| GET | /healthz | 健康检查，返回服务名与 ok 状态 |\n\n${plan.framework === "fastapi" ? "启动后访问 `/docs` 查看自动生成的 OpenAPI 文档。\n" : "新增接口后在此登记，并补请求/响应示例。\n"}` }
+      : {}),
+  };
+  const registered = [];
+  for (const [name, content] of Object.entries(docs)) {
+    try {
+      writeFileSync(join(docsDir, name), content);
+      const rel = `${relData}/docs/${name}`;
+      const type = name === "deploy.md" ? "runbook" : name === "architecture.md" ? "architecture" : "doc";
+      try { store.registerDocAt(root, { path: rel, type, title: `${plan.name} · ${name.replace(/\.md$/, "")}`, source: "wudi_arch_plan" }); } catch { /* 登记失败不阻塞 */ }
+      registered.push(rel);
+    } catch { /* 单个文档失败忽略 */ }
+  }
+  return { docs: registered, profile };
+}
+
 function toolArchPlan(args: any = {}) {
   let root;
   try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
@@ -2670,7 +2793,10 @@ function toolArchPlan(args: any = {}) {
   let options;
   try { options = resolveArchOptions(fwPreset, args.options ?? {}); } catch (err: any) { return fail(String(err?.message ?? err)); }
   const name = String(args.name ?? "").trim() || store.loadProjectAt(root)?.name || store.projectBaseName(root);
-  const files = fwPreset.files(name, options).map(([path, purpose, content]) => ({ path, purpose, content }));
+  const baseFiles = fwPreset.files(name, options);
+  /* 部署同步生成：Dockerfile / compose 随方案一起进骨架 */
+  const deployFiles = archDeployFiles({ kind, framework: fwId, kindLabel: preset.label, frameworkLabel: fwPreset.label, name, commands: fwPreset.commands });
+  const files = [...baseFiles, ...deployFiles].map(([path, purpose, content]) => ({ path, purpose, content }));
   const plan = {
     kind,
     kindLabel: preset.label,
@@ -2704,6 +2830,18 @@ function toolArchPlan(args: any = {}) {
   } catch (err: any) {
     return fail(`架构方案已生成但保存失败：${String(err?.message ?? err)}`);
   }
+  /* 部署档案 + 项目文档同步生成（.wudi/<项目名>/docs/，并登记到文档库） */
+  let sync = { docs: [], profile: null };
+  try { sync = archSyncDeployAndDocs(root, plan, "planned"); } catch { /* 同步失败不阻塞方案 */ }
+  plan.projectDocs = sync.docs;
+  plan.deploy = sync.profile
+    ? {
+        build: sync.profile.build ?? "",
+        packagePath: sync.profile.package?.path ?? "",
+        deployRoot: sync.profile.deployRoot ?? "",
+        healthCheck: sync.profile.healthCheck?.url ?? "",
+      }
+    : null;
   const text = [
     `═══ 架构方案：${preset.label} · ${plan.stack.join(" · ")}（${name}）═══`,
     fwPreset.summary,
@@ -2713,6 +2851,11 @@ function toolArchPlan(args: any = {}) {
     `命令：安装 ${plan.commands.install}｜开发 ${plan.commands.dev}｜构建 ${plan.commands.build}`,
     plan.notes.length ? `注意：\n- ${plan.notes.join("\n- ")}` : "",
     `架构目录：${relDir}/（ARCHITECTURE.md、architecture.json、plan.json、decisions/、diagrams.md）`,
+    sync.profile
+      ? `部署档案已预填：构建 ${sync.profile.build || "-"}｜产物 ${sync.profile.package?.path || "-"}｜部署根 ${sync.profile.deployRoot || "-"}｜健康检查 ${sync.profile.healthCheck?.url || "-"}`
+      : "",
+    sync.docs.length ? `项目文档已生成并登记：\n- ${sync.docs.join("\n- ")}` : "",
+    deployFiles.length ? `部署文件：${deployFiles.map(([f]) => f).join("、")}` : "",
     "下一步：点「写入骨架」创建目录与初始文件，或让 Agent 按方案搭建并实现各模块。",
   ].filter(Boolean).join("\n");
   return ok(text, plan);
@@ -2779,6 +2922,9 @@ function toolArchScaffold(args: any = {}) {
     if (Array.isArray(plan.files) && plan.files.length) writeFileSync(join(archDir, "plan.json"), JSON.stringify(plan, null, 2));
     writeFileSync(join(archDir, "ARCHITECTURE.md"), archDocMd(plan));
   } catch { /* 文档更新失败不阻塞骨架 */ }
+  /* 部署档案与项目文档随骨架同步（状态更新为 scaffolded） */
+  let sync = { docs: [], profile: null };
+  try { sync = archSyncDeployAndDocs(root, plan, "scaffolded"); } catch { /* 同步失败不阻塞骨架 */ }
   const summary = {
     root,
     name: plan.name ?? "",
@@ -2787,6 +2933,7 @@ function toolArchScaffold(args: any = {}) {
     planPath: `${relDir}/plan.json`,
     architectureDir: relDir,
     docs: plan.docs ?? [],
+    projectDocs: sync.docs,
     created,
     skipped,
     failed,
@@ -2800,6 +2947,10 @@ function toolArchScaffold(args: any = {}) {
     skipped.length ? `跳过（已存在，未覆盖）：\n- ${skipped.slice(0, 20).join("\n- ")}${skipped.length > 20 ? "\n- …" : ""}` : "",
     failed.length ? `失败：\n- ${failed.join("\n- ")}` : "",
     `架构目录：${relDir}/（架构模型与文档已更新为 scaffolded）`,
+    sync.profile
+      ? `部署档案：构建 ${sync.profile.build || "-"}｜产物 ${sync.profile.package?.path || "-"}｜部署根 ${sync.profile.deployRoot || "-"}｜健康检查 ${sync.profile.healthCheck?.url || "-"}`
+      : "",
+    sync.docs.length ? `项目文档：\n- ${sync.docs.join("\n- ")}` : "",
     plan.commands?.install ? `下一步：\n1. ${plan.commands.install}\n2. ${plan.commands.dev}` : "下一步：安装依赖并启动项目。",
     "Agent 可继续按方案实现页面/模块，并用 wudi_architecture 复查结构。",
   ].filter(Boolean).join("\n");

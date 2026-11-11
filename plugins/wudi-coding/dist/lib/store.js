@@ -15,14 +15,21 @@ function ensureWudiDir() {
 }
 function ensureProfileAt(root, name = "") {
   const abs = resolve(root);
-  const dir = join(abs, ".wudi");
-  mkdirSync(dir, { recursive: true });
-  const file = join(dir, "project.json");
-  if (!existsSync(file)) {
-    const base = String(name || abs.split("/").filter(Boolean).pop() || "project").trim();
-    const doc = { ...structuredClone(PROJECT_TEMPLATE), name: base };
-    writeFileSync(file, JSON.stringify(doc, null, 2));
+  const file = projectDataPath("project.json", abs);
+  if (existsSync(file)) return file;
+  const legacy = join(abs, ".wudi", "project.json");
+  if (existsSync(legacy)) {
+    try {
+      mkdirSync(projectDataDirFor(abs), { recursive: true });
+      renameSync(legacy, file);
+      return file;
+    } catch {
+    }
   }
+  mkdirSync(projectDataDirFor(abs), { recursive: true });
+  const base = String(name || abs.split("/").filter(Boolean).pop() || "project").trim();
+  const doc = { ...structuredClone(PROJECT_TEMPLATE), name: base };
+  writeFileSync(file, JSON.stringify(doc, null, 2));
   return file;
 }
 function path(name) {
@@ -64,8 +71,23 @@ var PROJECT_TEMPLATE = {
   defaultEnv: "",
   notes: ""
 };
+function projectDataPath(name, root = projectRoot()) {
+  return join(projectDataDirFor(root), name);
+}
 function readJSONAt(root, name, fallback) {
-  const p = join(resolve(root), ".wudi", name);
+  const abs = resolve(root);
+  const target = projectDataPath(name, abs);
+  if (!existsSync(target)) {
+    const legacy = join(abs, ".wudi", name);
+    if (existsSync(legacy)) {
+      try {
+        mkdirSync(projectDataDirFor(abs), { recursive: true });
+        renameSync(legacy, target);
+      } catch {
+      }
+    }
+  }
+  const p = existsSync(target) ? target : join(abs, ".wudi", name);
   if (!existsSync(p)) return fallback;
   try {
     return JSON.parse(readFileSync(p, "utf-8"));
@@ -86,7 +108,7 @@ function loadProjectAt(root) {
   };
 }
 function loadProject() {
-  const raw = readJSON("project.json", null);
+  const raw = readJSONAt(projectRoot(), "project.json", null);
   if (!raw) return null;
   return {
     ...structuredClone(PROJECT_TEMPLATE),
@@ -96,8 +118,8 @@ function loadProject() {
     envs: Array.isArray(raw.envs) ? raw.envs : []
   };
 }
-function saveProject(patch) {
-  const current = loadProject() ?? structuredClone(PROJECT_TEMPLATE);
+function saveProjectAt(root, patch) {
+  const current = loadProjectAt(root) ?? structuredClone(PROJECT_TEMPLATE);
   const next = { ...current };
   for (const [k, v] of Object.entries(patch ?? {})) {
     if (v === void 0) continue;
@@ -105,8 +127,20 @@ function saveProject(patch) {
     else if (k === "healthCheck") next.healthCheck = { ...current.healthCheck, ...v };
     else next[k] = v;
   }
-  const file = writeJSON("project.json", next);
+  const file = writeProjectJSONAt(root, "project.json", next);
   return { project: next, file };
+}
+function saveProject(patch) {
+  return saveProjectAt(projectRoot(), patch);
+}
+function writeProjectJSONAt(root, name, value) {
+  const dir = projectDataDirFor(root);
+  mkdirSync(dir, { recursive: true });
+  const p = join(dir, name);
+  const tmp = `${p}.tmp-${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(value, null, 2));
+  renameSync(tmp, p);
+  return p;
 }
 function resolveEnv(project, envName) {
   const envs = Array.isArray(project?.envs) ? project.envs : [];
@@ -226,7 +260,7 @@ function loadDocsAt(root) {
   return Array.isArray(list) ? list : [];
 }
 function loadDeploys() {
-  const list = readJSON("deploys.json", []);
+  const list = readJSONAt(projectRoot(), "deploys.json", []);
   let changed = false;
   const now = Date.now();
   for (const d of list) {
@@ -236,13 +270,13 @@ function loadDeploys() {
       changed = true;
     }
   }
-  if (changed) writeJSON("deploys.json", list);
+  if (changed) writeProjectJSONAt(projectRoot(), "deploys.json", list);
   return list;
 }
 function appendDeploy(record) {
   const list = loadDeploys();
   list.unshift(record);
-  writeJSON("deploys.json", list.slice(0, 50));
+  writeProjectJSONAt(projectRoot(), "deploys.json", list.slice(0, 50));
   return record;
 }
 function updateDeploy(id, patch) {
@@ -250,15 +284,15 @@ function updateDeploy(id, patch) {
   const idx = list.findIndex((d) => d.id === id);
   if (idx < 0) return null;
   list[idx] = { ...list[idx], ...patch };
-  writeJSON("deploys.json", list);
+  writeProjectJSONAt(projectRoot(), "deploys.json", list);
   return list[idx];
 }
 function loadDocs() {
-  return readJSON("docs.json", []);
+  return readJSONAt(projectRoot(), "docs.json", []);
 }
-function registerDoc({ path: docPath, type = "doc", title = "", source = "" }) {
-  if (!docPath) throw new Error("\u7F3A\u5C11 path\uFF1A\u8981\u767B\u8BB0\u7684\u6587\u6863\u76F8\u5BF9\u9879\u76EE\u6839\u7684\u8DEF\u5F84\u3002");
-  const list = loadDocs().filter((d) => d.path !== docPath);
+function registerDocAt(root, { path: docPath, type = "doc", title = "", source = "" }) {
+  if (!docPath) throw new Error("\u7F3A\u5C11 path\uFF1A\u8981\u767B\u8BB0\u7684\u6587\u6863\u8DEF\u5F84\u3002");
+  const list = (loadDocsAt(root) ?? []).filter((d) => d.path !== docPath);
   list.unshift({
     path: docPath,
     type,
@@ -266,8 +300,11 @@ function registerDoc({ path: docPath, type = "doc", title = "", source = "" }) {
     source,
     updatedAt: (/* @__PURE__ */ new Date()).toISOString()
   });
-  writeJSON("docs.json", list.slice(0, 100));
+  writeProjectJSONAt(root, "docs.json", list.slice(0, 100));
   return list[0];
+}
+function registerDoc(doc) {
+  return registerDocAt(projectRoot(), doc);
 }
 function designDir() {
   return join(wudiDir(), "design");
@@ -655,17 +692,9 @@ function registryRemove(idOrPath, wsRoot = projectRoot()) {
 function registrySummaries(currentRoot = "", wsRoot = projectRoot()) {
   const cur = currentRoot ? resolve(currentRoot) : "";
   return loadRegistry(wsRoot).map((entry) => {
-    const wudi = join(entry.path, ".wudi");
-    const read = (name, fallback) => {
-      try {
-        return JSON.parse(readFileSync(join(wudi, name), "utf-8"));
-      } catch {
-        return fallback;
-      }
-    };
-    const project = read("project.json", null);
-    const deploys = read("deploys.json", []);
-    const docs = read("docs.json", []);
+    const project = loadProjectAt(entry.path);
+    const deploys = loadDeploysAt(entry.path);
+    const docs = loadDocsAt(entry.path);
     let designCount = 0;
     try {
       const canvasDirs = [
@@ -734,6 +763,7 @@ export {
   projectDataDirFor,
   projectRoot,
   registerDoc,
+  registerDocAt,
   registryAdd,
   registryRemove,
   registryRename,
@@ -744,6 +774,7 @@ export {
   sanitizeShape,
   saveCanvas,
   saveProject,
+  saveProjectAt,
   saveTokens,
   setFigmaUrl,
   unhideProjectRoot,

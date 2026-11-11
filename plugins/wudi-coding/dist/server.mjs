@@ -26,14 +26,21 @@ function ensureWudiDir() {
 }
 function ensureProfileAt(root, name = "") {
   const abs = resolve(root);
-  const dir = join(abs, ".wudi");
-  mkdirSync(dir, { recursive: true });
-  const file = join(dir, "project.json");
-  if (!existsSync(file)) {
-    const base = String(name || abs.split("/").filter(Boolean).pop() || "project").trim();
-    const doc = { ...structuredClone(PROJECT_TEMPLATE), name: base };
-    writeFileSync(file, JSON.stringify(doc, null, 2));
+  const file = projectDataPath("project.json", abs);
+  if (existsSync(file)) return file;
+  const legacy = join(abs, ".wudi", "project.json");
+  if (existsSync(legacy)) {
+    try {
+      mkdirSync(projectDataDirFor(abs), { recursive: true });
+      renameSync(legacy, file);
+      return file;
+    } catch {
+    }
   }
+  mkdirSync(projectDataDirFor(abs), { recursive: true });
+  const base = String(name || abs.split("/").filter(Boolean).pop() || "project").trim();
+  const doc = { ...structuredClone(PROJECT_TEMPLATE), name: base };
+  writeFileSync(file, JSON.stringify(doc, null, 2));
   return file;
 }
 function path(name) {
@@ -75,8 +82,23 @@ var PROJECT_TEMPLATE = {
   defaultEnv: "",
   notes: ""
 };
+function projectDataPath(name, root = projectRoot()) {
+  return join(projectDataDirFor(root), name);
+}
 function readJSONAt(root, name, fallback) {
-  const p = join(resolve(root), ".wudi", name);
+  const abs = resolve(root);
+  const target = projectDataPath(name, abs);
+  if (!existsSync(target)) {
+    const legacy = join(abs, ".wudi", name);
+    if (existsSync(legacy)) {
+      try {
+        mkdirSync(projectDataDirFor(abs), { recursive: true });
+        renameSync(legacy, target);
+      } catch {
+      }
+    }
+  }
+  const p = existsSync(target) ? target : join(abs, ".wudi", name);
   if (!existsSync(p)) return fallback;
   try {
     return JSON.parse(readFileSync(p, "utf-8"));
@@ -97,7 +119,7 @@ function loadProjectAt(root) {
   };
 }
 function loadProject() {
-  const raw = readJSON("project.json", null);
+  const raw = readJSONAt(projectRoot(), "project.json", null);
   if (!raw) return null;
   return {
     ...structuredClone(PROJECT_TEMPLATE),
@@ -107,8 +129,8 @@ function loadProject() {
     envs: Array.isArray(raw.envs) ? raw.envs : []
   };
 }
-function saveProject(patch) {
-  const current = loadProject() ?? structuredClone(PROJECT_TEMPLATE);
+function saveProjectAt(root, patch) {
+  const current = loadProjectAt(root) ?? structuredClone(PROJECT_TEMPLATE);
   const next = { ...current };
   for (const [k, v] of Object.entries(patch ?? {})) {
     if (v === void 0) continue;
@@ -116,8 +138,20 @@ function saveProject(patch) {
     else if (k === "healthCheck") next.healthCheck = { ...current.healthCheck, ...v };
     else next[k] = v;
   }
-  const file = writeJSON("project.json", next);
+  const file = writeProjectJSONAt(root, "project.json", next);
   return { project: next, file };
+}
+function saveProject(patch) {
+  return saveProjectAt(projectRoot(), patch);
+}
+function writeProjectJSONAt(root, name, value) {
+  const dir = projectDataDirFor(root);
+  mkdirSync(dir, { recursive: true });
+  const p = join(dir, name);
+  const tmp = `${p}.tmp-${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(value, null, 2));
+  renameSync(tmp, p);
+  return p;
 }
 function resolveEnv(project, envName) {
   const envs = Array.isArray(project?.envs) ? project.envs : [];
@@ -237,7 +271,7 @@ function loadDocsAt(root) {
   return Array.isArray(list) ? list : [];
 }
 function loadDeploys() {
-  const list = readJSON("deploys.json", []);
+  const list = readJSONAt(projectRoot(), "deploys.json", []);
   let changed = false;
   const now = Date.now();
   for (const d of list) {
@@ -247,13 +281,13 @@ function loadDeploys() {
       changed = true;
     }
   }
-  if (changed) writeJSON("deploys.json", list);
+  if (changed) writeProjectJSONAt(projectRoot(), "deploys.json", list);
   return list;
 }
 function appendDeploy(record) {
   const list = loadDeploys();
   list.unshift(record);
-  writeJSON("deploys.json", list.slice(0, 50));
+  writeProjectJSONAt(projectRoot(), "deploys.json", list.slice(0, 50));
   return record;
 }
 function updateDeploy(id, patch) {
@@ -261,15 +295,12 @@ function updateDeploy(id, patch) {
   const idx = list.findIndex((d) => d.id === id);
   if (idx < 0) return null;
   list[idx] = { ...list[idx], ...patch };
-  writeJSON("deploys.json", list);
+  writeProjectJSONAt(projectRoot(), "deploys.json", list);
   return list[idx];
 }
-function loadDocs() {
-  return readJSON("docs.json", []);
-}
-function registerDoc({ path: docPath, type = "doc", title = "", source = "" }) {
-  if (!docPath) throw new Error("\u7F3A\u5C11 path\uFF1A\u8981\u767B\u8BB0\u7684\u6587\u6863\u76F8\u5BF9\u9879\u76EE\u6839\u7684\u8DEF\u5F84\u3002");
-  const list = loadDocs().filter((d) => d.path !== docPath);
+function registerDocAt(root, { path: docPath, type = "doc", title = "", source = "" }) {
+  if (!docPath) throw new Error("\u7F3A\u5C11 path\uFF1A\u8981\u767B\u8BB0\u7684\u6587\u6863\u8DEF\u5F84\u3002");
+  const list = (loadDocsAt(root) ?? []).filter((d) => d.path !== docPath);
   list.unshift({
     path: docPath,
     type,
@@ -277,8 +308,11 @@ function registerDoc({ path: docPath, type = "doc", title = "", source = "" }) {
     source,
     updatedAt: (/* @__PURE__ */ new Date()).toISOString()
   });
-  writeJSON("docs.json", list.slice(0, 100));
+  writeProjectJSONAt(root, "docs.json", list.slice(0, 100));
   return list[0];
+}
+function registerDoc(doc) {
+  return registerDocAt(projectRoot(), doc);
 }
 function designDir() {
   return join(wudiDir(), "design");
@@ -666,17 +700,9 @@ function registryRemove(idOrPath, wsRoot = projectRoot()) {
 function registrySummaries(currentRoot = "", wsRoot = projectRoot()) {
   const cur = currentRoot ? resolve(currentRoot) : "";
   return loadRegistry(wsRoot).map((entry) => {
-    const wudi = join(entry.path, ".wudi");
-    const read = (name, fallback) => {
-      try {
-        return JSON.parse(readFileSync(join(wudi, name), "utf-8"));
-      } catch {
-        return fallback;
-      }
-    };
-    const project = read("project.json", null);
-    const deploys = read("deploys.json", []);
-    const docs = read("docs.json", []);
+    const project = loadProjectAt(entry.path);
+    const deploys = loadDeploysAt(entry.path);
+    const docs = loadDocsAt(entry.path);
     let designCount = 0;
     try {
       const canvasDirs = [
@@ -3054,7 +3080,13 @@ function toolArchitecture(args = {}) {
     designs: archDesignCount(root),
     envs: envs.length ? envs : project?.deployRoot ? ["default"] : [],
     deployRoot: project?.deployRoot ?? "",
-    healthCheck: project?.healthCheck?.url ?? ""
+    healthCheck: project?.healthCheck?.url ?? "",
+    build: project?.build ?? "",
+    packagePath: project?.package?.type === "docker-image" ? project?.package?.dockerImage ?? "" : project?.package?.path ?? "",
+    packageType: project?.package?.type ?? "dir",
+    deployPolicy: project?.deployPolicy ?? "confirm",
+    docker: existsSync3(join3(root, "Dockerfile")) || existsSync3(join3(root, "docker-compose.yml")),
+    registeredDocs: docs.slice(0, 12).map((d) => ({ path: d.path, type: d.type ?? "doc" }))
   };
   let architecture = null;
   try {
@@ -3116,6 +3148,8 @@ function toolArchitecture(args = {}) {
   if (pkg?.scripts?.length) lines.push(`\u811A\u672C\uFF1A${pkg.scripts.map((s) => s.name).join("\u3001")}`);
   if (pkg?.workspaces?.length) lines.push(`Monorepo workspaces\uFF1A${pkg.workspaces.join("\u3001")}`);
   lines.push(`\u5173\u8054\uFF1A\u753B\u5E03 ${related.designs}\uFF5C\u6587\u6863 ${related.docs}\uFF5C\u73AF\u5883 ${related.envs.join("\u3001") || "\u672A\u914D\u7F6E"}`);
+  lines.push(`\u90E8\u7F72\uFF1A\u6784\u5EFA ${related.build || "-"}\uFF5C\u4EA7\u7269 ${related.packagePath || "-"}\uFF5C\u90E8\u7F72\u6839 ${related.deployRoot || "\u672A\u914D\u7F6E"}${related.docker ? "\uFF5CDocker \u2713" : ""}`);
+  if (related.registeredDocs.length) lines.push(`\u9879\u76EE\u6587\u6863\uFF1A${related.registeredDocs.map((d) => d.path).join("\u3001")}`);
   if (architecture) {
     lines.push(`\u67B6\u6784\u65B9\u6848\uFF1A${architecture.status}\uFF5C${architecture.stack.join(" \xB7 ") || "\uFF08\u65E0\uFF09"}`);
     lines.push(`\u67B6\u6784\u76EE\u5F55\uFF1A${architecture.dir}\uFF08${architecture.docs.length} \u4E2A\u6587\u6863\uFF09`);
@@ -4616,6 +4650,276 @@ function archModel(plan, relDir, status, extra = {}) {
     updatedAt: (/* @__PURE__ */ new Date()).toISOString()
   };
 }
+var ARCH_DEPLOY_META = {
+  "vue-vite": { packagePath: "dist", port: 80, healthPath: "/", docker: "nginx" },
+  "react-vite": { packagePath: "dist", port: 80, healthPath: "/", docker: "nginx" },
+  "next-app": { packagePath: ".next", port: 3e3, healthPath: "/", docker: "node-next" },
+  nuxt: { packagePath: ".output", port: 3e3, healthPath: "/", docker: "node-nuxt" },
+  "svelte-kit": { packagePath: "build", port: 3e3, healthPath: "/", docker: "node-svelte" },
+  static: { packagePath: ".", port: 80, healthPath: "/", docker: "static" },
+  taro: { packagePath: "dist", port: 0, healthPath: "" },
+  "uni-app": { packagePath: "dist", port: 0, healthPath: "" },
+  "native-wechat": { packagePath: "", port: 0, healthPath: "" },
+  flutter: { packagePath: "build", port: 0, healthPath: "" },
+  swiftui: { packagePath: "", port: 0, healthPath: "" },
+  expo: { packagePath: "dist", port: 0, healthPath: "" },
+  nest: { packagePath: "dist", port: 3e3, healthPath: "/healthz", docker: "node-ts" },
+  "go-gin": { packagePath: "bin", port: 8080, healthPath: "/healthz", docker: "go" },
+  express: { packagePath: "dist", port: 3e3, healthPath: "/healthz", docker: "node-ts" },
+  fastapi: { packagePath: ".", port: 8e3, healthPath: "/healthz", docker: "python" },
+  "spring-boot": { packagePath: "target", port: 8080, healthPath: "/healthz", docker: "java" },
+  "pnpm-workspace": { packagePath: "apps/web/dist", port: 80, healthPath: "/", docker: "nginx-workspace" },
+  turbo: { packagePath: "apps/web/dist", port: 80, healthPath: "/", docker: "nginx-workspace" }
+};
+function archDeployFiles(plan) {
+  const meta = ARCH_DEPLOY_META[plan.framework];
+  if (!meta?.docker) return [];
+  const port = meta.port || 80;
+  const dockerfile = (() => {
+    switch (meta.docker) {
+      case "nginx":
+        return `FROM node:20-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+
+FROM nginx:alpine
+COPY --from=build /app/${meta.packagePath} /usr/share/nginx/html
+EXPOSE 80
+`;
+      case "nginx-workspace":
+        return `FROM node:20-alpine AS build
+WORKDIR /app
+RUN corepack enable
+COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml ./ 
+COPY . .
+RUN pnpm install
+RUN pnpm -r build
+
+FROM nginx:alpine
+COPY --from=build /app/${meta.packagePath} /usr/share/nginx/html
+EXPOSE 80
+`;
+      case "static":
+        return `FROM nginx:alpine
+COPY . /usr/share/nginx/html
+EXPOSE 80
+`;
+      case "node-next":
+        return `FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+EXPOSE ${port}
+CMD ["npm", "run", "start"]
+`;
+      case "node-nuxt":
+        return `FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+EXPOSE ${port}
+CMD ["node", ".output/server/index.mjs"]
+`;
+      case "node-svelte":
+        return `FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+EXPOSE ${port}
+CMD ["node", "build"]
+`;
+      case "node-ts":
+        return `FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+EXPOSE ${port}
+CMD ["node", "dist/main.js"]
+`;
+      case "go":
+        return `FROM golang:1.22-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum* ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -o /out/server ./cmd/server
+
+FROM alpine:3.20
+WORKDIR /app
+COPY --from=build /out/server /app/server
+EXPOSE ${port}
+CMD ["/app/server"]
+`;
+      case "python":
+        return `FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+EXPOSE ${port}
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "${port}"]
+`;
+      case "java":
+        return `FROM maven:3.9-eclipse-temurin-21 AS build
+WORKDIR /src
+COPY pom.xml ./
+RUN mvn -q dependency:go-offline
+COPY . .
+RUN mvn -q package -DskipTests
+
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+COPY --from=build /src/target/*.jar /app/app.jar
+EXPOSE ${port}
+CMD ["java", "-jar", "/app/app.jar"]
+`;
+      default:
+        return "";
+    }
+  })();
+  if (!dockerfile) return [];
+  const compose = `services:
+  app:
+    build: .
+    ports:
+      - "${port}:${port}"
+    restart: unless-stopped
+`;
+  const ignore = `node_modules
+dist
+build
+.next
+.output
+.git
+.wudi
+`;
+  return [
+    ["Dockerfile", "\u5BB9\u5668\u955C\u50CF\uFF08\u90E8\u7F72\u7528\uFF09", dockerfile],
+    ["docker-compose.yml", "\u672C\u5730/\u670D\u52A1\u5668\u7F16\u6392\uFF08\u90E8\u7F72\u7528\uFF09", compose],
+    [".dockerignore", "\u955C\u50CF\u6784\u5EFA\u6392\u9664\u9879", ignore]
+  ];
+}
+function archSyncDeployAndDocs(root, plan, status = "planned") {
+  const base = projectBaseName(root);
+  const relData = `.wudi/${base}`;
+  const meta = ARCH_DEPLOY_META[plan.framework] ?? {};
+  let profile = null;
+  try {
+    const current = loadProjectAt(root) ?? {};
+    const patch = {};
+    if (!current.build) patch.build = plan.commands?.build ?? "";
+    if (!current.techStack) patch.techStack = (plan.stack ?? []).join(" + ");
+    if (!current.package?.path) patch.package = { type: "dir", path: meta.packagePath || "dist" };
+    if (!current.deployRoot) patch.deployRoot = `/srv/${archSlug(plan.name)}`;
+    if (meta.port && !current.healthCheck?.url) {
+      patch.healthCheck = { url: `http://127.0.0.1:${meta.port}${meta.healthPath || "/"}`, expect: 200, checkFrom: "remote" };
+    }
+    profile = saveProjectAt(root, patch).project;
+  } catch {
+  }
+  const docsDir = join3(projectDataDirFor(root), "docs");
+  mkdirSync2(docsDir, { recursive: true });
+  const build = plan.commands?.build ?? "-";
+  const install = plan.commands?.install ?? "-";
+  const dev = plan.commands?.dev ?? "-";
+  const moduleLines = (plan.dirs ?? []).map((d) => `- \`${d}/\``).join("\n") || "- \uFF08\u65E0\u989D\u5916\u76EE\u5F55\uFF09";
+  const stackLine = (plan.stack ?? []).join(" \xB7 ");
+  const dockerLine = meta.docker ? "\u672C\u9879\u76EE\u5DF2\u751F\u6210 `Dockerfile` \u4E0E `docker-compose.yml`\uFF1A`docker compose up -d --build` \u5373\u53EF\u672C\u5730/\u670D\u52A1\u5668\u8FD0\u884C\u3002" : "\u672C\u9879\u76EE\u4E3A\u79FB\u52A8\u7AEF/\u5C0F\u7A0B\u5E8F\u9884\u8BBE\uFF0C\u4E0D\u4F7F\u7528 Docker\uFF1B\u53D1\u5E03\u8BF7\u6309\u5BF9\u5E94\u5E73\u53F0\u6D41\u7A0B\uFF08\u5E94\u7528\u5546\u5E97 / \u5FAE\u4FE1\u5F00\u53D1\u8005\u5DE5\u5177\u4E0A\u4F20\uFF09\u3002";
+  const docs = {
+    "architecture.md": `# ${plan.name} \xB7 \u67B6\u6784
+
+> \u72B6\u6001\uFF1A${status === "scaffolded" ? "\u9AA8\u67B6\u5DF2\u5199\u5165" : "\u5DF2\u89C4\u5212"}
+> \u6280\u672F\u6808\uFF1A${stackLine}
+
+\u5B8C\u6574\u67B6\u6784\u6587\u6863\u89C1 [../architecture/ARCHITECTURE.md](../architecture/ARCHITECTURE.md)\u3002
+
+## \u9876\u5C42\u76EE\u5F55
+
+${moduleLines}
+`,
+    "development.md": `# ${plan.name} \xB7 \u672C\u5730\u5F00\u53D1
+
+\`\`\`bash
+${install}
+${dev}
+\`\`\`
+
+## \u547D\u4EE4
+
+| \u7528\u9014 | \u547D\u4EE4 |
+| --- | --- |
+| \u5B89\u88C5 | \`${install}\` |
+| \u5F00\u53D1 | \`${dev}\` |
+| \u6784\u5EFA | \`${build}\` |
+
+## \u7EA6\u5B9A
+
+- \u65B0\u6A21\u5757\u6309\u67B6\u6784\u6587\u6863\u7684\u5206\u5C42\u653E\u7F6E\uFF1B
+- \u63D0\u4EA4\u524D\u5148\u672C\u5730\u6784\u5EFA\u901A\u8FC7\uFF1B
+- \u67B6\u6784\u53D8\u66F4\u540C\u6B65\u66F4\u65B0 ${relData}/architecture/ \u5E76\u8FFD\u52A0 ADR\u3002
+`,
+    "deploy.md": `# ${plan.name} \xB7 \u90E8\u7F72\u624B\u518C
+
+> \u6280\u672F\u6808\uFF1A${stackLine}
+> \u90E8\u7F72\u6839\uFF08\u6863\u6848\u9884\u586B\uFF09\uFF1A${profile?.deployRoot || `/srv/${archSlug(plan.name)}`}
+
+## \u6D41\u6C34\u7EBF
+
+1. \u6784\u5EFA\uFF1A\`${build}\`
+2. \u6253\u5305\uFF1A\`${meta.packagePath || "dist"}\`\uFF08\u76EE\u5F55\u4EA7\u7269\uFF09
+3. \u4E0A\u4F20\uFF1ASSH \u4F20\u5230\u90E8\u7F72\u6839 releases/
+4. \u5207\u6362\uFF1A\u8F6F\u94FE current \u2192 \u6700\u65B0 release
+5. \u9A8C\u8BC1\uFF1A\u5065\u5EB7\u68C0\u67E5 ${profile?.healthCheck?.url ? `\`${profile.healthCheck.url}\`` : "\uFF08\u5F85\u914D\u7F6E\uFF09"}
+
+${dockerLine}
+
+## \u56DE\u6EDA
+
+\u5728\u300C\u90E8\u7F72\u300D\u9875\u9009\u62E9\u5386\u53F2 release \u6267\u884C\u56DE\u6EDA\uFF1B\u5FC5\u8981\u65F6\u624B\u52A8\u628A current \u8F6F\u94FE\u6307\u56DE\u4E0A\u4E00\u7248\u3002
+
+## \u73AF\u5883
+
+\u5728\u300C\u603B\u89C8\u300D\u9875\u6216 \`wudi_env_set\` \u914D\u7F6E staging / prod \u7684\u90E8\u7F72\u6839\u4E0E\u5065\u5EB7\u68C0\u67E5\u3002
+`,
+    ...plan.kind === "backend" ? { "api.md": `# ${plan.name} \xB7 API
+
+> \u6846\u67B6\uFF1A${plan.frameworkLabel}
+
+## \u5DF2\u5B9E\u73B0
+
+| \u65B9\u6CD5 | \u8DEF\u5F84 | \u8BF4\u660E |
+| --- | --- | --- |
+| GET | /healthz | \u5065\u5EB7\u68C0\u67E5\uFF0C\u8FD4\u56DE\u670D\u52A1\u540D\u4E0E ok \u72B6\u6001 |
+
+${plan.framework === "fastapi" ? "\u542F\u52A8\u540E\u8BBF\u95EE `/docs` \u67E5\u770B\u81EA\u52A8\u751F\u6210\u7684 OpenAPI \u6587\u6863\u3002\n" : "\u65B0\u589E\u63A5\u53E3\u540E\u5728\u6B64\u767B\u8BB0\uFF0C\u5E76\u8865\u8BF7\u6C42/\u54CD\u5E94\u793A\u4F8B\u3002\n"}` } : {}
+  };
+  const registered = [];
+  for (const [name, content] of Object.entries(docs)) {
+    try {
+      writeFileSync2(join3(docsDir, name), content);
+      const rel = `${relData}/docs/${name}`;
+      const type = name === "deploy.md" ? "runbook" : name === "architecture.md" ? "architecture" : "doc";
+      try {
+        registerDocAt(root, { path: rel, type, title: `${plan.name} \xB7 ${name.replace(/\.md$/, "")}`, source: "wudi_arch_plan" });
+      } catch {
+      }
+      registered.push(rel);
+    } catch {
+    }
+  }
+  return { docs: registered, profile };
+}
 function toolArchPlan(args = {}) {
   let root;
   try {
@@ -4636,7 +4940,9 @@ function toolArchPlan(args = {}) {
     return fail(String(err?.message ?? err));
   }
   const name = String(args.name ?? "").trim() || loadProjectAt(root)?.name || projectBaseName(root);
-  const files = fwPreset.files(name, options).map(([path2, purpose, content]) => ({ path: path2, purpose, content }));
+  const baseFiles = fwPreset.files(name, options);
+  const deployFiles = archDeployFiles({ kind, framework: fwId, kindLabel: preset.label, frameworkLabel: fwPreset.label, name, commands: fwPreset.commands });
+  const files = [...baseFiles, ...deployFiles].map(([path2, purpose, content]) => ({ path: path2, purpose, content }));
   const plan = {
     kind,
     kindLabel: preset.label,
@@ -4670,6 +4976,18 @@ function toolArchPlan(args = {}) {
   } catch (err) {
     return fail(`\u67B6\u6784\u65B9\u6848\u5DF2\u751F\u6210\u4F46\u4FDD\u5B58\u5931\u8D25\uFF1A${String(err?.message ?? err)}`);
   }
+  let sync = { docs: [], profile: null };
+  try {
+    sync = archSyncDeployAndDocs(root, plan, "planned");
+  } catch {
+  }
+  plan.projectDocs = sync.docs;
+  plan.deploy = sync.profile ? {
+    build: sync.profile.build ?? "",
+    packagePath: sync.profile.package?.path ?? "",
+    deployRoot: sync.profile.deployRoot ?? "",
+    healthCheck: sync.profile.healthCheck?.url ?? ""
+  } : null;
   const text = [
     `\u2550\u2550\u2550 \u67B6\u6784\u65B9\u6848\uFF1A${preset.label} \xB7 ${plan.stack.join(" \xB7 ")}\uFF08${name}\uFF09\u2550\u2550\u2550`,
     fwPreset.summary,
@@ -4680,6 +4998,10 @@ function toolArchPlan(args = {}) {
     plan.notes.length ? `\u6CE8\u610F\uFF1A
 - ${plan.notes.join("\n- ")}` : "",
     `\u67B6\u6784\u76EE\u5F55\uFF1A${relDir}/\uFF08ARCHITECTURE.md\u3001architecture.json\u3001plan.json\u3001decisions/\u3001diagrams.md\uFF09`,
+    sync.profile ? `\u90E8\u7F72\u6863\u6848\u5DF2\u9884\u586B\uFF1A\u6784\u5EFA ${sync.profile.build || "-"}\uFF5C\u4EA7\u7269 ${sync.profile.package?.path || "-"}\uFF5C\u90E8\u7F72\u6839 ${sync.profile.deployRoot || "-"}\uFF5C\u5065\u5EB7\u68C0\u67E5 ${sync.profile.healthCheck?.url || "-"}` : "",
+    sync.docs.length ? `\u9879\u76EE\u6587\u6863\u5DF2\u751F\u6210\u5E76\u767B\u8BB0\uFF1A
+- ${sync.docs.join("\n- ")}` : "",
+    deployFiles.length ? `\u90E8\u7F72\u6587\u4EF6\uFF1A${deployFiles.map(([f]) => f).join("\u3001")}` : "",
     "\u4E0B\u4E00\u6B65\uFF1A\u70B9\u300C\u5199\u5165\u9AA8\u67B6\u300D\u521B\u5EFA\u76EE\u5F55\u4E0E\u521D\u59CB\u6587\u4EF6\uFF0C\u6216\u8BA9 Agent \u6309\u65B9\u6848\u642D\u5EFA\u5E76\u5B9E\u73B0\u5404\u6A21\u5757\u3002"
   ].filter(Boolean).join("\n");
   return ok(text, plan);
@@ -4751,6 +5073,11 @@ function toolArchScaffold(args = {}) {
     writeFileSync2(join3(archDir, "ARCHITECTURE.md"), archDocMd(plan));
   } catch {
   }
+  let sync = { docs: [], profile: null };
+  try {
+    sync = archSyncDeployAndDocs(root, plan, "scaffolded");
+  } catch {
+  }
   const summary = {
     root,
     name: plan.name ?? "",
@@ -4759,6 +5086,7 @@ function toolArchScaffold(args = {}) {
     planPath: `${relDir}/plan.json`,
     architectureDir: relDir,
     docs: plan.docs ?? [],
+    projectDocs: sync.docs,
     created,
     skipped,
     failed,
@@ -4776,6 +5104,9 @@ function toolArchScaffold(args = {}) {
     failed.length ? `\u5931\u8D25\uFF1A
 - ${failed.join("\n- ")}` : "",
     `\u67B6\u6784\u76EE\u5F55\uFF1A${relDir}/\uFF08\u67B6\u6784\u6A21\u578B\u4E0E\u6587\u6863\u5DF2\u66F4\u65B0\u4E3A scaffolded\uFF09`,
+    sync.profile ? `\u90E8\u7F72\u6863\u6848\uFF1A\u6784\u5EFA ${sync.profile.build || "-"}\uFF5C\u4EA7\u7269 ${sync.profile.package?.path || "-"}\uFF5C\u90E8\u7F72\u6839 ${sync.profile.deployRoot || "-"}\uFF5C\u5065\u5EB7\u68C0\u67E5 ${sync.profile.healthCheck?.url || "-"}` : "",
+    sync.docs.length ? `\u9879\u76EE\u6587\u6863\uFF1A
+- ${sync.docs.join("\n- ")}` : "",
     plan.commands?.install ? `\u4E0B\u4E00\u6B65\uFF1A
 1. ${plan.commands.install}
 2. ${plan.commands.dev}` : "\u4E0B\u4E00\u6B65\uFF1A\u5B89\u88C5\u4F9D\u8D56\u5E76\u542F\u52A8\u9879\u76EE\u3002",
@@ -5607,7 +5938,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.42.0" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.43.0" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());

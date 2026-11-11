@@ -19,7 +19,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.42.0" },
+    { name: "wudi-coding", version: "0.43.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -547,6 +547,23 @@ const EmptyResultSchema = {
       return `<div>${"&nbsp;&nbsp;&nbsp;".repeat(depth)}${esc(p.split("/").pop())}${dirSet.has(p) ? "/" : ""}</div>`;
     }).join("");
   }
+  /** 流程图：node 之间插箭头（纯 CSS，无外部依赖）。 */
+  function archFlow(nodes) {
+    return `<div class="flow">${nodes.map((n, i) =>
+      `<div class="node"><b>${esc(n.title)}</b>${n.sub ? `<span>${esc(n.sub)}</span>` : ""}</div>${i < nodes.length - 1 ? '<span class="arrow">→</span>' : ""}`
+    ).join("")}</div>`;
+  }
+  /** 交付流程（构建 → 打包 → 上传 → 切换 → 验证）。 */
+  function archDeployFlow(d) {
+    if (!d) return "";
+    return archFlow([
+      { title: "构建", sub: d.build || "待配置" },
+      { title: "打包", sub: d.packagePath || "dist" },
+      { title: "上传", sub: d.deployRoot || "待配置部署根" },
+      { title: "切换", sub: "软链 current" },
+      { title: "验证", sub: d.healthCheck || "待配置健康检查" },
+    ]);
+  }
   function renderArchWizard() {
     const def = archKindDef(state.archKind);
     const fw = state.archFw && def[2].some((f) => f[0] === state.archFw) ? state.archFw : def[2][0][0];
@@ -592,6 +609,13 @@ const EmptyResultSchema = {
         <div class="entrychips" style="margin-top:8px">${(p.docs ?? []).map((d) => `<span class="chip mono">${esc(String(d).split("/").pop())}</span>`).join("")}</div>
         <div class="muted" style="margin-top:8px">ARCHITECTURE.md 是给人看的架构总览；architecture.json 是机器模型；decisions/ 记录技术栈与目录决策（ADR）。</div>
       </div>
+      <div class="card" style="margin-top:12px"><h3>交付流程（部署档案已预填）<span class="line"></span></h3>
+        ${archDeployFlow(p.deploy)}
+        <div class="muted" style="margin-top:8px">写入骨架时会生成 Dockerfile / docker-compose.yml（可容器化的预设），部署配置在「部署」页可继续调整。</div>
+      </div>
+      ${(p.projectDocs ?? []).length ? `<div class="card" style="margin-top:12px"><h3>项目文档（已登记到文档库）<span class="line"></span></h3>
+        <div class="entrychips">${p.projectDocs.map((d) => `<span class="chip mono">${esc(d)}</span>`).join("")}</div>
+      </div>` : ""}
       <div class="btnrow">
         <button class="btn primary" id="btn-arch-scaffold" ${state.archBusy ? "disabled" : ""}>${state.archBusy ? '<span class="spin"></span>' : ""}写入骨架</button>
         <button class="btn" id="btn-arch-agent" ${state.archBusy ? "disabled" : ""}>交给 Agent 搭建</button>
@@ -628,23 +652,37 @@ const EmptyResultSchema = {
       ? entries.map((e) => `<span class="chip mono">${esc(e.name)}</span>`).join("")
       : `<span class="muted">未发现关键配置文件</span>`;
     const services = a.compose?.services ?? [];
+    /* 模块分层：入口 → 顶层模块（最多 5 个） → 公共/资源 */
+    const layerNodes = [
+      { title: "入口", sub: (entries ?? []).map((e) => e.name).slice(0, 2).join(" / ") || "main" },
+      ...modules.slice(0, 5).map((m) => ({ title: `${m.name}/`, sub: `${m.files} 文件` })),
+      { title: "公共/资源", sub: (langs[0]?.name ?? "styles") },
+    ];
     return `
       <div class="banner">
         <div class="row"><h2>${esc(a.name || "项目")}</h2><span class="chip">${a.scanned?.files ?? 0} 个源码文件${a.scanned?.truncated ? "（已截断）" : ""}</span></div>
         <div class="meta">${chips.length ? chips.map((c) => `<span class="chip">${esc(c)}</span>`).join("") : '<span class="chip">未识别技术栈</span>'}</div>
       </div>
-      <div class="card"><h3>语言分布<span class="line"></span></h3>${langBar}</div>
+      <div class="card"><h3>模块分层<span class="line"></span></h3>${archFlow(layerNodes)}</div>
+      <div class="card" style="margin-top:12px"><h3>交付流程<span class="line"></span></h3>
+        ${archDeployFlow({ build: related.build, packagePath: related.packagePath, deployRoot: related.deployRoot, healthCheck: related.healthCheck })}
+        ${related.docker ? '<div class="muted" style="margin-top:8px">已生成 Dockerfile / docker-compose.yml：<span class="mono">docker compose up -d --build</span></div>' : ""}
+      </div>
+      <div class="card" style="margin-top:12px"><h3>语言分布<span class="line"></span></h3>${langBar}</div>
       <div class="sec"><div class="sec-title">顶层模块<span class="line"></span></div>${moduleCards}</div>
       <div class="grid" style="margin-top:12px">
         <div class="card"><h3>关键文件<span class="line"></span></h3><div class="entrychips">${entryChips}</div></div>
-        <div class="card"><h3>关联资产<span class="line"></span></h3>
+        <div class="card"><h3>部署与文档<span class="line"></span></h3>
           <div class="kv">
             <span class="k">画布</span><span class="v plain">${related.designs ?? 0} 个</span>
             <span class="k">文档</span><span class="v plain">${related.docs ?? 0} 份</span>
             <span class="k">环境</span><span class="v plain">${(related.envs ?? []).join("、") || "未配置"}</span>
+            <span class="k">构建</span><span class="v">${esc(related.build || "—")}</span>
+            <span class="k">产物</span><span class="v">${esc(related.packagePath || "—")}</span>
             <span class="k">部署根</span><span class="v">${esc(related.deployRoot || "—")}</span>
             <span class="k">健康检查</span><span class="v">${esc(related.healthCheck || "—")}</span>
           </div>
+          ${(related.registeredDocs ?? []).length ? `<div class="entrychips" style="margin-top:8px">${related.registeredDocs.map((d) => `<span class="chip mono">${esc(d.path)}</span>`).join("")}</div>` : ""}
         </div>
       </div>
       ${services.length ? `<div class="card" style="margin-top:12px"><h3>服务<span style="text-transform:none">（${esc(a.compose.file)}）</span><span class="line"></span></h3>
@@ -980,7 +1018,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.42.0" },
+              hostInfo: { name: "wudi-workbench", version: "0.43.0" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -1146,6 +1184,8 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
       commands: { install: "npm install", dev: "npm run dev", build: "npm run build" },
       notes: [], architectureDir: ".wudi/zongheng-app/architecture",
       docs: ["plan.json", "architecture.json", "ARCHITECTURE.md", "diagrams.md", "decisions/0001-tech-stack.md", "decisions/0002-directory-layout.md"].map((x) => `.wudi/zongheng-app/architecture/${x}`),
+      projectDocs: ["architecture.md", "development.md", "deploy.md"].map((x) => `.wudi/zongheng-app/docs/${x}`),
+      deploy: { build: "npm install && npm run build", packagePath: "dist", deployRoot: "/srv/zongheng-app", healthCheck: "http://127.0.0.1:80/" },
       generatedAt: new Date().toISOString(),
     };
   }
@@ -1677,7 +1717,13 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
       ],
       workspaces: ["packages/*"],
       compose: { file: "docker-compose.yml", services: [{ name: "web", image: "nginx:alpine", ports: "8080:80" }, { name: "api", image: "zongheng/api:latest", ports: "3000:3000" }] },
-      related: { docs: 6, designs: 9, envs: ["staging", "prod"], deployRoot: "/srv/zongheng", healthCheck: "http://127.0.0.1:8080/healthz" },
+      related: {
+        docs: 6, designs: 9, envs: ["staging", "prod"],
+        deployRoot: "/srv/zongheng", healthCheck: "http://127.0.0.1:8080/healthz",
+        build: "npm run build", packagePath: "dist", packageType: "dir", deployPolicy: "confirm",
+        docker: true,
+        registeredDocs: [".wudi/zongheng-app/docs/architecture.md", ".wudi/zongheng-app/docs/development.md", ".wudi/zongheng-app/docs/deploy.md"],
+      },
       generatedAt: iso(2),
     };
   }

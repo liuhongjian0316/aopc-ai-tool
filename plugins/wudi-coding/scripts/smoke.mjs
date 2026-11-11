@@ -284,8 +284,9 @@ async function protocolTests() {
     try {
       r = await s.call("tools/call", { name: "wudi_projects_add", arguments: { path: sub, name: "subproj" } });
       check("projects_add: 子文件夹可登记", !errOf(r) && textOf(r).includes("subproj"));
-      check("auto_profile: 启动即建 .wudi/project.json", existsSync(join(workdir, ".wudi", "project.json")));
-      check("auto_profile: 登记项目自动建档", existsSync(join(sub, ".wudi", "project.json")));
+      const wsBase = workdir.split("/").filter(Boolean).pop();
+      check("auto_profile: 启动即建 .wudi/<项目名>/project.json", existsSync(join(workdir, ".wudi", wsBase, "project.json")));
+      check("auto_profile: 登记项目自动建档", existsSync(join(workdir, ".wudi", "subproj", "project.json")));
       r = await s.call("tools/call", { name: "wudi_projects_add", arguments: { path: outside } });
       check("projects_add: 项目根之外拒绝", errOf(r) && textOf(r).includes("不在范围内"));
       /* 目录浏览：默认根 / 子目录 / 越界拒绝 */
@@ -414,6 +415,21 @@ async function protocolTests() {
       check("arch_plan: 架构页返回架构目录与文档", archAfter.architecture?.status === "scaffolded"
         && (archAfter.architecture?.docs ?? []).includes("ARCHITECTURE.md")
         && (archAfter.architecture?.docs ?? []).includes("decisions/0001-tech-stack.md"), JSON.stringify(archAfter.architecture));
+      /* 部署 + 文档同步生成（存储到 .wudi/<项目名>/） */
+      check("arch_sync: 部署档案预填（build/产物/部署根/健康检查）",
+        archAfter.related?.build === "npm run build"
+        && archAfter.related?.packagePath === "dist"
+        && (archAfter.related?.deployRoot ?? "").startsWith("/srv/")
+        && (archAfter.related?.healthCheck ?? "").includes("127.0.0.1"),
+        JSON.stringify(archAfter.related));
+      check("arch_sync: 部署文件随方案生成", existsSync(join(blank, "Dockerfile")) && existsSync(join(blank, "docker-compose.yml")));
+      check("arch_sync: 项目文档落到 .wudi/<项目名>/docs 并登记",
+        existsSync(join(workdir, ".wudi", "blankproj", "docs", "architecture.md"))
+        && existsSync(join(workdir, ".wudi", "blankproj", "docs", "development.md"))
+        && existsSync(join(workdir, ".wudi", "blankproj", "docs", "deploy.md"))
+        && existsSync(join(workdir, ".wudi", "blankproj", "docs.json"))
+        && (archAfter.related?.registeredDocs ?? []).some((d) => String(d.path).includes(".wudi/blankproj/docs/deploy.md")),
+        JSON.stringify(archAfter.related?.registeredDocs));
       /* 旧位置 <项目>/.wudi/architecture.json 自动迁移到 architecture/plan.json */
       const legacyProj = join(workdir, "legacyproj");
       await mkdir(join(legacyProj, ".wudi"), { recursive: true });

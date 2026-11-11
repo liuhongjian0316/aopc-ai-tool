@@ -427,6 +427,18 @@ plugins/wudi-coding/
   - 面板**主动打开编辑器**：收到 `get_design_status` 的 `live:false` 或「编辑器未打开」失败结果时，自动打开该画布编辑器——Agent 稍后重试即可写入了。
 - 注意：本机 homebrew Node 24 依赖损坏（libsimdjson 缺失），openpencil 的 web 构建暂不可用；本次服务端补丁直接应用于 vendored dist（与源码补丁一致）。
 
+## 架构生成同步部署与文档（v0.43.0）
+
+- **部署同步生成**
+  - 自动预填部署档案：`build`（方案构建命令）、`package.path`（产物目录）、`deployRoot`（`/srv/<项目>`）、`healthCheck`（按框架端口 + `/healthz`），只补空字段、不覆盖用户配置。
+  - 可容器化预设自动生成 `Dockerfile`、`docker-compose.yml`、`.dockerignore`（Vue/React/Next/Nuxt/SvelteKit/静态站/Nest/Express/Go/FastAPI/Spring Boot/Monorepo）。
+- **文档同步生成**：`<工作区>/.wudi/<项目名>/docs/`
+  - `architecture.md`（链接架构总览）、`development.md`（安装/开发/构建/约定）、`deploy.md`（流水线、Docker、回滚、环境），后端另加 `api.md`。
+  - 自动登记到文档库（`docs.json`），文档页可直接看到。
+- **数据位置统一**：项目档案、部署历史、文档库改为 `<工作区>/.wudi/<项目名>/{project.json,deploys.json,docs.json}`（旧位置读取时自动迁移）。
+- **架构流程图**：架构页新增「模块分层」（入口 → 顶层模块 → 公共/资源）与「交付流程」（构建 → 打包 → 上传 → 切换 → 验证），纯 CSS 渲染；部署与文档卡展示构建/产物/部署根/健康检查与已登记文档；方案页展示交付流程与项目文档清单。
+- 回归：smoke **168 项全绿**（+3）。
+
 ## 由画布快速生成页面（v0.42.0）
 
 - **`wudi_page_from_design {path, format, output?, overwrite?}`**：直接把 `.fig` 画布变成页面代码。
