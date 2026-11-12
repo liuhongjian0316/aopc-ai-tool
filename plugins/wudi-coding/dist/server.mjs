@@ -6358,7 +6358,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.44.0" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.45.0" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());

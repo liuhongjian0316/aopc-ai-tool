@@ -19,7 +19,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.44.0" },
+    { name: "wudi-coding", version: "0.45.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -507,7 +507,24 @@ const EmptyResultSchema = {
           </div>
           <div class="muted" style="margin-top:10px">创建后自动进入编辑器，无需任何额外配置</div>
         </div>`;
-    return canvasSection;
+    const aiCard = `
+      <div class="card" style="margin-bottom:12px"><h3>让 Agent 设计<span class="line"></span></h3>
+        <div class="muted" style="margin-bottom:8px">这里是项目的 UI 设计画布：每个画布承载一组界面（网站 / 移动端）。描述需求发给 Agent，它会直接在画布上创建/修改元素；「生成页面」把设计变成代码。</div>
+        <div class="kv" style="grid-template-columns:72px 1fr;margin-bottom:8px">
+          <span class="k">画布</span><span class="v"><select id="ai-canvas" style="${INPUT_CSS}" ${canvases.length ? "" : "disabled"}>${canvases.map((c) => `<option value="${esc(c.path)}">${esc(String(c.name).replace(/\.(fig|pen)$/i, ""))}</option>`).join("") || `<option>（还没有画布）</option>`}</select></span>
+        </div>
+        <textarea id="ai-prompt" rows="3" placeholder="描述你想设计的界面，例如：手机端登录页 320×640，手机号输入、验证码按钮、微信登录入口" style="${INPUT_CSS}height:72px;resize:vertical;font-family:inherit"></textarea>
+        <div class="entrychips" style="margin:8px 0">
+          ${["手机端登录页", "官网首页", "个人中心", "数据看板"].map((t) => `<button class="btn" data-ai-suggest="${esc(t)}">${esc(t)}</button>`).join("")}
+        </div>
+        <div class="btnrow">
+          <button class="btn primary" id="btn-ai-design" ${state.busy ? "disabled" : ""}>${state.busy ? '<span class="spin"></span>' : ""}发送给 Agent</button>
+          <button class="btn" id="btn-ai-open" ${canvases.length ? "" : "disabled"}>打开画布</button>
+          ${canvases.length ? "" : `<button class="btn" id="btn-ai-create">先创建画布</button>`}
+        </div>
+        <div class="muted" style="margin-top:8px">发送后 Agent 会打开画布并开始绘制，可回到对话继续与它沟通迭代。</div>
+      </div>`;
+    return aiCard + canvasSection;
   }
 
   /* ---------- 开发页：启动开发服务器 / 安装构建测试 / 日志 ---------- */
@@ -1044,6 +1061,51 @@ const EmptyResultSchema = {
     render();
   }
 
+  /* ---------- 让 Agent 设计：选区上下文 + ui/message 任务下发 ---------- */
+  async function agentDesignFlow(figPath, prompt) {
+    if (!figPath) { state.notice = { kind: "err", text: "请先选择或创建画布" }; render(); return; }
+    if (DEMO) { state.notice = { kind: "ok", text: `演示模式：已把设计任务发给 Agent（画布 ${figPath}）` }; render(); return; }
+    state.notice = { kind: "ok", text: "正在连接画布并把任务发给 Agent…" };
+    render();
+    try {
+      if (!state.opEmbed || state.opEmbed.path !== figPath) await openOpEmbed(figPath);
+      const live = await waitDesignLive(15000);
+      if (!live) throw new Error("编辑器尚未连接，无法把任务发给 Agent");
+      let selection = "";
+      try {
+        const r = await callTool("get_selection", {});
+        const sc = r?.structuredContent ?? {};
+        let nodes = sc.nodes ?? sc.selection ?? [];
+        if (!nodes.length) {
+          try {
+            const t = JSON.parse(r?.result?.content?.[0]?.text ?? "{}");
+            nodes = t.nodes ?? t.selection ?? [];
+          } catch { /* 非 JSON 文本 */ }
+        }
+        const ids = nodes.map((n) => n?.id).filter(Boolean).slice(0, 20);
+        if (ids.length) selection = `当前选区：${ids.join("、")}（优先在选区内修改）`;
+      } catch { /* 无选区继续 */ }
+      const text = [
+        `请用 OpenPencil 设计工具在画布 ${figPath} 上完成以下设计任务：`,
+        `「${prompt}」`,
+        selection,
+        "要求：",
+        "- 直接使用 create_shape / set_text / set_layout / set_fill / set_font 等 OpenPencil 工具在画布上创建或修改元素，不要只给文字方案；",
+        "- 未提及的既有内容保持不变；",
+        "- 完成后调用 export_image 把画布渲染成 PNG（输出到 .wudi/<项目名>/design/renders/），方便在面板里确认效果。",
+      ].filter(Boolean).join("\n");
+      await app.sendMessage({
+        role: "user",
+        content: [{ type: "text", text }],
+        structuredContent: { canvas: figPath, task: prompt },
+      });
+      state.notice = { kind: "ok", text: "已把设计任务发给 Agent：回到对话即可看到它开始绘制，画布会实时更新" };
+    } catch (err) {
+      state.notice = { kind: "err", text: `发送失败：${String(err.message ?? err).slice(0, 300)}` };
+    }
+    render();
+  }
+
   /* ---------- 内嵌 OpenPencil 编辑器（overlay + 宿主协议 shim） ----------
    * 编辑器本体（vendor 官方 dist 的 loader + bundle 资产）经 wudi 协同桥 HTTP 端点 /openpencil/frame
    * 加载进 iframe；loader 按官方架构走 MCP App 协议连 window.parent —— 这里由面板扮演宿主：
@@ -1116,6 +1178,8 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
         <span class="chip accent">OpenPencil 编辑器</span>
         <span class="op-path mono"></span>
         <span id="op-status" class="muted"></span>
+        <input id="op-ai-input" placeholder="让 Agent 在画布上设计…" style="width:240px">
+        <button class="btn primary" id="op-layer-ai" title="把描述发给 Agent，由它在画布上绘制/修改">发送</button>
         <span style="flex:1"></span>
         <button class="btn" id="op-layer-fit" title="缩放到全部内容（调用编辑器 zoomToFit）">适应视图</button>
         <button class="btn" id="op-layer-page" title="由当前画布生成页面（JSX / Vue / HTML）">生成页面</button>
@@ -1128,6 +1192,16 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
     layer.querySelector("#op-layer-page").addEventListener("click", () => {
       const path = state.opEmbed?.path;
       if (path) void pageFromCanvas(path);
+    });
+    layer.querySelector("#op-layer-ai").addEventListener("click", () => {
+      const input = layer.querySelector("#op-ai-input");
+      const prompt = String(input?.value ?? "").trim();
+      if (!prompt) { input?.focus(); return; }
+      const path = state.opEmbed?.path;
+      if (path) void agentDesignFlow(path, prompt);
+    });
+    layer.querySelector("#op-ai-input").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") layer.querySelector("#op-layer-ai")?.click();
     });
     layer.querySelector("#op-layer-fit").addEventListener("click", () => {
       const frame = document.getElementById("op-frame");
@@ -1170,7 +1244,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.44.0" },
+              hostInfo: { name: "wudi-workbench", version: "0.45.0" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -1606,6 +1680,49 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
         await pageFromCanvas(b.dataset.cvPage);
       })
     );
+    /* 让 Agent 设计：建议词 / 发送 / 打开 / 先建画布 */
+    $root().querySelectorAll("[data-ai-suggest]").forEach((b) => b.addEventListener("click", () => {
+      const t = document.getElementById("ai-prompt");
+      if (t) { t.value = `设计一个${b.dataset.aiSuggest}`; t.focus(); }
+    }));
+    document.getElementById("btn-ai-design")?.addEventListener("click", async () => {
+      const prompt = String(document.getElementById("ai-prompt")?.value ?? "").trim();
+      if (!prompt) { state.notice = { kind: "err", text: "请先描述要设计的内容" }; render(); return; }
+      let figPath = document.getElementById("ai-canvas")?.value ?? "";
+      if (!figPath) {
+        setBusy(true);
+        try {
+          const res = await callTool("wudi_design_create", { name: "ui", ...rootArg() });
+          figPath = struct(res)?.path ?? "";
+          await loadDesign();
+        } catch (err) {
+          setBusy(false);
+          state.notice = { kind: "err", text: `创建画布失败：${String(err.message ?? err).slice(0, 200)}` };
+          render();
+          return;
+        }
+        setBusy(false);
+      }
+      await agentDesignFlow(figPath, prompt);
+    });
+    document.getElementById("btn-ai-open")?.addEventListener("click", () => {
+      const p = document.getElementById("ai-canvas")?.value;
+      if (p) openOpEmbed(p);
+    });
+    document.getElementById("btn-ai-create")?.addEventListener("click", async () => {
+      setBusy(true);
+      try {
+        const res = await callTool("wudi_design_create", { name: "ui", ...rootArg() });
+        const path = struct(res)?.path ?? "";
+        setBusy(false);
+        await loadDesign();
+        if (path) openOpEmbed(path);
+      } catch (err) {
+        setBusy(false);
+        state.notice = { kind: "err", text: `创建画布失败：${String(err.message ?? err).slice(0, 200)}` };
+        render();
+      }
+    });
     /* 画布重命名 / 删除（CRUD 的改与删） */
     $root().querySelectorAll("[data-cv-rename]").forEach((b) =>
       b.addEventListener("click", async (ev) => {

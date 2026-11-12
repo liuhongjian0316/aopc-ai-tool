@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.44.0",
+      "version": "0.45.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,17 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.45.0",
+          "date": "2026-11-13",
+          "changes": [
+            "设计页新增「让 Agent 设计」：画布选择 + 需求描述 + 常用界面建议词（登录页/官网首页/个人中心/数据看板），一键把设计任务发给 Agent",
+            "发送流程自动完成：打开画布编辑器 → 等连接就绪 → 读取当前选区（get_selection）作为上下文 → ui/message 下发任务（含工具使用要求与 export_image 渲染确认）",
+            "编辑器顶栏新增快捷输入框（Enter 发送），选中元素后可直接描述修改",
+            "空项目：先自动创建画布再发任务；设计页顶部补充页面用途说明",
+            "smoke 174 全绿（面板交互，无需新增服务端断言）"
+          ]
+        },
         {
           "version": "0.44.0",
           "date": "2026-11-11",

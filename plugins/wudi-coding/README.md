@@ -427,6 +427,16 @@ plugins/wudi-coding/
   - 面板**主动打开编辑器**：收到 `get_design_status` 的 `live:false` 或「编辑器未打开」失败结果时，自动打开该画布编辑器——Agent 稍后重试即可写入了。
 - 注意：本机 homebrew Node 24 依赖损坏（libsimdjson 缺失），openpencil 的 web 构建暂不可用；本次服务端补丁直接应用于 vendored dist（与源码补丁一致）。
 
+## 设计页「让 Agent 设计」（v0.45.0）
+
+- 设计页顶部新增 **「让 Agent 设计」** 卡片：画布选择 + 需求描述 + 常用界面建议词（手机端登录页 / 官网首页 / 个人中心 / 数据看板），一键把设计任务发给 Agent。
+- 发送流程全自动：打开该画布编辑器 → 等待连接就绪 → 读取当前选区（`get_selection`）作为上下文 → `ui/message` 下发任务。
+- 任务提示里明确要求 Agent：用 `create_shape / set_text / set_layout / set_fill` 等 OpenPencil 工具**直接在画布上绘制**（不是只给文字方案），完成后 `export_image` 渲染 PNG 供确认。
+- 编辑器顶栏新增快捷输入框（Enter 发送）：选中元素后描述修改，Agent 直接改画布。
+- 空项目：没有画布时先自动创建再发任务。
+- 页面顶部补充用途说明：每个画布承载一组界面（网站/移动端），Agent 可实时协同，「生成页面」把设计变成代码。
+- 回归：smoke 174 项全绿。
+
 ## 新增「开发」tab（v0.44.0）
 
 - 页签：**项目 / 总览 / 开发 / 架构 / 部署 / 设计 / 文档**。
