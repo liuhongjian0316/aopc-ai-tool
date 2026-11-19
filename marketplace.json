@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.45.0",
+      "version": "0.46.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,17 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.46.0",
+          "date": "2026-11-19",
+          "changes": [
+            "编程到落地闭环：总览新增「落地进度」流程图（架构 → 文档 → 需求 → 部署）与「需求清单」（添加/点状态循环切换，Agent 可用 wudi_req_add / wudi_req_update / wudi_req_list 维护，存储 .wudi/<项目名>/requirements.json）",
+            "新增 wudi_release_check 发布就绪检查（9 项）：部署配置 / 健康检查 / SSH / 代码提交（git 未提交数）/ 测试与构建（runTests、runBuild 实际执行）/ 容器化 / 文档 / 最近部署；关键项全过才判定可发布",
+            "新增 wudi_release_notes：git log（自上个 tag）按 feat/fix 分组 + 最近部署信息，生成 .wudi/<项目名>/docs/releases/<tag>.md 并登记文档库；文档页新增「生成发布记录」按钮",
+            "wudi_status 返回 requirements 与 architecture，总览/Agent 直接读取",
+            "smoke +6（180 全绿）"
+          ]
+        },
         {
           "version": "0.45.0",
           "date": "2026-11-13",

@@ -467,6 +467,19 @@ export function registerDoc(doc) {
   return registerDocAt(projectRoot(), doc);
 }
 
+/* ---------------- 需求清单 requirements.json ---------------- */
+
+/** 读需求清单（.wudi/<项目名>/requirements.json）。 */
+export function loadRequirementsAt(root) {
+  const list = readJSONAt(root, "requirements.json", []);
+  return Array.isArray(list) ? list : [];
+}
+
+/** 保存需求清单。 */
+export function saveRequirementsAt(root, list) {
+  return writeProjectJSONAt(root, "requirements.json", list.slice(0, 200));
+}
+
 /* ---------------- 设计产物 design/ ---------------- */
 
 export function designDir() {

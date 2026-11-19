@@ -346,6 +346,64 @@ export const TOOLS = [
     },
   },
   {
+    name: "wudi_req_add",
+    description: "添加一条需求到项目需求清单（.wudi/<项目名>/requirements.json）。开发过程中让 Agent 记录要做的事，落地进度一目了然。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "需求标题" },
+        notes: { type: "string", description: "补充说明" },
+        priority: { type: "string", enum: ["high", "normal", "low"], description: "优先级，默认 normal" },
+        root: { type: "string", description: "项目根路径（缺省为当前工作区）" },
+      },
+      required: ["title"],
+    },
+  },
+  {
+    name: "wudi_req_update",
+    description: "更新需求状态（todo / doing / done）或标题、备注。完成后面板落地进度自动推进。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "需求 id（或完整标题）" },
+        status: { type: "string", enum: ["todo", "doing", "done"], description: "新状态" },
+        title: { type: "string", description: "新标题（可选）" },
+        notes: { type: "string", description: "新备注（可选）" },
+        root: { type: "string", description: "项目根路径（缺省为当前工作区）" },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "wudi_req_list",
+    description: "查看需求清单（按进行中/待办/已完成分组）与完成进度。",
+    inputSchema: { type: "object", properties: { root: { type: "string", description: "项目根路径（缺省为当前工作区）" } } },
+  },
+  {
+    name: "wudi_release_check",
+    description: "发布就绪检查：部署配置、健康检查、SSH、代码提交（git 未提交数）、测试与构建（runTests/runBuild: true 实际执行）、容器化、文档、最近部署。全部关键项通过才可发布。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        runTests: { type: "boolean", description: "实际运行测试命令" },
+        runBuild: { type: "boolean", description: "实际运行构建命令" },
+        timeoutSec: { type: "number", description: "测试/构建超时秒数，默认 180" },
+        root: { type: "string", description: "项目根路径（缺省为当前工作区）" },
+      },
+    },
+  },
+  {
+    name: "wudi_release_notes",
+    description: "生成发布记录：git log（自上个 tag）按 feat/fix 分组 + 最近部署信息，写入 .wudi/<项目名>/docs/releases/<tag>.md 并登记到文档库。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tag: { type: "string", description: "发布 tag（缺省按 package.json 版本或日期生成）" },
+        root: { type: "string", description: "项目根路径（缺省为当前工作区）" },
+      },
+    },
+  },
+  {
     name: "wudi_docs_register",
     description: "登记/更新一份项目文档到 .wudi/docs.json（工作台文档库可见）。path 相对项目根。",
     inputSchema: {
@@ -705,6 +763,16 @@ export async function callTool(name, args = {}) {
         return toolDevStop(args);
       case "wudi_dev_logs":
         return toolDevLogs(args);
+      case "wudi_req_add":
+        return toolReqAdd(args);
+      case "wudi_req_update":
+        return toolReqUpdate(args);
+      case "wudi_req_list":
+        return toolReqList(args);
+      case "wudi_release_check":
+        return await toolReleaseCheck(args);
+      case "wudi_release_notes":
+        return await toolReleaseNotes(args);
       case "wudi_docs_register":
         return toolDocsRegister(args);
       case "wudi_ssh_ping":
@@ -949,7 +1017,27 @@ async function toolStatus(args: any = {}) {
     `文档（${docs.length}）：`,
     docs.length ? docs.slice(0, 10).map((d) => `- [${d.type}] ${d.path}`).join("\n") : "  （无登记文档，用 wudi_docs_register 登记）",
   ];
-  return ok(lines.join("\n"), { project, envs: project ? store.listEnvNames(project) : [], currentEnv: resolved?.name ?? null, resolved, deploys, docs: docs.slice(0, 50) });
+  const requirements = store.loadRequirementsAt(root);
+  const reqDone = requirements.filter((r: any) => r.status === "done").length;
+  let architecture = null;
+  try {
+    const mp = store.archModelPathFor(root);
+    if (existsSync(mp)) {
+      const m = JSON.parse(readFileSync(mp, "utf-8"));
+      architecture = { status: m.status, stack: m.stack ?? [], dir: `.wudi/${store.projectBaseName(root)}/architecture` };
+    }
+  } catch { /* 架构模型缺失 */ }
+  lines.push(`需求：${reqDone}/${requirements.length} 完成｜架构：${architecture?.status ?? "未生成"}`);
+  return ok(lines.join("\n"), {
+    project,
+    envs: project ? store.listEnvNames(project) : [],
+    currentEnv: resolved?.name ?? null,
+    resolved,
+    deploys,
+    docs: docs.slice(0, 50),
+    requirements,
+    architecture,
+  });
 }
 
 function toolDocsRegister(args) {
@@ -3366,7 +3454,222 @@ function toolDevLogs(args: any = {}) {
   );
 }
 
+/* ================= 需求清单 + 发布就绪 + 发布记录（编程到落地） ================= */
+
+const REQ_STATUS_SET = new Set(["todo", "doing", "done"]);
+const REQ_STATUS_ZH = { todo: "待办", doing: "进行中", done: "已完成" };
+
+function toolReqAdd(args: any = {}) {
+  let root;
+  try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
+  const title = String(args?.title ?? "").trim();
+  if (!title) return fail("缺少 title：需求标题。");
+  const list = store.loadRequirementsAt(root);
+  const item = {
+    id: `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    title,
+    status: "todo",
+    priority: ["high", "normal", "low"].includes(args?.priority) ? args.priority : "normal",
+    notes: String(args?.notes ?? ""),
+    createdAt: new Date().toISOString(),
+    doneAt: null,
+  };
+  list.unshift(item);
+  store.saveRequirementsAt(root, list);
+  const done = list.filter((x) => x.status === "done").length;
+  return ok(`已添加需求：${title}（进度 ${done}/${list.length}）`, { requirement: item, progress: { total: list.length, done } });
+}
+
+function toolReqUpdate(args: any = {}) {
+  let root;
+  try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
+  const id = String(args?.id ?? "").trim();
+  if (!id) return fail("缺少 id：需求 id（wudi_req_list 查看）。");
+  const list = store.loadRequirementsAt(root);
+  const item = list.find((x) => x.id === id || x.title === id);
+  if (!item) return fail(`找不到需求：${id}`);
+  if (args?.status !== undefined) {
+    if (!REQ_STATUS_SET.has(args.status)) return fail(`status 仅支持：todo / doing / done`);
+    item.status = args.status;
+    item.doneAt = args.status === "done" ? new Date().toISOString() : null;
+  }
+  if (args?.title !== undefined && String(args.title).trim()) item.title = String(args.title).trim();
+  if (args?.notes !== undefined) item.notes = String(args.notes);
+  store.saveRequirementsAt(root, list);
+  const done = list.filter((x) => x.status === "done").length;
+  return ok(`需求已更新：${item.title} → ${REQ_STATUS_ZH[item.status]}（进度 ${done}/${list.length}）`, { requirement: item, progress: { total: list.length, done } });
+}
+
+function toolReqList(args: any = {}) {
+  let root;
+  try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
+  const list = store.loadRequirementsAt(root);
+  const done = list.filter((x) => x.status === "done").length;
+  const groups = { todo: [], doing: [], done: [] };
+  for (const r of list) (groups[r.status] ?? groups.todo).push(r);
+  const lines = [
+    `═══ 需求清单（${done}/${list.length} 完成）═══`,
+    groups.doing.length ? `进行中：\n${groups.doing.map((r) => `- [${r.id}] ${r.title}${r.notes ? `（${r.notes}）` : ""}`).join("\n")}` : "",
+    groups.todo.length ? `待办：\n${groups.todo.map((r) => `- [${r.id}] ${r.title}`).join("\n")}` : "",
+    groups.done.length ? `已完成：\n${groups.done.map((r) => `- [${r.id}] ${r.title}`).join("\n")}` : "",
+    list.length ? "" : "（清单为空：用 wudi_req_add 添加需求，或让 Agent 在开发过程中记录）",
+  ].filter(Boolean).join("\n\n");
+  return ok(lines, { requirements: list, progress: { total: list.length, done } });
+}
+
+/** 发布就绪检查：部署配置 / SSH / 代码提交 / 测试 / 构建 / 容器化 / 文档 / 部署历史。 */
+async function toolReleaseCheck(args: any = {}) {
+  let root;
+  try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
+  const runTests = args?.runTests === true;
+  const runBuild = args?.runBuild === true;
+  const timeoutSec = Math.min(Math.max(Number(args?.timeoutSec) || 180, 10), 600);
+  const items = [];
+  const add = (name, ok, detail) => items.push({ name, ok: !!ok, detail: String(detail ?? "").slice(0, 260) });
+
+  const project = store.loadProjectAt(root);
+  const cfgOk = !!(project?.build && (project?.package?.path || project?.package?.dockerImage) && project?.deployRoot);
+  add("部署配置", cfgOk, project
+    ? `构建 ${project.build || "缺"}｜产物 ${project.package?.path || project?.package?.dockerImage || "缺"}｜部署根 ${project.deployRoot || "缺"}`
+    : "项目档案缺失（去「总览」建档）");
+  add("健康检查", !!(project?.healthCheck?.url), project?.healthCheck?.url || "未配置（部署后无法自动验证）");
+
+  let sshOk = false;
+  let sshDetail = "未配置（插件设置里填 sshHost）";
+  try {
+    const cfg = sshConfig();
+    sshOk = !!cfg.host;
+    sshDetail = `${cfg.user}@${cfg.host}:${cfg.port}`;
+  } catch { /* 未配置 */ }
+  add("SSH 服务器", sshOk, sshDetail);
+
+  const isRepo = existsSync(join(root, ".git"));
+  let dirty = 0;
+  let branch = "";
+  let lastCommit = "";
+  if (isRepo) {
+    try {
+      const out = await localRun("git status --porcelain", { cwd: root, timeoutMs: 15000 });
+      dirty = String(out).split("\n").filter((l) => l.trim()).length;
+    } catch { dirty = 0; }
+    try { branch = String(await localRun("git rev-parse --abbrev-ref HEAD", { cwd: root, timeoutMs: 15000 })).trim(); } catch { /* ignore */ }
+    try { lastCommit = String(await localRun('git log -1 --pretty="%h %s"', { cwd: root, timeoutMs: 15000 })).trim(); } catch { /* ignore */ }
+  }
+  add("代码提交（git）", isRepo ? dirty === 0 : false,
+    isRepo ? `${branch || "?"} · 未提交 ${dirty} 处${lastCommit ? ` · 最近：${lastCommit}` : ""}` : "不是 git 仓库（无法追溯发布版本）");
+
+  const actions = devActionsFor(root);
+  const testAction = actions.find((a) => /test/i.test(a.id) || /test/i.test(a.command));
+  if (runTests && testAction) {
+    try {
+      await localRun(testAction.command, { cwd: root, timeoutMs: timeoutSec * 1000 });
+      add("测试", true, `${testAction.command} · 通过`);
+    } catch (err: any) {
+      add("测试", false, `${testAction.command} · ${String(err?.message ?? err).split("\n")[0]}`);
+    }
+  } else {
+    add("测试", !!testAction, testAction ? `${testAction.command}（本次未运行，runTests: true 执行）` : "未发现测试命令");
+  }
+
+  const buildCmd = project?.build || actions.find((a) => /build/i.test(a.id) || /build/i.test(a.command))?.command || "";
+  if (runBuild && buildCmd) {
+    try {
+      await localRun(buildCmd, { cwd: root, timeoutMs: timeoutSec * 1000 });
+      add("构建", true, `${buildCmd} · 通过`);
+    } catch (err: any) {
+      add("构建", false, `${buildCmd} · ${String(err?.message ?? err).split("\n")[0]}`);
+    }
+  } else {
+    add("构建", !!buildCmd, buildCmd ? `${buildCmd}（本次未运行）` : "未配置构建命令");
+  }
+
+  const hasDocker = existsSync(join(root, "Dockerfile"));
+  add("容器化", hasDocker, hasDocker ? "Dockerfile 存在" : "无 Dockerfile（目录产物部署也可）");
+
+  const docs = store.loadDocsAt(root);
+  const hasDeployDoc = docs.some((d: any) => /deploy/i.test(d.path));
+  add("文档", docs.length > 0, `${docs.length} 份登记文档${hasDeployDoc ? "（含部署手册）" : ""}`);
+
+  const deploys = store.loadDeploysAt(root);
+  const last = deploys[0];
+  add("最近部署", !!last && (last.status === "ok" || last.status === "ok-with-warnings"),
+    last ? `${last.release ?? last.id} · ${last.status}${last.env ? ` @${last.env}` : ""}` : "尚未部署");
+
+  const okCount = items.filter((i) => i.ok).length;
+  const criticalNames = ["部署配置", "健康检查", "SSH 服务器", "代码提交（git）"];
+  const ready = items.filter((i) => criticalNames.includes(i.name)).every((i) => i.ok);
+  const text = [
+    `═══ 发布就绪检查：${ready ? "✅ 可以发布" : "⚠️ 尚未就绪"}（${okCount}/${items.length} 项通过）═══`,
+    ...items.map((i) => `${i.ok ? "✓" : "✗"} ${i.name}：${i.detail}`),
+    ready
+      ? "下一步：wudi_deploy {confirm:true} 发布（生产环境记得 confirmWord）。"
+      : "先解决上面标 ✗ 的关键项（部署配置 / 健康检查 / SSH / 代码提交）。",
+  ].join("\n");
+  return ok(text, { ready, score: `${okCount}/${items.length}`, items, runTests, runBuild });
+}
+
+/** 发布记录：git log（自上个 tag）+ 最近部署 → docs/releases/<tag>.md 并登记。 */
+async function toolReleaseNotes(args: any = {}) {
+  let root;
+  try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
+  const project = store.loadProjectAt(root);
+  const isRepo = existsSync(join(root, ".git"));
+  const stamp = store.releaseStamp();
+  let tag = String(args?.tag ?? "").trim();
+  if (!tag) {
+    let v = "";
+    try { v = String(JSON.parse(readFileSync(join(root, "package.json"), "utf-8"))?.version ?? ""); } catch { /* 无 package.json */ }
+    tag = v ? `v${v}` : `release-${stamp}`;
+  }
+  let commits = [];
+  if (isRepo) {
+    let from = "";
+    try { from = String(await localRun("git describe --tags --abbrev=0", { cwd: root, timeoutMs: 15000 })).trim(); } catch { /* 无 tag */ }
+    const range = from ? `${from}..HEAD` : "--max-count=30 HEAD";
+    try {
+      const out = await localRun(`git log --pretty="%s" ${range}`, { cwd: root, timeoutMs: 15000 });
+      commits = String(out).split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 50);
+    } catch { /* git log 失败忽略 */ }
+  }
+  const groups = { feat: [], fix: [], other: [] };
+  for (const c of commits) {
+    const lower = c.toLowerCase();
+    if (lower.startsWith("feat")) groups.feat.push(c);
+    else if (lower.startsWith("fix") || lower.startsWith("hotfix")) groups.fix.push(c);
+    else groups.other.push(c);
+  }
+  const deploys = store.loadDeploysAt(root);
+  const last = deploys[0];
+  const md = [
+    `# Release ${tag}`,
+    "",
+    `- 项目：${project?.name ?? store.projectBaseName(root)}`,
+    `- 时间：${new Date().toISOString()}`,
+    ...(last ? [`- 部署：${last.release ?? last.id} · ${last.status}${last.env ? ` @${last.env}` : ""}`] : []),
+    "",
+    `## 新功能`,
+    groups.feat.length ? groups.feat.map((c) => `- ${c}`).join("\n") : "- （无）",
+    "",
+    `## 修复`,
+    groups.fix.length ? groups.fix.map((c) => `- ${c}`).join("\n") : "- （无）",
+    "",
+    `## 其他变更`,
+    groups.other.length ? groups.other.map((c) => `- ${c}`).join("\n") : "- （无）",
+    "",
+  ].join("\n");
+  const relPath = `.wudi/${store.projectBaseName(root)}/docs/releases/${tag}.md`;
+  const abs = join(store.projectDataDirFor(root), "docs", "releases", `${tag.replace(/[^\w.\-]/g, "_")}.md`);
+  mkdirSync(_dirname(abs), { recursive: true });
+  writeFileSync(abs, md);
+  store.registerDocAt(root, { path: relPath, type: "changelog", title: `Release ${tag}`, source: "git log" });
+  return ok(
+    `发布记录已生成：${relPath}（${commits.length} 条提交）\n\n${md}`,
+    { path: relPath, tag, commits: commits.length }
+  );
+}
+
 /* ================= 项目注册表（跨项目管理） ================= */
+
 
 
 /** 自动把当前工作区登记进注册表（幂等），再返回全部项目概览。 */

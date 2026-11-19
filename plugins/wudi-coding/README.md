@@ -427,6 +427,23 @@ plugins/wudi-coding/
   - 面板**主动打开编辑器**：收到 `get_design_status` 的 `live:false` 或「编辑器未打开」失败结果时，自动打开该画布编辑器——Agent 稍后重试即可写入了。
 - 注意：本机 homebrew Node 24 依赖损坏（libsimdjson 缺失），openpencil 的 web 构建暂不可用；本次服务端补丁直接应用于 vendored dist（与源码补丁一致）。
 
+## 编程到落地闭环（v0.46.0）
+
+- **落地进度**（总览新增）：架构 → 文档 → 需求 → 部署 四步流程图，每步显示状态与数量，一眼看清项目走到哪一步。
+- **需求清单**（总览新增 + 三个工具）：
+  - `wudi_req_add / wudi_req_update / wudi_req_list`：需求记录在 `.wudi/<项目名>/requirements.json`；
+  - 面板可直接添加需求、点状态循环切换（待办 → 进行中 → 已完成）；
+  - Agent 在开发过程中同步记录，落地进度自动推进。
+- **发布就绪检查** `wudi_release_check`（总览一键「快速检查 / 完整检查」）：
+  - 9 项检查：部署配置 / 健康检查 / SSH / 代码提交（git 未提交数）/ 测试 / 构建 / 容器化 / 文档 / 最近部署；
+  - `runTests` / `runBuild` 为 true 时实际执行测试与构建命令；
+  - 关键项（部署配置 / 健康检查 / SSH / 代码提交）全过才判定「可以发布」。
+- **发布记录** `wudi_release_notes`（文档页一键「生成发布记录」）：
+  - git log（自上个 tag）按 feat / fix 分组 + 最近部署信息；
+  - 写入 `.wudi/<项目名>/docs/releases/<tag>.md` 并登记文档库。
+- `wudi_status` 现返回 requirements 与 architecture，Agent/面板直接读取。
+- 回归：smoke **180 项全绿**（+6）。
+
 ## 设计页「让 Agent 设计」（v0.45.0）
 
 - 设计页顶部新增 **「让 Agent 设计」** 卡片：画布选择 + 需求描述 + 常用界面建议词（手机端登录页 / 官网首页 / 个人中心 / 数据看板），一键把设计任务发给 Agent。

@@ -477,6 +477,31 @@ async function protocolTests() {
       check("dev: 自定义命令需确认", errOf(r) && textOf(r).includes("confirm"));
       r = await s.call("tools/call", { name: "wudi_dev_stop", arguments: { all: true, root: archProj } });
       check("dev: 停止接口可用", !errOf(r));
+      /* ---- 需求清单 + 发布就绪 + 发布记录（编程到落地） ---- */
+      r = await s.call("tools/call", { name: "wudi_req_add", arguments: { title: "登录页（手机端）", root: archProj } });
+      const req1 = r?.result?.structuredContent?.requirement ?? {};
+      check("req: 添加需求", !errOf(r) && req1.status === "todo" && !!req1.id, textOf(r).slice(0, 120));
+      r = await s.call("tools/call", { name: "wudi_req_update", arguments: { id: req1.id, status: "done", root: archProj } });
+      check("req: 更新状态为已完成", !errOf(r) && r?.result?.structuredContent?.requirement?.status === "done"
+        && !!r?.result?.structuredContent?.requirement?.doneAt);
+      r = await s.call("tools/call", { name: "wudi_req_list", arguments: { root: archProj } });
+      check("req: 清单与进度", !errOf(r) && r?.result?.structuredContent?.progress?.total === 1
+        && r?.result?.structuredContent?.progress?.done === 1 && textOf(r).includes("1/1 完成"));
+      const st2 = await s.call("tools/call", { name: "wudi_status", arguments: { root: archProj } });
+      check("status: 返回需求清单", (st2?.result?.structuredContent?.requirements ?? []).length === 1);
+      r = await s.call("tools/call", { name: "wudi_release_check", arguments: { root: archProj } });
+      const rcItems = r?.result?.structuredContent?.items ?? [];
+      check("release_check: 九项检查 + 未就绪结论", !errOf(r)
+        && rcItems.length >= 9
+        && r?.result?.structuredContent?.ready === false
+        && rcItems.some((i) => i.name === "部署配置") && rcItems.some((i) => i.name === "代码提交（git）"),
+        JSON.stringify(rcItems.map((i) => [i.name, i.ok])));
+      r = await s.call("tools/call", { name: "wudi_release_notes", arguments: { root: archProj } });
+      const relPath = r?.result?.structuredContent?.path ?? "";
+      check("release_notes: 生成并登记发布记录", !errOf(r) && relPath.startsWith(".wudi/")
+        && relPath.includes("docs/releases/")
+        && existsSync(join(workdir, relPath))
+        && textOf(r).includes("## 新功能"), relPath);
     } finally {
       await rm(outside, { recursive: true, force: true });
     }

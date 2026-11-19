@@ -389,6 +389,13 @@ function registerDocAt(root, { path: docPath, type = "doc", title = "", source =
 function registerDoc(doc) {
   return registerDocAt(projectRoot(), doc);
 }
+function loadRequirementsAt(root) {
+  const list = readJSONAt(root, "requirements.json", []);
+  return Array.isArray(list) ? list : [];
+}
+function saveRequirementsAt(root, list) {
+  return writeProjectJSONAt(root, "requirements.json", list.slice(0, 200));
+}
 function designDir() {
   return join(wudiDir(), "design");
 }
@@ -1577,6 +1584,64 @@ var TOOLS = [
     }
   },
   {
+    name: "wudi_req_add",
+    description: "\u6DFB\u52A0\u4E00\u6761\u9700\u6C42\u5230\u9879\u76EE\u9700\u6C42\u6E05\u5355\uFF08.wudi/<\u9879\u76EE\u540D>/requirements.json\uFF09\u3002\u5F00\u53D1\u8FC7\u7A0B\u4E2D\u8BA9 Agent \u8BB0\u5F55\u8981\u505A\u7684\u4E8B\uFF0C\u843D\u5730\u8FDB\u5EA6\u4E00\u76EE\u4E86\u7136\u3002",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "\u9700\u6C42\u6807\u9898" },
+        notes: { type: "string", description: "\u8865\u5145\u8BF4\u660E" },
+        priority: { type: "string", enum: ["high", "normal", "low"], description: "\u4F18\u5148\u7EA7\uFF0C\u9ED8\u8BA4 normal" },
+        root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF09" }
+      },
+      required: ["title"]
+    }
+  },
+  {
+    name: "wudi_req_update",
+    description: "\u66F4\u65B0\u9700\u6C42\u72B6\u6001\uFF08todo / doing / done\uFF09\u6216\u6807\u9898\u3001\u5907\u6CE8\u3002\u5B8C\u6210\u540E\u9762\u677F\u843D\u5730\u8FDB\u5EA6\u81EA\u52A8\u63A8\u8FDB\u3002",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "\u9700\u6C42 id\uFF08\u6216\u5B8C\u6574\u6807\u9898\uFF09" },
+        status: { type: "string", enum: ["todo", "doing", "done"], description: "\u65B0\u72B6\u6001" },
+        title: { type: "string", description: "\u65B0\u6807\u9898\uFF08\u53EF\u9009\uFF09" },
+        notes: { type: "string", description: "\u65B0\u5907\u6CE8\uFF08\u53EF\u9009\uFF09" },
+        root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF09" }
+      },
+      required: ["id"]
+    }
+  },
+  {
+    name: "wudi_req_list",
+    description: "\u67E5\u770B\u9700\u6C42\u6E05\u5355\uFF08\u6309\u8FDB\u884C\u4E2D/\u5F85\u529E/\u5DF2\u5B8C\u6210\u5206\u7EC4\uFF09\u4E0E\u5B8C\u6210\u8FDB\u5EA6\u3002",
+    inputSchema: { type: "object", properties: { root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF09" } } }
+  },
+  {
+    name: "wudi_release_check",
+    description: "\u53D1\u5E03\u5C31\u7EEA\u68C0\u67E5\uFF1A\u90E8\u7F72\u914D\u7F6E\u3001\u5065\u5EB7\u68C0\u67E5\u3001SSH\u3001\u4EE3\u7801\u63D0\u4EA4\uFF08git \u672A\u63D0\u4EA4\u6570\uFF09\u3001\u6D4B\u8BD5\u4E0E\u6784\u5EFA\uFF08runTests/runBuild: true \u5B9E\u9645\u6267\u884C\uFF09\u3001\u5BB9\u5668\u5316\u3001\u6587\u6863\u3001\u6700\u8FD1\u90E8\u7F72\u3002\u5168\u90E8\u5173\u952E\u9879\u901A\u8FC7\u624D\u53EF\u53D1\u5E03\u3002",
+    inputSchema: {
+      type: "object",
+      properties: {
+        runTests: { type: "boolean", description: "\u5B9E\u9645\u8FD0\u884C\u6D4B\u8BD5\u547D\u4EE4" },
+        runBuild: { type: "boolean", description: "\u5B9E\u9645\u8FD0\u884C\u6784\u5EFA\u547D\u4EE4" },
+        timeoutSec: { type: "number", description: "\u6D4B\u8BD5/\u6784\u5EFA\u8D85\u65F6\u79D2\u6570\uFF0C\u9ED8\u8BA4 180" },
+        root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF09" }
+      }
+    }
+  },
+  {
+    name: "wudi_release_notes",
+    description: "\u751F\u6210\u53D1\u5E03\u8BB0\u5F55\uFF1Agit log\uFF08\u81EA\u4E0A\u4E2A tag\uFF09\u6309 feat/fix \u5206\u7EC4 + \u6700\u8FD1\u90E8\u7F72\u4FE1\u606F\uFF0C\u5199\u5165 .wudi/<\u9879\u76EE\u540D>/docs/releases/<tag>.md \u5E76\u767B\u8BB0\u5230\u6587\u6863\u5E93\u3002",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tag: { type: "string", description: "\u53D1\u5E03 tag\uFF08\u7F3A\u7701\u6309 package.json \u7248\u672C\u6216\u65E5\u671F\u751F\u6210\uFF09" },
+        root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF09" }
+      }
+    }
+  },
+  {
     name: "wudi_docs_register",
     description: "\u767B\u8BB0/\u66F4\u65B0\u4E00\u4EFD\u9879\u76EE\u6587\u6863\u5230 .wudi/docs.json\uFF08\u5DE5\u4F5C\u53F0\u6587\u6863\u5E93\u53EF\u89C1\uFF09\u3002path \u76F8\u5BF9\u9879\u76EE\u6839\u3002",
     inputSchema: {
@@ -1935,6 +2000,16 @@ async function callTool(name, args = {}) {
         return toolDevStop(args);
       case "wudi_dev_logs":
         return toolDevLogs(args);
+      case "wudi_req_add":
+        return toolReqAdd(args);
+      case "wudi_req_update":
+        return toolReqUpdate(args);
+      case "wudi_req_list":
+        return toolReqList(args);
+      case "wudi_release_check":
+        return await toolReleaseCheck(args);
+      case "wudi_release_notes":
+        return await toolReleaseNotes(args);
       case "wudi_docs_register":
         return toolDocsRegister(args);
       case "wudi_ssh_ping":
@@ -2164,7 +2239,28 @@ async function toolStatus(args = {}) {
     `\u6587\u6863\uFF08${docs.length}\uFF09\uFF1A`,
     docs.length ? docs.slice(0, 10).map((d) => `- [${d.type}] ${d.path}`).join("\n") : "  \uFF08\u65E0\u767B\u8BB0\u6587\u6863\uFF0C\u7528 wudi_docs_register \u767B\u8BB0\uFF09"
   ];
-  return ok(lines.join("\n"), { project, envs: project ? listEnvNames(project) : [], currentEnv: resolved?.name ?? null, resolved, deploys, docs: docs.slice(0, 50) });
+  const requirements = loadRequirementsAt(root);
+  const reqDone = requirements.filter((r) => r.status === "done").length;
+  let architecture = null;
+  try {
+    const mp = archModelPathFor(root);
+    if (existsSync3(mp)) {
+      const m = JSON.parse(readFileSync2(mp, "utf-8"));
+      architecture = { status: m.status, stack: m.stack ?? [], dir: `.wudi/${projectBaseName(root)}/architecture` };
+    }
+  } catch {
+  }
+  lines.push(`\u9700\u6C42\uFF1A${reqDone}/${requirements.length} \u5B8C\u6210\uFF5C\u67B6\u6784\uFF1A${architecture?.status ?? "\u672A\u751F\u6210"}`);
+  return ok(lines.join("\n"), {
+    project,
+    envs: project ? listEnvNames(project) : [],
+    currentEnv: resolved?.name ?? null,
+    resolved,
+    deploys,
+    docs: docs.slice(0, 50),
+    requirements,
+    architecture
+  });
 }
 function toolDocsRegister(args) {
   const doc = registerDoc({
@@ -5653,6 +5749,244 @@ ${proc.logs.slice(-lines).join("\n") || "\uFF08\u6682\u65E0\u8F93\u51FA\uFF09"}`
     { process: devProcSummary(proc, lines) }
   );
 }
+var REQ_STATUS_SET = /* @__PURE__ */ new Set(["todo", "doing", "done"]);
+var REQ_STATUS_ZH = { todo: "\u5F85\u529E", doing: "\u8FDB\u884C\u4E2D", done: "\u5DF2\u5B8C\u6210" };
+function toolReqAdd(args = {}) {
+  let root;
+  try {
+    root = toolRoot(args);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  const title = String(args?.title ?? "").trim();
+  if (!title) return fail("\u7F3A\u5C11 title\uFF1A\u9700\u6C42\u6807\u9898\u3002");
+  const list = loadRequirementsAt(root);
+  const item = {
+    id: `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    title,
+    status: "todo",
+    priority: ["high", "normal", "low"].includes(args?.priority) ? args.priority : "normal",
+    notes: String(args?.notes ?? ""),
+    createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+    doneAt: null
+  };
+  list.unshift(item);
+  saveRequirementsAt(root, list);
+  const done = list.filter((x) => x.status === "done").length;
+  return ok(`\u5DF2\u6DFB\u52A0\u9700\u6C42\uFF1A${title}\uFF08\u8FDB\u5EA6 ${done}/${list.length}\uFF09`, { requirement: item, progress: { total: list.length, done } });
+}
+function toolReqUpdate(args = {}) {
+  let root;
+  try {
+    root = toolRoot(args);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  const id = String(args?.id ?? "").trim();
+  if (!id) return fail("\u7F3A\u5C11 id\uFF1A\u9700\u6C42 id\uFF08wudi_req_list \u67E5\u770B\uFF09\u3002");
+  const list = loadRequirementsAt(root);
+  const item = list.find((x) => x.id === id || x.title === id);
+  if (!item) return fail(`\u627E\u4E0D\u5230\u9700\u6C42\uFF1A${id}`);
+  if (args?.status !== void 0) {
+    if (!REQ_STATUS_SET.has(args.status)) return fail(`status \u4EC5\u652F\u6301\uFF1Atodo / doing / done`);
+    item.status = args.status;
+    item.doneAt = args.status === "done" ? (/* @__PURE__ */ new Date()).toISOString() : null;
+  }
+  if (args?.title !== void 0 && String(args.title).trim()) item.title = String(args.title).trim();
+  if (args?.notes !== void 0) item.notes = String(args.notes);
+  saveRequirementsAt(root, list);
+  const done = list.filter((x) => x.status === "done").length;
+  return ok(`\u9700\u6C42\u5DF2\u66F4\u65B0\uFF1A${item.title} \u2192 ${REQ_STATUS_ZH[item.status]}\uFF08\u8FDB\u5EA6 ${done}/${list.length}\uFF09`, { requirement: item, progress: { total: list.length, done } });
+}
+function toolReqList(args = {}) {
+  let root;
+  try {
+    root = toolRoot(args);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  const list = loadRequirementsAt(root);
+  const done = list.filter((x) => x.status === "done").length;
+  const groups = { todo: [], doing: [], done: [] };
+  for (const r of list) (groups[r.status] ?? groups.todo).push(r);
+  const lines = [
+    `\u2550\u2550\u2550 \u9700\u6C42\u6E05\u5355\uFF08${done}/${list.length} \u5B8C\u6210\uFF09\u2550\u2550\u2550`,
+    groups.doing.length ? `\u8FDB\u884C\u4E2D\uFF1A
+${groups.doing.map((r) => `- [${r.id}] ${r.title}${r.notes ? `\uFF08${r.notes}\uFF09` : ""}`).join("\n")}` : "",
+    groups.todo.length ? `\u5F85\u529E\uFF1A
+${groups.todo.map((r) => `- [${r.id}] ${r.title}`).join("\n")}` : "",
+    groups.done.length ? `\u5DF2\u5B8C\u6210\uFF1A
+${groups.done.map((r) => `- [${r.id}] ${r.title}`).join("\n")}` : "",
+    list.length ? "" : "\uFF08\u6E05\u5355\u4E3A\u7A7A\uFF1A\u7528 wudi_req_add \u6DFB\u52A0\u9700\u6C42\uFF0C\u6216\u8BA9 Agent \u5728\u5F00\u53D1\u8FC7\u7A0B\u4E2D\u8BB0\u5F55\uFF09"
+  ].filter(Boolean).join("\n\n");
+  return ok(lines, { requirements: list, progress: { total: list.length, done } });
+}
+async function toolReleaseCheck(args = {}) {
+  let root;
+  try {
+    root = toolRoot(args);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  const runTests = args?.runTests === true;
+  const runBuild = args?.runBuild === true;
+  const timeoutSec = Math.min(Math.max(Number(args?.timeoutSec) || 180, 10), 600);
+  const items = [];
+  const add = (name, ok2, detail) => items.push({ name, ok: !!ok2, detail: String(detail ?? "").slice(0, 260) });
+  const project = loadProjectAt(root);
+  const cfgOk = !!(project?.build && (project?.package?.path || project?.package?.dockerImage) && project?.deployRoot);
+  add("\u90E8\u7F72\u914D\u7F6E", cfgOk, project ? `\u6784\u5EFA ${project.build || "\u7F3A"}\uFF5C\u4EA7\u7269 ${project.package?.path || project?.package?.dockerImage || "\u7F3A"}\uFF5C\u90E8\u7F72\u6839 ${project.deployRoot || "\u7F3A"}` : "\u9879\u76EE\u6863\u6848\u7F3A\u5931\uFF08\u53BB\u300C\u603B\u89C8\u300D\u5EFA\u6863\uFF09");
+  add("\u5065\u5EB7\u68C0\u67E5", !!project?.healthCheck?.url, project?.healthCheck?.url || "\u672A\u914D\u7F6E\uFF08\u90E8\u7F72\u540E\u65E0\u6CD5\u81EA\u52A8\u9A8C\u8BC1\uFF09");
+  let sshOk = false;
+  let sshDetail = "\u672A\u914D\u7F6E\uFF08\u63D2\u4EF6\u8BBE\u7F6E\u91CC\u586B sshHost\uFF09";
+  try {
+    const cfg = sshConfig();
+    sshOk = !!cfg.host;
+    sshDetail = `${cfg.user}@${cfg.host}:${cfg.port}`;
+  } catch {
+  }
+  add("SSH \u670D\u52A1\u5668", sshOk, sshDetail);
+  const isRepo = existsSync3(join3(root, ".git"));
+  let dirty = 0;
+  let branch = "";
+  let lastCommit = "";
+  if (isRepo) {
+    try {
+      const out = await localRun("git status --porcelain", { cwd: root, timeoutMs: 15e3 });
+      dirty = String(out).split("\n").filter((l) => l.trim()).length;
+    } catch {
+      dirty = 0;
+    }
+    try {
+      branch = String(await localRun("git rev-parse --abbrev-ref HEAD", { cwd: root, timeoutMs: 15e3 })).trim();
+    } catch {
+    }
+    try {
+      lastCommit = String(await localRun('git log -1 --pretty="%h %s"', { cwd: root, timeoutMs: 15e3 })).trim();
+    } catch {
+    }
+  }
+  add(
+    "\u4EE3\u7801\u63D0\u4EA4\uFF08git\uFF09",
+    isRepo ? dirty === 0 : false,
+    isRepo ? `${branch || "?"} \xB7 \u672A\u63D0\u4EA4 ${dirty} \u5904${lastCommit ? ` \xB7 \u6700\u8FD1\uFF1A${lastCommit}` : ""}` : "\u4E0D\u662F git \u4ED3\u5E93\uFF08\u65E0\u6CD5\u8FFD\u6EAF\u53D1\u5E03\u7248\u672C\uFF09"
+  );
+  const actions = devActionsFor(root);
+  const testAction = actions.find((a) => /test/i.test(a.id) || /test/i.test(a.command));
+  if (runTests && testAction) {
+    try {
+      await localRun(testAction.command, { cwd: root, timeoutMs: timeoutSec * 1e3 });
+      add("\u6D4B\u8BD5", true, `${testAction.command} \xB7 \u901A\u8FC7`);
+    } catch (err) {
+      add("\u6D4B\u8BD5", false, `${testAction.command} \xB7 ${String(err?.message ?? err).split("\n")[0]}`);
+    }
+  } else {
+    add("\u6D4B\u8BD5", !!testAction, testAction ? `${testAction.command}\uFF08\u672C\u6B21\u672A\u8FD0\u884C\uFF0CrunTests: true \u6267\u884C\uFF09` : "\u672A\u53D1\u73B0\u6D4B\u8BD5\u547D\u4EE4");
+  }
+  const buildCmd = project?.build || actions.find((a) => /build/i.test(a.id) || /build/i.test(a.command))?.command || "";
+  if (runBuild && buildCmd) {
+    try {
+      await localRun(buildCmd, { cwd: root, timeoutMs: timeoutSec * 1e3 });
+      add("\u6784\u5EFA", true, `${buildCmd} \xB7 \u901A\u8FC7`);
+    } catch (err) {
+      add("\u6784\u5EFA", false, `${buildCmd} \xB7 ${String(err?.message ?? err).split("\n")[0]}`);
+    }
+  } else {
+    add("\u6784\u5EFA", !!buildCmd, buildCmd ? `${buildCmd}\uFF08\u672C\u6B21\u672A\u8FD0\u884C\uFF09` : "\u672A\u914D\u7F6E\u6784\u5EFA\u547D\u4EE4");
+  }
+  const hasDocker = existsSync3(join3(root, "Dockerfile"));
+  add("\u5BB9\u5668\u5316", hasDocker, hasDocker ? "Dockerfile \u5B58\u5728" : "\u65E0 Dockerfile\uFF08\u76EE\u5F55\u4EA7\u7269\u90E8\u7F72\u4E5F\u53EF\uFF09");
+  const docs = loadDocsAt(root);
+  const hasDeployDoc = docs.some((d) => /deploy/i.test(d.path));
+  add("\u6587\u6863", docs.length > 0, `${docs.length} \u4EFD\u767B\u8BB0\u6587\u6863${hasDeployDoc ? "\uFF08\u542B\u90E8\u7F72\u624B\u518C\uFF09" : ""}`);
+  const deploys = loadDeploysAt(root);
+  const last = deploys[0];
+  add(
+    "\u6700\u8FD1\u90E8\u7F72",
+    !!last && (last.status === "ok" || last.status === "ok-with-warnings"),
+    last ? `${last.release ?? last.id} \xB7 ${last.status}${last.env ? ` @${last.env}` : ""}` : "\u5C1A\u672A\u90E8\u7F72"
+  );
+  const okCount = items.filter((i) => i.ok).length;
+  const criticalNames = ["\u90E8\u7F72\u914D\u7F6E", "\u5065\u5EB7\u68C0\u67E5", "SSH \u670D\u52A1\u5668", "\u4EE3\u7801\u63D0\u4EA4\uFF08git\uFF09"];
+  const ready = items.filter((i) => criticalNames.includes(i.name)).every((i) => i.ok);
+  const text = [
+    `\u2550\u2550\u2550 \u53D1\u5E03\u5C31\u7EEA\u68C0\u67E5\uFF1A${ready ? "\u2705 \u53EF\u4EE5\u53D1\u5E03" : "\u26A0\uFE0F \u5C1A\u672A\u5C31\u7EEA"}\uFF08${okCount}/${items.length} \u9879\u901A\u8FC7\uFF09\u2550\u2550\u2550`,
+    ...items.map((i) => `${i.ok ? "\u2713" : "\u2717"} ${i.name}\uFF1A${i.detail}`),
+    ready ? "\u4E0B\u4E00\u6B65\uFF1Awudi_deploy {confirm:true} \u53D1\u5E03\uFF08\u751F\u4EA7\u73AF\u5883\u8BB0\u5F97 confirmWord\uFF09\u3002" : "\u5148\u89E3\u51B3\u4E0A\u9762\u6807 \u2717 \u7684\u5173\u952E\u9879\uFF08\u90E8\u7F72\u914D\u7F6E / \u5065\u5EB7\u68C0\u67E5 / SSH / \u4EE3\u7801\u63D0\u4EA4\uFF09\u3002"
+  ].join("\n");
+  return ok(text, { ready, score: `${okCount}/${items.length}`, items, runTests, runBuild });
+}
+async function toolReleaseNotes(args = {}) {
+  let root;
+  try {
+    root = toolRoot(args);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  const project = loadProjectAt(root);
+  const isRepo = existsSync3(join3(root, ".git"));
+  const stamp = releaseStamp();
+  let tag = String(args?.tag ?? "").trim();
+  if (!tag) {
+    let v = "";
+    try {
+      v = String(JSON.parse(readFileSync2(join3(root, "package.json"), "utf-8"))?.version ?? "");
+    } catch {
+    }
+    tag = v ? `v${v}` : `release-${stamp}`;
+  }
+  let commits = [];
+  if (isRepo) {
+    let from = "";
+    try {
+      from = String(await localRun("git describe --tags --abbrev=0", { cwd: root, timeoutMs: 15e3 })).trim();
+    } catch {
+    }
+    const range = from ? `${from}..HEAD` : "--max-count=30 HEAD";
+    try {
+      const out = await localRun(`git log --pretty="%s" ${range}`, { cwd: root, timeoutMs: 15e3 });
+      commits = String(out).split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 50);
+    } catch {
+    }
+  }
+  const groups = { feat: [], fix: [], other: [] };
+  for (const c of commits) {
+    const lower = c.toLowerCase();
+    if (lower.startsWith("feat")) groups.feat.push(c);
+    else if (lower.startsWith("fix") || lower.startsWith("hotfix")) groups.fix.push(c);
+    else groups.other.push(c);
+  }
+  const deploys = loadDeploysAt(root);
+  const last = deploys[0];
+  const md = [
+    `# Release ${tag}`,
+    "",
+    `- \u9879\u76EE\uFF1A${project?.name ?? projectBaseName(root)}`,
+    `- \u65F6\u95F4\uFF1A${(/* @__PURE__ */ new Date()).toISOString()}`,
+    ...last ? [`- \u90E8\u7F72\uFF1A${last.release ?? last.id} \xB7 ${last.status}${last.env ? ` @${last.env}` : ""}`] : [],
+    "",
+    `## \u65B0\u529F\u80FD`,
+    groups.feat.length ? groups.feat.map((c) => `- ${c}`).join("\n") : "- \uFF08\u65E0\uFF09",
+    "",
+    `## \u4FEE\u590D`,
+    groups.fix.length ? groups.fix.map((c) => `- ${c}`).join("\n") : "- \uFF08\u65E0\uFF09",
+    "",
+    `## \u5176\u4ED6\u53D8\u66F4`,
+    groups.other.length ? groups.other.map((c) => `- ${c}`).join("\n") : "- \uFF08\u65E0\uFF09",
+    ""
+  ].join("\n");
+  const relPath = `.wudi/${projectBaseName(root)}/docs/releases/${tag}.md`;
+  const abs = join3(projectDataDirFor(root), "docs", "releases", `${tag.replace(/[^\w.\-]/g, "_")}.md`);
+  mkdirSync2(_dirname(abs), { recursive: true });
+  writeFileSync2(abs, md);
+  registerDocAt(root, { path: relPath, type: "changelog", title: `Release ${tag}`, source: "git log" });
+  return ok(
+    `\u53D1\u5E03\u8BB0\u5F55\u5DF2\u751F\u6210\uFF1A${relPath}\uFF08${commits.length} \u6761\u63D0\u4EA4\uFF09
+
+${md}`,
+    { path: relPath, tag, commits: commits.length }
+  );
+}
 function toolProjectsList() {
   const root = projectRoot();
   try {
@@ -6358,7 +6692,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.45.0" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.46.0" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());

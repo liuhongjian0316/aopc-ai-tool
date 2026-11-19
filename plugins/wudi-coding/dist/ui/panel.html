@@ -525,7 +525,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.45.0" },
+    { name: "wudi-coding", version: "0.46.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -564,6 +564,7 @@ const EmptyResultSchema = {
     devSelected: "",   // 选中的开发进程 id
     devBusy: false,    // 启动/停止进行中
     devTimer: null,    // 开发页轮询定时器
+    releaseCheck: null, // 发布就绪检查结果
     figmaUrl: "",
     opEmbed: null,     // 内嵌 OpenPencil 编辑器会话 {path}（overlay 层，不参与 render 循环）
     opFrameOrigin: "", // 内嵌编辑器 iframe 的 http origin（wudi 协同桥）
@@ -786,6 +787,7 @@ const EmptyResultSchema = {
     });
     bindActions();
     bindArchActions();
+    bindOverviewActions();
     bindDevActions();
     /* 开发页轮询：有运行中进程时每 2.5s 刷新状态与日志 */
     if (state.view === "detail" && state.tab === "dev" && !DEMO &&
@@ -911,6 +913,49 @@ const EmptyResultSchema = {
         <div class="stat"><div class="num">${state.data?.docs?.length ?? 0}</div><div class="lbl">文档</div></div>
         <div class="stat"><div class="num">${(state.designs?.designs ?? []).length}</div><div class="lbl">设计画布</div></div>
       </div>`;
+    /* 落地进度：架构 → 骨架 → 文档 → 需求 → 部署 */
+    const arch = state.data?.architecture;
+    const reqs = state.data?.requirements ?? [];
+    const reqDone = reqs.filter((r) => r.status === "done").length;
+    const lastDeploy = deploys[0];
+    const REQ_ZH = { todo: "待办", doing: "进行中", done: "已完成" };
+    const landingSteps = [
+      { name: "架构", ok: arch?.status === "scaffolded", note: arch ? (arch.status === "scaffolded" ? "骨架已写入" : "已规划") : "未生成" },
+      { name: "文档", ok: (state.data?.docs?.length ?? 0) > 0, note: `${state.data?.docs?.length ?? 0} 份` },
+      { name: "需求", ok: reqs.length > 0 && reqDone === reqs.length, note: `${reqDone}/${reqs.length}` },
+      { name: "部署", ok: !!lastDeploy && (lastDeploy.status === "ok" || lastDeploy.status === "ok-with-warnings"), note: lastDeploy ? String(lastDeploy.status) : "未部署" },
+    ];
+    const landingCard = `
+      <div class="card"><h3>落地进度<span class="line"></span>
+        <span class="muted" style="text-transform:none;letter-spacing:0">编程到落地：架构 → 开发 → 需求验收 → 部署</span></h3>
+        <div class="flow">${landingSteps.map((st, i) =>
+          `<div class="node"><b>${st.ok ? "✓ " : "○ "}${esc(st.name)}</b><span>${esc(st.note)}</span></div>${i < landingSteps.length - 1 ? '<span class="arrow">→</span>' : ""}`
+        ).join("")}</div>
+      </div>`;
+    /* 需求清单 */
+    const reqCard = `
+      <div class="card"><h3>需求清单<span class="line"></span><span class="muted" style="text-transform:none;letter-spacing:0">${reqDone}/${reqs.length} 已完成 · 点状态循环切换</span></h3>
+        <div class="btnrow" style="margin-bottom:8px">
+          <input id="req-title" placeholder="新需求标题，回车或点「添加」" style="${INPUT_CSS}flex:1">
+          <button class="btn primary" id="btn-req-add" ${state.busy ? "disabled" : ""}>添加</button>
+        </div>
+        ${reqs.length ? `<div class="kv">${reqs.slice(0, 8).map((r) =>
+          `<span class="k"><button class="link-act" data-req-cycle="${esc(r.id)}" title="点击切换 待办→进行中→已完成">${esc(REQ_ZH[r.status] ?? r.status)}</button></span><span class="v plain">${esc(r.title)}</span>`
+        ).join("")}</div>${reqs.length > 8 ? `<div class="muted" style="margin-top:6px">…共 ${reqs.length} 条（Agent 可用 wudi_req_list 查看）</div>` : ""}` : `<div class="muted">还没有需求。开发过程中让 Agent 用 wudi_req_add 记录要做的事，落地进度一目了然。</div>`}
+      </div>`;
+    /* 发布就绪检查 */
+    const rc = state.releaseCheck;
+    const releaseCard = `
+      <div class="card"><h3>发布就绪检查<span class="line"></span></h3>
+        <div class="btnrow">
+          <button class="btn" id="btn-release-quick" ${state.busy ? "disabled" : ""}>快速检查</button>
+          <button class="btn" id="btn-release-full" ${state.busy ? "disabled" : ""}>完整检查（含测试·构建）</button>
+          ${rc ? `<span class="badge ${rc.ready ? "ok" : "err"}">${rc.ready ? "可以发布" : "尚未就绪"} · ${esc(rc.score)}</span>` : ""}
+        </div>
+        ${rc ? `<div class="kv" style="margin-top:8px">${rc.items.map((i) =>
+          `<span class="k">${i.ok ? "✓" : "✗"} ${esc(i.name)}</span><span class="v plain">${esc(i.detail)}</span>`
+        ).join("")}</div>` : `<div class="muted">检查部署配置 / SSH / 代码提交 / 测试 / 构建 / 容器化 / 文档 / 部署历史，全部关键项通过即可发布。</div>`}
+      </div>`;
     const envBtns = (state.data?.envs ?? []).length > 1
       ? ["", ...state.data.envs].map((e) =>
           `<button class="btn env-btn ${state.env === e ? "primary" : ""}" data-env="${esc(e)}">${e === "" ? `默认（${esc(state.data.currentEnv || "?")}）` : esc(e)}</button>`
@@ -927,6 +972,9 @@ const EmptyResultSchema = {
         </div>
       </div>
       ${statTiles}
+      ${landingCard}
+      ${reqCard}
+      ${releaseCard}
       ${nextActions(p)}
       ${envBtns ? `<div class="btnrow" style="margin-bottom:12px">${envBtns}</div>` : ""}
       <div class="card"><h3>流水线配置<span class="line"></span></h3>
@@ -1380,7 +1428,8 @@ const EmptyResultSchema = {
     return `<div class="card"><h3>文档库（.wudi/docs.json）<span class="line"></span></h3>
       <div class="btnrow" style="margin-bottom:8px">
         <button class="btn" id="btn-weekly" ${state.busy || isForeignProject() ? "disabled" : ""}>生成周报</button>
-        <span class="muted">${isForeignProject() ? "查看其他项目：只读（生成周报请在该项目工作区进行）" : "从 git log 生成近 7 天周报草稿并登记"}</span>
+        <button class="btn" id="btn-release-notes" ${state.busy ? "disabled" : ""}>生成发布记录</button>
+        <span class="muted">${isForeignProject() ? "查看其他项目：只读（生成周报请在该项目工作区进行）" : "周报：近 7 天 git 变更；发布记录：自上个 tag 的 feat/fix 分组 + 部署信息"}</span>
       </div>
       ${docs.length ? docs.map((d) =>
         `<div class="row clickable" data-path="${esc(d.path)}" title="点击让 Agent 打开并简介这份文档"><span class="badge neutral">${esc(TYPE_ZH[d.type] ?? d.type)}</span><span class="path">${esc(d.path)}</span><span class="time">${esc(fmtTime(d.updatedAt))}</span></div>`
@@ -1750,7 +1799,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.45.0" },
+              hostInfo: { name: "wudi-workbench", version: "0.46.0" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -1896,6 +1945,68 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
     return state.projectRoot ? { root: state.projectRoot } : {};
   }
   const isForeignProject = () => !!state.projectRoot;
+
+  /* ---------- 总览：落地进度 / 需求清单 / 发布就绪 ---------- */
+  async function runReleaseCheck(full) {
+    setBusy(true);
+    try {
+      const res = await callTool("wudi_release_check", { runTests: full, runBuild: full, timeoutSec: 180, ...rootArg() });
+      state.releaseCheck = struct(res);
+      state.notice = { kind: state.releaseCheck?.ready ? "ok" : "err", text: `发布就绪：${state.releaseCheck?.ready ? "可以发布" : "尚未就绪"}（${state.releaseCheck?.score}）` };
+    } catch (err) {
+      state.notice = { kind: "err", text: `检查失败：${String(err.message ?? err).slice(0, 300)}` };
+    }
+    setBusy(false);
+    render();
+  }
+  function bindOverviewActions() {
+    document.getElementById("btn-release-quick")?.addEventListener("click", () => runReleaseCheck(false));
+    document.getElementById("btn-release-full")?.addEventListener("click", () => runReleaseCheck(true));
+    document.getElementById("btn-req-add")?.addEventListener("click", async () => {
+      const title = String(document.getElementById("req-title")?.value ?? "").trim();
+      if (!title) { state.notice = { kind: "err", text: "请填需求标题" }; render(); return; }
+      setBusy(true);
+      try {
+        await callTool("wudi_req_add", { title, ...rootArg() });
+        state.notice = { kind: "ok", text: `已添加需求：${title}` };
+        document.getElementById("req-title").value = "";
+      } catch (err) {
+        state.notice = { kind: "err", text: `添加失败：${String(err.message ?? err).slice(0, 200)}` };
+      }
+      setBusy(false);
+      await loadAll();
+    });
+    document.getElementById("req-title")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") document.getElementById("btn-req-add")?.click();
+    });
+    $root().querySelectorAll("[data-req-cycle]").forEach((b) => b.addEventListener("click", async () => {
+      const order = ["todo", "doing", "done"];
+      const cur = ((state.data?.requirements ?? []).find((r) => r.id === b.dataset.reqCycle))?.status ?? "todo";
+      const next = order[(order.indexOf(cur) + 1) % order.length];
+      setBusy(true);
+      try {
+        await callTool("wudi_req_update", { id: b.dataset.reqCycle, status: next, ...rootArg() });
+        state.notice = { kind: "ok", text: `需求 → ${next === "done" ? "已完成" : next === "doing" ? "进行中" : "待办"}` };
+      } catch (err) {
+        state.notice = { kind: "err", text: `更新失败：${String(err.message ?? err).slice(0, 200)}` };
+      }
+      setBusy(false);
+      await loadAll();
+    }));
+    document.getElementById("btn-release-notes")?.addEventListener("click", async () => {
+      const tag = await inputDialog("发布 tag（留空按 package.json 版本 / 日期生成）", "");
+      if (tag === null) return;
+      setBusy(true);
+      try {
+        const res = await callTool("wudi_release_notes", { ...(tag ? { tag } : {}), ...rootArg() });
+        state.notice = { kind: "ok", text: `发布记录已生成：${struct(res)?.path ?? ""}` };
+      } catch (err) {
+        state.notice = { kind: "err", text: `生成失败：${String(err.message ?? err).slice(0, 300)}` };
+      }
+      setBusy(false);
+      await loadAll();
+    });
+  }
 
   /* ---------- 架构页交互：向导 / 生成方案 / 写入骨架 / 交给 Agent ---------- */
   function demoArchPlan(kind, fw, name) {
@@ -2452,8 +2563,15 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
       docs: [
         { path: "docs/api.md", type: "api", updatedAt: iso(2000) },
         { path: "docs/weekly/2026-W44.md", type: "weekly", updatedAt: iso(400) },
+        { path: ".wudi/zongheng-app/docs/deploy.md", type: "runbook", updatedAt: iso(300) },
         { path: "README.md", type: "readme", updatedAt: iso(5000) },
       ],
+      requirements: [
+        { id: "req-d1", title: "登录页（手机端）", status: "done", createdAt: iso(8000), doneAt: iso(100) },
+        { id: "req-d2", title: "首页 Banner + 卡片列表", status: "doing", createdAt: iso(7000), doneAt: null },
+        { id: "req-d3", title: "订单列表与详情", status: "todo", createdAt: iso(6000), doneAt: null },
+      ],
+      architecture: { status: "scaffolded", stack: ["React", "Vite", "Tailwind CSS"], dir: ".wudi/zongheng-app/architecture" },
     };
     state.history = { deploys: state.data.deploys };
     state.designs = {

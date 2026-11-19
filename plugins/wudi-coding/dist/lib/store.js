@@ -380,6 +380,13 @@ function registerDocAt(root, { path: docPath, type = "doc", title = "", source =
 function registerDoc(doc) {
   return registerDocAt(projectRoot(), doc);
 }
+function loadRequirementsAt(root) {
+  const list = readJSONAt(root, "requirements.json", []);
+  return Array.isArray(list) ? list : [];
+}
+function saveRequirementsAt(root, list) {
+  return writeProjectJSONAt(root, "requirements.json", list.slice(0, 200));
+}
 function designDir() {
   return join(wudiDir(), "design");
 }
@@ -828,6 +835,7 @@ export {
   loadProject,
   loadProjectAt,
   loadRegistry,
+  loadRequirementsAt,
   loadTokens,
   migrateArchPlanFor,
   migrateDesignsFor,
@@ -849,6 +857,7 @@ export {
   saveCanvas,
   saveProject,
   saveProjectAt,
+  saveRequirementsAt,
   saveTokens,
   setFigmaUrl,
   unhideProjectRoot,
