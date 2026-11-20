@@ -346,6 +346,21 @@ export const TOOLS = [
     },
   },
   {
+    name: "wudi_ship",
+    description: "一键上线：先跑完整发布就绪检查（测试+构建实际执行）——未就绪返回清单并中止；就绪后 confirm: true 直接执行部署流水线，发布记录与健康趋势自动生成。生产环境配置了 confirmWord 时流水线会要求二次确认。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        env: { type: "string", description: "目标环境（staging/prod 等，缺省 default）" },
+        confirm: { type: "boolean", description: "必须为 true 才真正部署" },
+        runTests: { type: "boolean", description: "是否执行测试，默认 true" },
+        timeoutSec: { type: "number", description: "测试/构建超时秒数，默认 180" },
+        pruneOld: { type: "boolean", description: "部署成功后清理服务器旧版本" },
+        root: { type: "string", description: "项目根路径（缺省为当前工作区）" },
+      },
+    },
+  },
+  {
     name: "wudi_health_trend",
     description: "健康趋势：最近 N 次健康检查记录（部署 verify 与 wudi_health_check 自动写入 .wudi/<项目名>/deploys/health.json），按时间倒序，含环境/URL/状态/关联版本。",
     inputSchema: {
@@ -801,6 +816,8 @@ export async function callTool(name, args = {}) {
         return toolHealthTrend(args);
       case "wudi_ci_generate":
         return toolCiGenerate(args);
+      case "wudi_ship":
+        return await toolShip(args);
       case "wudi_docs_register":
         return toolDocsRegister(args);
       case "wudi_ssh_ping":
@@ -3662,6 +3679,11 @@ async function toolReleaseCheck(args: any = {}) {
   const hasDeployDoc = docs.some((d: any) => /deploy/i.test(d.path));
   add("文档", docs.length > 0, `${docs.length} 份登记文档${hasDeployDoc ? "（含部署手册）" : ""}`);
 
+  const requirements = store.loadRequirementsAt(root);
+  const reqDone = requirements.filter((r: any) => r.status === "done").length;
+  add("需求验收", requirements.length === 0 ? true : reqDone === requirements.length,
+    requirements.length ? `${reqDone}/${requirements.length} 完成` : "未使用需求清单（可选，wudi_req_add 记录）");
+
   const deploys = store.loadDeploysAt(root);
   const last = deploys[0];
   add("最近部署", !!last && (last.status === "ok" || last.status === "ok-with-warnings"),
@@ -3670,6 +3692,13 @@ async function toolReleaseCheck(args: any = {}) {
   const okCount = items.filter((i) => i.ok).length;
   const criticalNames = ["部署配置", "健康检查", "SSH 服务器", "代码提交（git）"];
   const ready = items.filter((i) => criticalNames.includes(i.name)).every((i) => i.ok);
+  try {
+    store.appendCheckAt(root, {
+      ready, score: `${okCount}/${items.length}`,
+      items: items.map((i) => ({ name: i.name, ok: i.ok })),
+      runTests, runBuild,
+    });
+  } catch { /* 检查留存失败不阻塞 */ }
   const text = [
     `═══ 发布就绪检查：${ready ? "✅ 可以发布" : "⚠️ 尚未就绪"}（${okCount}/${items.length} 项通过）═══`,
     ...items.map((i) => `${i.ok ? "✓" : "✗"} ${i.name}：${i.detail}`),
@@ -3677,7 +3706,7 @@ async function toolReleaseCheck(args: any = {}) {
       ? "下一步：wudi_deploy {confirm:true} 发布（生产环境记得 confirmWord）。"
       : "先解决上面标 ✗ 的关键项（部署配置 / 健康检查 / SSH / 代码提交）。",
   ].join("\n");
-  return ok(text, { ready, score: `${okCount}/${items.length}`, items, runTests, runBuild });
+  return ok(text, { ready, score: `${okCount}/${items.length}`, items, runTests, runBuild, recordedAt: new Date().toISOString() });
 }
 
 /** 发布记录：git log（自上个 tag）+ 最近部署 → docs/releases/<tag>.md 并登记。 */
@@ -3873,7 +3902,57 @@ function toolCiGenerate(args: any = {}) {
   return ok(text, { provider, created, skipped, failed });
 }
 
+/** 一键上线：完整发布就绪检查 → 未就绪给清单中止；就绪后 confirm 走部署流水线。 */
+async function toolShip(args: any = {}) {
+  let root;
+  try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
+  const env = args?.env ? String(args.env) : undefined;
+  const confirm = args?.confirm === true;
+  const runTests = args?.runTests !== false;
+  const timeoutSec = args?.timeoutSec;
+  const check = await toolReleaseCheck({ root, runTests, runBuild: true, timeoutSec });
+  const sc = check.structuredContent ?? {};
+  if (!sc.ready) {
+    return fail(
+      [
+        `═══ 一键上线中止：尚未就绪（${sc.score}）═══`,
+        ...(sc.items ?? []).map((i) => `${i.ok ? "✓" : "✗"} ${i.name}：${i.detail}`),
+        "",
+        "未执行部署。解决上面标 ✗ 的关键项（部署配置 / 健康检查 / SSH / 代码提交）后重试。",
+      ].join("\n"),
+      { ready: false, score: sc.score, items: sc.items, deployed: false }
+    );
+  }
+  if (!confirm) {
+    return ok(
+      [
+        `═══ 一键上线预检通过（${sc.score}）═══`,
+        ...(sc.items ?? []).map((i) => `${i.ok ? "✓" : "○"} ${i.name}：${i.detail}`),
+        "",
+        `目标环境：${env || "default"}。传 confirm: true 执行上线：部署流水线（build→package→upload→remote→verify）+ 发布记录与健康趋势自动生成。`,
+      ].join("\n"),
+      { ready: true, score: sc.score, items: sc.items, deployed: false }
+    );
+  }
+  const deployRes = await toolDeploy({ confirm: true, ...(env ? { env } : {}), ...(args?.pruneOld !== undefined ? { pruneOld: args.pruneOld } : {}) });
+  const deployText = deployRes?.content?.[0]?.text ?? "";
+  if (deployRes.isError) {
+    return fail(`就绪检查通过（${sc.score}），但部署失败：\n${deployText.slice(0, 1000)}`);
+  }
+  const deploySc = deployRes.structuredContent ?? {};
+  return ok(
+    [
+      `═══ 一键上线完成（${sc.score}）═══`,
+      ...(sc.items ?? []).map((i) => `✓ ${i.name}：${i.detail}`),
+      "",
+      deployText,
+    ].join("\n"),
+    { ready: true, deployed: true, score: sc.score, items: sc.items, deploy: deploySc.deploy ?? null }
+  );
+}
+
 /* ================= 项目注册表（跨项目管理） ================= */
+
 
 
 

@@ -455,6 +455,18 @@ export function appendHealthAt(root, record) {
   return writeNestedJSON(root, "deploys/health.json", list.slice(0, 100));
 }
 
+/** 发布检查历史：<ws>/.wudi/<项目名>/deploys/checks.json（最近 50 次）。 */
+export function loadChecksAt(root) {
+  const list = readNestedJSON(root, "deploys/checks.json", []);
+  return Array.isArray(list) ? list : [];
+}
+
+export function appendCheckAt(root, record) {
+  const list = loadChecksAt(root);
+  list.unshift({ at: new Date().toISOString(), ...record });
+  return writeNestedJSON(root, "deploys/checks.json", list.slice(0, 50));
+}
+
 /* ---------------- 文档清单 docs.json ---------------- */
 
 export function loadDocs() {

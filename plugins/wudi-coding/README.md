@@ -427,6 +427,15 @@ plugins/wudi-coding/
   - 面板**主动打开编辑器**：收到 `get_design_status` 的 `live:false` 或「编辑器未打开」失败结果时，自动打开该画布编辑器——Agent 稍后重试即可写入了。
 - 注意：本机 homebrew Node 24 依赖损坏（libsimdjson 缺失），openpencil 的 web 构建暂不可用；本次服务端补丁直接应用于 vendored dist（与源码补丁一致）。
 
+## 一键上线 wudi_ship（v0.49.0）
+
+- **`wudi_ship`**（总览「一键上线」按钮 / Agent 直接调用）：
+  1. 先跑**完整发布就绪检查**（测试 + 构建实际执行，含新增「需求验收」项）；
+  2. 未就绪 → 返回 ✗ 清单并**中止**（即使 `confirm: true` 也不部署）；
+  3. 就绪 + `confirm: true` → 直接执行部署流水线（build→package→upload→remote→verify），发布记录与健康趋势自动生成。
+- 每次检查结果留存 `.wudi/<项目名>/deploys/checks.json`（最近 50 次，含 `recordedAt`）；总览显示上次检查时间。
+- 回归：smoke **194 项全绿**（+4）。
+
 ## CI/CD 工作流生成（v0.48.0）
 
 - **`wudi_ci_generate`**（部署页一键「生成 CI/CD 工作流」）：

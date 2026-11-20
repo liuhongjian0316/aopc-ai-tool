@@ -538,6 +538,14 @@ async function protocolTests() {
         && (await readFile(join(workdir, ".github", "workflows", "cd.yml"), "utf8")).includes("SSH_HOST")
         && (await readFile(join(workdir, ".github", "workflows", "cd.yml"), "utf8")).includes("/srv/smoke-hc"),
         textOf(r).slice(0, 160));
+      /* ---- 一键上线（检查门禁 + 检查留存）---- */
+      r = await s.call("tools/call", { name: "wudi_ship", arguments: { root: archProj } });
+      check("ship: 未就绪中止并列清单", errOf(r) && textOf(r).includes("尚未就绪") && textOf(r).includes("部署配置"));
+      r = await s.call("tools/call", { name: "wudi_ship", arguments: { root: archProj, confirm: true } });
+      check("ship: 未就绪时 confirm 也不部署", errOf(r) && textOf(r).includes("未执行部署"));
+      r = await s.call("tools/call", { name: "wudi_release_check", arguments: {} });
+      check("ship: 检查结果留存 recordedAt", !errOf(r) && !!r?.result?.structuredContent?.recordedAt);
+      check("ship: checks.json 落盘 .wudi/<项目名>/deploys/", existsSync(join(workdir, ".wudi", wsBase, "deploys", "checks.json")));
     } finally {
       await rm(outside, { recursive: true, force: true });
     }

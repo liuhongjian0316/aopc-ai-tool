@@ -370,6 +370,15 @@ function appendHealthAt(root, record) {
   list.unshift({ at: (/* @__PURE__ */ new Date()).toISOString(), ...record });
   return writeNestedJSON(root, "deploys/health.json", list.slice(0, 100));
 }
+function loadChecksAt(root) {
+  const list = readNestedJSON(root, "deploys/checks.json", []);
+  return Array.isArray(list) ? list : [];
+}
+function appendCheckAt(root, record) {
+  const list = loadChecksAt(root);
+  list.unshift({ at: (/* @__PURE__ */ new Date()).toISOString(), ...record });
+  return writeNestedJSON(root, "deploys/checks.json", list.slice(0, 50));
+}
 function loadDocs() {
   return readJSONAt(projectRoot(), "docs.json", []);
 }
@@ -821,6 +830,7 @@ function registrySummaries(currentRoot = "", wsRoot = projectRoot()) {
 export {
   CANVAS_SHAPE_TYPES,
   PROJECT_TEMPLATE,
+  appendCheckAt,
   appendDeploy,
   appendHealthAt,
   archModelPathFor,
@@ -838,6 +848,7 @@ export {
   isProjectRootHidden,
   listEnvNames,
   loadCanvas,
+  loadChecksAt,
   loadDeploys,
   loadDeploysAt,
   loadDocs,

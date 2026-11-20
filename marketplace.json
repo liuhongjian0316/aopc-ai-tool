@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.48.0",
+      "version": "0.49.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,16 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.49.0",
+          "date": "2026-11-20",
+          "changes": [
+            "新增 wudi_ship 一键上线：先跑完整发布就绪检查（测试+构建实际执行）——未就绪返回清单并中止（confirm 也不部署）；就绪后 confirm: true 直接走部署流水线，发布记录与健康趋势自动生成",
+            "release_check 新增「需求验收」项（需求清单全部完成才通过，可选）并把每次检查结果留存到 .wudi/<项目名>/deploys/checks.json（最近 50 次，含 recordedAt）",
+            "总览发布就绪卡新增「一键上线」按钮（确认弹窗→检查→部署）与上次检查时间",
+            "smoke +4（194 全绿）：未就绪中止、confirm 不部署、结果留存、checks.json 落盘"
+          ]
+        },
         {
           "version": "0.48.0",
           "date": "2026-11-20",

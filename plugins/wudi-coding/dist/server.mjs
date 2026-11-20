@@ -382,6 +382,15 @@ function appendHealthAt(root, record) {
   list.unshift({ at: (/* @__PURE__ */ new Date()).toISOString(), ...record });
   return writeNestedJSON(root, "deploys/health.json", list.slice(0, 100));
 }
+function loadChecksAt(root) {
+  const list = readNestedJSON(root, "deploys/checks.json", []);
+  return Array.isArray(list) ? list : [];
+}
+function appendCheckAt(root, record) {
+  const list = loadChecksAt(root);
+  list.unshift({ at: (/* @__PURE__ */ new Date()).toISOString(), ...record });
+  return writeNestedJSON(root, "deploys/checks.json", list.slice(0, 50));
+}
 function registerDocAt(root, { path: docPath, type = "doc", title = "", source = "" }) {
   if (!docPath) throw new Error("\u7F3A\u5C11 path\uFF1A\u8981\u767B\u8BB0\u7684\u6587\u6863\u8DEF\u5F84\u3002");
   const list = (loadDocsAt(root) ?? []).filter((d) => d.path !== docPath);
@@ -1593,6 +1602,21 @@ var TOOLS = [
     }
   },
   {
+    name: "wudi_ship",
+    description: "\u4E00\u952E\u4E0A\u7EBF\uFF1A\u5148\u8DD1\u5B8C\u6574\u53D1\u5E03\u5C31\u7EEA\u68C0\u67E5\uFF08\u6D4B\u8BD5+\u6784\u5EFA\u5B9E\u9645\u6267\u884C\uFF09\u2014\u2014\u672A\u5C31\u7EEA\u8FD4\u56DE\u6E05\u5355\u5E76\u4E2D\u6B62\uFF1B\u5C31\u7EEA\u540E confirm: true \u76F4\u63A5\u6267\u884C\u90E8\u7F72\u6D41\u6C34\u7EBF\uFF0C\u53D1\u5E03\u8BB0\u5F55\u4E0E\u5065\u5EB7\u8D8B\u52BF\u81EA\u52A8\u751F\u6210\u3002\u751F\u4EA7\u73AF\u5883\u914D\u7F6E\u4E86 confirmWord \u65F6\u6D41\u6C34\u7EBF\u4F1A\u8981\u6C42\u4E8C\u6B21\u786E\u8BA4\u3002",
+    inputSchema: {
+      type: "object",
+      properties: {
+        env: { type: "string", description: "\u76EE\u6807\u73AF\u5883\uFF08staging/prod \u7B49\uFF0C\u7F3A\u7701 default\uFF09" },
+        confirm: { type: "boolean", description: "\u5FC5\u987B\u4E3A true \u624D\u771F\u6B63\u90E8\u7F72" },
+        runTests: { type: "boolean", description: "\u662F\u5426\u6267\u884C\u6D4B\u8BD5\uFF0C\u9ED8\u8BA4 true" },
+        timeoutSec: { type: "number", description: "\u6D4B\u8BD5/\u6784\u5EFA\u8D85\u65F6\u79D2\u6570\uFF0C\u9ED8\u8BA4 180" },
+        pruneOld: { type: "boolean", description: "\u90E8\u7F72\u6210\u529F\u540E\u6E05\u7406\u670D\u52A1\u5668\u65E7\u7248\u672C" },
+        root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF09" }
+      }
+    }
+  },
+  {
     name: "wudi_health_trend",
     description: "\u5065\u5EB7\u8D8B\u52BF\uFF1A\u6700\u8FD1 N \u6B21\u5065\u5EB7\u68C0\u67E5\u8BB0\u5F55\uFF08\u90E8\u7F72 verify \u4E0E wudi_health_check \u81EA\u52A8\u5199\u5165 .wudi/<\u9879\u76EE\u540D>/deploys/health.json\uFF09\uFF0C\u6309\u65F6\u95F4\u5012\u5E8F\uFF0C\u542B\u73AF\u5883/URL/\u72B6\u6001/\u5173\u8054\u7248\u672C\u3002",
     inputSchema: {
@@ -2047,6 +2071,8 @@ async function callTool(name, args = {}) {
         return toolHealthTrend(args);
       case "wudi_ci_generate":
         return toolCiGenerate(args);
+      case "wudi_ship":
+        return await toolShip(args);
       case "wudi_docs_register":
         return toolDocsRegister(args);
       case "wudi_ssh_ping":
@@ -5987,6 +6013,13 @@ async function toolReleaseCheck(args = {}) {
   const docs = loadDocsAt(root);
   const hasDeployDoc = docs.some((d) => /deploy/i.test(d.path));
   add("\u6587\u6863", docs.length > 0, `${docs.length} \u4EFD\u767B\u8BB0\u6587\u6863${hasDeployDoc ? "\uFF08\u542B\u90E8\u7F72\u624B\u518C\uFF09" : ""}`);
+  const requirements = loadRequirementsAt(root);
+  const reqDone = requirements.filter((r) => r.status === "done").length;
+  add(
+    "\u9700\u6C42\u9A8C\u6536",
+    requirements.length === 0 ? true : reqDone === requirements.length,
+    requirements.length ? `${reqDone}/${requirements.length} \u5B8C\u6210` : "\u672A\u4F7F\u7528\u9700\u6C42\u6E05\u5355\uFF08\u53EF\u9009\uFF0Cwudi_req_add \u8BB0\u5F55\uFF09"
+  );
   const deploys = loadDeploysAt(root);
   const last = deploys[0];
   add(
@@ -5997,12 +6030,22 @@ async function toolReleaseCheck(args = {}) {
   const okCount = items.filter((i) => i.ok).length;
   const criticalNames = ["\u90E8\u7F72\u914D\u7F6E", "\u5065\u5EB7\u68C0\u67E5", "SSH \u670D\u52A1\u5668", "\u4EE3\u7801\u63D0\u4EA4\uFF08git\uFF09"];
   const ready = items.filter((i) => criticalNames.includes(i.name)).every((i) => i.ok);
+  try {
+    appendCheckAt(root, {
+      ready,
+      score: `${okCount}/${items.length}`,
+      items: items.map((i) => ({ name: i.name, ok: i.ok })),
+      runTests,
+      runBuild
+    });
+  } catch {
+  }
   const text = [
     `\u2550\u2550\u2550 \u53D1\u5E03\u5C31\u7EEA\u68C0\u67E5\uFF1A${ready ? "\u2705 \u53EF\u4EE5\u53D1\u5E03" : "\u26A0\uFE0F \u5C1A\u672A\u5C31\u7EEA"}\uFF08${okCount}/${items.length} \u9879\u901A\u8FC7\uFF09\u2550\u2550\u2550`,
     ...items.map((i) => `${i.ok ? "\u2713" : "\u2717"} ${i.name}\uFF1A${i.detail}`),
     ready ? "\u4E0B\u4E00\u6B65\uFF1Awudi_deploy {confirm:true} \u53D1\u5E03\uFF08\u751F\u4EA7\u73AF\u5883\u8BB0\u5F97 confirmWord\uFF09\u3002" : "\u5148\u89E3\u51B3\u4E0A\u9762\u6807 \u2717 \u7684\u5173\u952E\u9879\uFF08\u90E8\u7F72\u914D\u7F6E / \u5065\u5EB7\u68C0\u67E5 / SSH / \u4EE3\u7801\u63D0\u4EA4\uFF09\u3002"
   ].join("\n");
-  return ok(text, { ready, score: `${okCount}/${items.length}`, items, runTests, runBuild });
+  return ok(text, { ready, score: `${okCount}/${items.length}`, items, runTests, runBuild, recordedAt: (/* @__PURE__ */ new Date()).toISOString() });
 }
 async function writeReleaseNotesFor(root, tag = "") {
   const project = loadProjectAt(root);
@@ -6214,6 +6257,58 @@ function toolCiGenerate(args = {}) {
     created.some((f) => f.endsWith("cd.yml")) ? "\u6CE8\u610F\uFF1A\u5728\u4ED3\u5E93 Settings \u2192 Secrets \u914D\u7F6E SSH_HOST / SSH_USER / SSH_KEY \u540E\uFF0C\u6253 tag\uFF08v*\uFF09\u5373\u81EA\u52A8\u90E8\u7F72\u3002" : "CI \u4F1A\u5728 push/PR \u65F6\u81EA\u52A8\u5B89\u88C5\u4F9D\u8D56\u5E76\u8DD1\u6784\u5EFA\u4E0E\u6D4B\u8BD5\u3002"
   ].filter(Boolean).join("\n");
   return ok(text, { provider, created, skipped, failed });
+}
+async function toolShip(args = {}) {
+  let root;
+  try {
+    root = toolRoot(args);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  const env = args?.env ? String(args.env) : void 0;
+  const confirm = args?.confirm === true;
+  const runTests = args?.runTests !== false;
+  const timeoutSec = args?.timeoutSec;
+  const check = await toolReleaseCheck({ root, runTests, runBuild: true, timeoutSec });
+  const sc = check.structuredContent ?? {};
+  if (!sc.ready) {
+    return fail(
+      [
+        `\u2550\u2550\u2550 \u4E00\u952E\u4E0A\u7EBF\u4E2D\u6B62\uFF1A\u5C1A\u672A\u5C31\u7EEA\uFF08${sc.score}\uFF09\u2550\u2550\u2550`,
+        ...(sc.items ?? []).map((i) => `${i.ok ? "\u2713" : "\u2717"} ${i.name}\uFF1A${i.detail}`),
+        "",
+        "\u672A\u6267\u884C\u90E8\u7F72\u3002\u89E3\u51B3\u4E0A\u9762\u6807 \u2717 \u7684\u5173\u952E\u9879\uFF08\u90E8\u7F72\u914D\u7F6E / \u5065\u5EB7\u68C0\u67E5 / SSH / \u4EE3\u7801\u63D0\u4EA4\uFF09\u540E\u91CD\u8BD5\u3002"
+      ].join("\n"),
+      { ready: false, score: sc.score, items: sc.items, deployed: false }
+    );
+  }
+  if (!confirm) {
+    return ok(
+      [
+        `\u2550\u2550\u2550 \u4E00\u952E\u4E0A\u7EBF\u9884\u68C0\u901A\u8FC7\uFF08${sc.score}\uFF09\u2550\u2550\u2550`,
+        ...(sc.items ?? []).map((i) => `${i.ok ? "\u2713" : "\u25CB"} ${i.name}\uFF1A${i.detail}`),
+        "",
+        `\u76EE\u6807\u73AF\u5883\uFF1A${env || "default"}\u3002\u4F20 confirm: true \u6267\u884C\u4E0A\u7EBF\uFF1A\u90E8\u7F72\u6D41\u6C34\u7EBF\uFF08build\u2192package\u2192upload\u2192remote\u2192verify\uFF09+ \u53D1\u5E03\u8BB0\u5F55\u4E0E\u5065\u5EB7\u8D8B\u52BF\u81EA\u52A8\u751F\u6210\u3002`
+      ].join("\n"),
+      { ready: true, score: sc.score, items: sc.items, deployed: false }
+    );
+  }
+  const deployRes = await toolDeploy({ confirm: true, ...env ? { env } : {}, ...args?.pruneOld !== void 0 ? { pruneOld: args.pruneOld } : {} });
+  const deployText = deployRes?.content?.[0]?.text ?? "";
+  if (deployRes.isError) {
+    return fail(`\u5C31\u7EEA\u68C0\u67E5\u901A\u8FC7\uFF08${sc.score}\uFF09\uFF0C\u4F46\u90E8\u7F72\u5931\u8D25\uFF1A
+${deployText.slice(0, 1e3)}`);
+  }
+  const deploySc = deployRes.structuredContent ?? {};
+  return ok(
+    [
+      `\u2550\u2550\u2550 \u4E00\u952E\u4E0A\u7EBF\u5B8C\u6210\uFF08${sc.score}\uFF09\u2550\u2550\u2550`,
+      ...(sc.items ?? []).map((i) => `\u2713 ${i.name}\uFF1A${i.detail}`),
+      "",
+      deployText
+    ].join("\n"),
+    { ready: true, deployed: true, score: sc.score, items: sc.items, deploy: deploySc.deploy ?? null }
+  );
 }
 function toolProjectsList() {
   const root = projectRoot();
@@ -6920,7 +7015,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.48.0" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.49.0" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());

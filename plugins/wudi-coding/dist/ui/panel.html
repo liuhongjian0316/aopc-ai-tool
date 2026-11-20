@@ -525,7 +525,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.48.0" },
+    { name: "wudi-coding", version: "0.49.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -950,7 +950,8 @@ const EmptyResultSchema = {
         <div class="btnrow">
           <button class="btn" id="btn-release-quick" ${state.busy ? "disabled" : ""}>快速检查</button>
           <button class="btn" id="btn-release-full" ${state.busy ? "disabled" : ""}>完整检查（含测试·构建）</button>
-          ${rc ? `<span class="badge ${rc.ready ? "ok" : "err"}">${rc.ready ? "可以发布" : "尚未就绪"} · ${esc(rc.score)}</span>` : ""}
+          <button class="btn primary" id="btn-ship" ${state.busy || isForeignProject() || !state.data?.project ? "disabled" : ""}>一键上线</button>
+          ${rc ? `<span class="badge ${rc.ready ? "ok" : "err"}">${rc.ready ? "可以发布" : "尚未就绪"} · ${esc(rc.score)}</span>${rc.recordedAt ? `<span class="muted">上次检查 ${esc(fmtTime(rc.recordedAt))}</span>` : ""}` : ""}
         </div>
         ${rc ? `<div class="kv" style="margin-top:8px">${rc.items.map((i) =>
           `<span class="k">${i.ok ? "✓" : "✗"} ${esc(i.name)}</span><span class="v plain">${esc(i.detail)}</span>`
@@ -1817,7 +1818,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.48.0" },
+              hostInfo: { name: "wudi-workbench", version: "0.49.0" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -1980,6 +1981,24 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
   function bindOverviewActions() {
     document.getElementById("btn-release-quick")?.addEventListener("click", () => runReleaseCheck(false));
     document.getElementById("btn-release-full")?.addEventListener("click", () => runReleaseCheck(true));
+    document.getElementById("btn-ship")?.addEventListener("click", async () => {
+      const envName = state.env || state.data?.currentEnv || "default";
+      const okGo = await confirmDialog(`一键上线：先做完整检查（测试+构建），通过后直接部署到「${envName}」？`);
+      if (!okGo) return;
+      setBusy(true);
+      try {
+        const res = await callTool("wudi_ship", { confirm: true, ...(state.env ? { env: state.env } : {}), ...rootArg() });
+        const sc = struct(res);
+        state.notice = sc?.deployed
+          ? { kind: "ok", text: `一键上线完成：版本 ${(sc.deploy?.release) ?? ""} 已部署` }
+          : { kind: "err", text: "一键上线中止：尚未就绪（见检查清单）" };
+        state.releaseCheck = { ready: sc?.ready ?? false, score: sc?.score ?? "", items: sc?.items ?? [], recordedAt: new Date().toISOString() };
+      } catch (err) {
+        state.notice = { kind: "err", text: `上线失败：${String(err.message ?? err).slice(0, 400)}` };
+      }
+      setBusy(false);
+      await loadAll();
+    });
     document.getElementById("btn-req-add")?.addEventListener("click", async () => {
       const title = String(document.getElementById("req-title")?.value ?? "").trim();
       if (!title) { state.notice = { kind: "err", text: "请填需求标题" }; render(); return; }
