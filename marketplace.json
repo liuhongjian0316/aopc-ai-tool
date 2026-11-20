@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.47.0",
+      "version": "0.48.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,16 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.48.0",
+          "date": "2026-11-20",
+          "changes": [
+            "新增 wudi_ci_generate：一键生成 GitHub Actions —— ci.yml（push/PR 自动安装依赖 + 构建 + 测试，按 pnpm/yarn/bun/npm 与 engines.node 适配）；withCd=true 且档案已配 deployRoot 时另生成 cd.yml（打 tag 触发：构建 → scp 上传 → SSH 切换软链/重启 → 健康检查）",
+            "cd.yml 使用 SSH_HOST / SSH_USER / SSH_KEY secrets 占位；已存在文件不覆盖（overwrite: true）",
+            "部署页新增「生成 CI/CD 工作流」按钮",
+            "smoke +4（190 全绿）：ci.yml 生成与内容、已存在不覆盖、未配部署根不出 cd.yml、配好后 cd.yml 含 secrets 占位与部署根"
+          ]
+        },
         {
           "version": "0.47.0",
           "date": "2026-11-20",

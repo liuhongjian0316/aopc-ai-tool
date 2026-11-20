@@ -427,6 +427,15 @@ plugins/wudi-coding/
   - 面板**主动打开编辑器**：收到 `get_design_status` 的 `live:false` 或「编辑器未打开」失败结果时，自动打开该画布编辑器——Agent 稍后重试即可写入了。
 - 注意：本机 homebrew Node 24 依赖损坏（libsimdjson 缺失），openpencil 的 web 构建暂不可用；本次服务端补丁直接应用于 vendored dist（与源码补丁一致）。
 
+## CI/CD 工作流生成（v0.48.0）
+
+- **`wudi_ci_generate`**（部署页一键「生成 CI/CD 工作流」）：
+  - `ci.yml`：push / PR 自动 **安装依赖 → 构建 → 测试**（按 pnpm/yarn/bun/npm 与 `engines.node` 适配，setup-node 缓存）；
+  - `withCd: true` 且档案已配 `deployRoot` 时另生成 `cd.yml`：**打 tag（v*）触发** → 构建 → `scp-action` 上传产物 → `ssh-action` 切换软链/执行 remoteScript → `curl` 健康检查；
+  - `cd.yml` 使用 `SSH_HOST / SSH_USER / SSH_KEY` secrets 占位（仓库 Settings → Secrets 配置）；
+  - 已存在文件不覆盖（`overwrite: true` 覆盖）；未配部署根时不生成 cd.yml 并提示先完善档案。
+- 回归：smoke **190 项全绿**（+4）。
+
 ## 部署后自动闭环（v0.47.0）
 
 - **发布记录自动生成**：部署 verify 通过后自动生成 `deploy-<版本>.md`（自上个 tag 的 feat/fix 分组 + 本次部署信息），写入 `docs/releases/` 并登记，部署记录新增 `releaseNotes` 字段、部署页条目里直接显示路径。

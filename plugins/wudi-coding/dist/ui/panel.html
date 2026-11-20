@@ -525,7 +525,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.47.0" },
+    { name: "wudi-coding", version: "0.48.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -1021,6 +1021,7 @@ const EmptyResultSchema = {
           <button class="btn primary" id="btn-deploy" ${state.busy || !state.data?.project || isForeignProject() ? "disabled" : ""}>部署新版本…</button>
           <button class="btn" id="btn-health" ${state.busy || isForeignProject() ? "disabled" : ""}>健康检查</button>
           <button class="btn danger" id="btn-rollback" ${state.busy || !deploys.length || isForeignProject() ? "disabled" : ""}>回滚上一版…</button>
+          <button class="btn" id="btn-ci-generate" ${state.busy || isForeignProject() ? "disabled" : ""} title="生成 GitHub Actions：CI（构建+测试）与 CD（tag 触发 SSH 部署）">生成 CI/CD 工作流</button>
           <span class="muted">${isForeignProject() ? "查看其他项目：部署/回滚/体检请在该项目工作区进行（此处只读）" : "均先出预检计划，确认后执行（走宿主审批）"}</span>
         </div>
       </div>
@@ -1816,7 +1817,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.47.0" },
+              hostInfo: { name: "wudi-workbench", version: "0.48.0" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -2256,6 +2257,18 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
         successText: "回滚完成",
       })
     );
+    document.getElementById("btn-ci-generate")?.addEventListener("click", async () => {
+      setBusy(true);
+      try {
+        const res = await callTool("wudi_ci_generate", { withCd: true, ...rootArg() });
+        const sc = struct(res);
+        state.notice = { kind: "ok", text: `CI/CD 工作流已生成：${(sc?.created ?? []).join("、") || "无新建（已存在）"}` };
+      } catch (err) {
+        state.notice = { kind: "err", text: `生成失败：${String(err.message ?? err).slice(0, 300)}` };
+      }
+      setBusy(false);
+      await loadAll();
+    });
     document.getElementById("btn-deploy")?.addEventListener("click", async () => {
       const policy = state.data?.resolved?.deployPolicy ?? "confirm";
       const hasWord = !!state.data?.resolved?.confirmWord;

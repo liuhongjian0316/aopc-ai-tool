@@ -521,6 +521,23 @@ async function protocolTests() {
       r = await s.call("tools/call", { name: "wudi_deploy_history", arguments: {} });
       const trend2 = r?.result?.structuredContent?.healthTrend ?? [];
       check("hc_trend: 失败记录在趋势里", trend2.length === 2 && trend2[0].ok === false, JSON.stringify(trend2));
+      /* ---- CI/CD 工作流生成 ---- */
+      r = await s.call("tools/call", { name: "wudi_ci_generate", arguments: { root: archProj } });
+      check("ci: 生成 ci.yml（install/build/test）", !errOf(r)
+        && (r?.result?.structuredContent?.created ?? []).includes(".github/workflows/ci.yml")
+        && existsSync(join(archProj, ".github", "workflows", "ci.yml"))
+        && (await readFile(join(archProj, ".github", "workflows", "ci.yml"), "utf8")).includes("npm run build")
+        && (await readFile(join(archProj, ".github", "workflows", "ci.yml"), "utf8")).includes("npm run test"));
+      r = await s.call("tools/call", { name: "wudi_ci_generate", arguments: { root: archProj } });
+      check("ci: 已存在不覆盖", !errOf(r) && (r?.result?.structuredContent?.skipped ?? []).includes(".github/workflows/ci.yml"));
+      r = await s.call("tools/call", { name: "wudi_ci_generate", arguments: { withCd: true, root: archProj } });
+      check("ci: 未配部署根时不出 cd.yml", !errOf(r) && !existsSync(join(archProj, ".github", "workflows", "cd.yml")));
+      r = await s.call("tools/call", { name: "wudi_ci_generate", arguments: { withCd: true, overwrite: true } });
+      check("ci: 配置部署根后生成 cd.yml（secrets 占位）", !errOf(r)
+        && (r?.result?.structuredContent?.created ?? []).includes(".github/workflows/cd.yml")
+        && (await readFile(join(workdir, ".github", "workflows", "cd.yml"), "utf8")).includes("SSH_HOST")
+        && (await readFile(join(workdir, ".github", "workflows", "cd.yml"), "utf8")).includes("/srv/smoke-hc"),
+        textOf(r).slice(0, 160));
     } finally {
       await rm(outside, { recursive: true, force: true });
     }

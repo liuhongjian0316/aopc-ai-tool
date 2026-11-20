@@ -357,6 +357,19 @@ export const TOOLS = [
     },
   },
   {
+    name: "wudi_ci_generate",
+    description: "生成 CI/CD 工作流（github-actions）：ci.yml 在 push/PR 时安装依赖并跑构建与测试；withCd=true 且档案已配 deployRoot 时另生成 cd.yml（tag 触发 SSH 部署 + 健康检查，secrets 需配 SSH_HOST/SSH_USER/SSH_KEY）。已存在的文件不覆盖（overwrite: true 覆盖）。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        provider: { type: "string", enum: ["github-actions"], description: "CI 提供商，默认 github-actions" },
+        withCd: { type: "boolean", description: "同时生成 CD 部署工作流（需档案已配 deployRoot）" },
+        overwrite: { type: "boolean", description: "已存在时是否覆盖，默认 false" },
+        root: { type: "string", description: "项目根路径（缺省为当前工作区）" },
+      },
+    },
+  },
+  {
     name: "wudi_req_add",
     description: "添加一条需求到项目需求清单（.wudi/<项目名>/requirements.json）。开发过程中让 Agent 记录要做的事，落地进度一目了然。",
     inputSchema: {
@@ -786,6 +799,8 @@ export async function callTool(name, args = {}) {
         return await toolReleaseNotes(args);
       case "wudi_health_trend":
         return toolHealthTrend(args);
+      case "wudi_ci_generate":
+        return toolCiGenerate(args);
       case "wudi_docs_register":
         return toolDocsRegister(args);
       case "wudi_ssh_ping":
@@ -3728,7 +3743,138 @@ async function toolReleaseNotes(args: any = {}) {
   return ok(`发布记录已生成：${notes.path}（${notes.commits} 条提交）\n\n${md}`, notes);
 }
 
+/* ================= CI/CD 工作流生成 ================= */
+
+function toolCiGenerate(args: any = {}) {
+  let root;
+  try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
+  const provider = String(args?.provider ?? "github-actions").trim();
+  if (provider !== "github-actions") return fail(`暂只支持 provider=github-actions（收到 ${provider}）。`);
+  const overwrite = args?.overwrite === true;
+  const withCd = args?.withCd === true;
+  const project = store.loadProjectAt(root);
+  const actions = devActionsFor(root);
+  const pm = devPm(root);
+  let nodeVersion = "20";
+  try {
+    const engines = String(JSON.parse(readFileSync(join(root, "package.json"), "utf-8"))?.engines?.node ?? "");
+    const major = Number(engines.split(".")[0].replace(/\D/g, ""));
+    if (Number.isFinite(major) && major >= 18) nodeVersion = String(major);
+  } catch { /* 无 package.json/engines */ }
+  const installCmd = devInstallCommand(pm);
+  const buildCmd = project?.build || actions.find((a) => /build/i.test(a.id) || /build/i.test(a.command))?.command || "";
+  const testAction = actions.find((a) => /test/i.test(a.id) || /test/i.test(a.command));
+  const cacheKey = pm === "pnpm" ? "pnpm" : pm === "yarn" ? "yarn" : "npm";
+  const ci = [
+    `name: CI`,
+    ``,
+    `on:`,
+    `  push:`,
+    `    branches: [main, master]`,
+    `  pull_request:`,
+    ``,
+    `jobs:`,
+    `  build-test:`,
+    `    runs-on: ubuntu-latest`,
+    `    steps:`,
+    `      - uses: actions/checkout@v4`,
+    ...(pm === "pnpm" ? [`      - run: corepack enable`] : []),
+    `      - uses: actions/setup-node@v4`,
+    `        with:`,
+    `          node-version: ${nodeVersion}`,
+    `          cache: ${cacheKey}`,
+    `      - run: ${installCmd}`,
+    ...(buildCmd ? [`      - run: ${buildCmd}`] : []),
+    ...(testAction ? [`      - run: ${testAction.command}`] : []),
+    ``,
+  ].join("\n");
+
+  const created = [];
+  const skipped = [];
+  const failed = [];
+  const writeFile = (rel, content) => {
+    const relClean = String(rel).replace(/^\/+/, "");
+    if (relClean.includes("..") || /^[A-Za-z]:/.test(relClean)) { failed.push(relClean); return; }
+    const abs = resolve(root, relClean);
+    if (!abs.startsWith(resolve(root) + "/")) { failed.push(relClean); return; }
+    if (existsSync(abs) && !overwrite) { skipped.push(relClean); return; }
+    try {
+      mkdirSync(_dirname(abs), { recursive: true });
+      writeFileSync(abs, content);
+      created.push(relClean);
+    } catch {
+      failed.push(relClean);
+    }
+  };
+  writeFile(".github/workflows/ci.yml", ci);
+
+  /* CD（可选）：档案已配置 deployRoot 时生成 SSH 部署工作流（secrets 需在仓库配置） */
+  let cdNotes = "";
+  if (withCd) {
+    if (!project?.deployRoot) {
+      cdNotes = "cd.yml 未生成：项目档案缺少 deployRoot（先在「总览」完善部署配置）。";
+    } else {
+      const packagePath = project.package?.type === "docker-image" ? (project.package?.dockerImage || "dist") : (project.package?.path || "dist");
+      const remoteScript = project.remoteScript || "docker compose up -d";
+      const health = project.healthCheck?.url || "";
+      const cd = [
+        `name: CD`,
+        ``,
+        `on:`,
+        `  push:`,
+        `    tags: ["v*"]`,
+        ``,
+        `jobs:`,
+        `  deploy:`,
+        `    runs-on: ubuntu-latest`,
+        `    steps:`,
+        `      - uses: actions/checkout@v4`,
+        ...(pm === "pnpm" ? [`      - run: corepack enable`] : []),
+        `      - uses: actions/setup-node@v4`,
+        `        with:`,
+        `          node-version: ${nodeVersion}`,
+        `          cache: ${cacheKey}`,
+        `      - run: ${installCmd}`,
+        ...(buildCmd ? [`      - run: ${buildCmd}`] : []),
+        `      - name: 上传产物`,
+        `        uses: appleboy/scp-action@v0.1.7`,
+        `        with:`,
+        `          host: \${{ secrets.SSH_HOST }}`,
+        `          username: \${{ secrets.SSH_USER }}`,
+        `          key: \${{ secrets.SSH_KEY }}`,
+        `          source: "${packagePath}/*"`,
+        `          target: "${project.deployRoot}/releases/\${{ github.sha }}/"`,
+        `      - name: 切换版本 + 重启 + 健康检查`,
+        `        uses: appleboy/ssh-action@v1.0.3`,
+        `        with:`,
+        `          host: \${{ secrets.SSH_HOST }}`,
+        `          username: \${{ secrets.SSH_USER }}`,
+        `          key: \${{ secrets.SSH_KEY }}`,
+        `          script: |`,
+        `            ln -sfn ${project.deployRoot}/releases/\${{ github.sha }} ${project.deployRoot}/current`,
+        `            cd ${project.deployRoot} && ( ${remoteScript} )`,
+        ...(health ? [`            curl -fsS ${health}`] : [`            # 健康检查：档案未配置 healthCheck.url，请补充`]),
+        ``,
+        `# 需在仓库 Settings → Secrets 配置：SSH_HOST / SSH_USER / SSH_KEY`,
+      ].join("\n");
+      writeFile(".github/workflows/cd.yml", cd);
+    }
+  }
+  const text = [
+    `═══ CI/CD 工作流生成（github-actions）═══`,
+    created.length ? `新建：\n- ${created.join("\n- ")}` : "没有新建文件",
+    skipped.length ? `跳过（已存在，overwrite: true 覆盖）：\n- ${skipped.join("\n- ")}` : "",
+    failed.length ? `失败：\n- ${failed.join("\n- ")}` : "",
+    cdNotes,
+    created.some((f) => f.endsWith("cd.yml"))
+      ? "注意：在仓库 Settings → Secrets 配置 SSH_HOST / SSH_USER / SSH_KEY 后，打 tag（v*）即自动部署。"
+      : "CI 会在 push/PR 时自动安装依赖并跑构建与测试。",
+  ].filter(Boolean).join("\n");
+  return ok(text, { provider, created, skipped, failed });
+}
+
 /* ================= 项目注册表（跨项目管理） ================= */
+
 
 
 

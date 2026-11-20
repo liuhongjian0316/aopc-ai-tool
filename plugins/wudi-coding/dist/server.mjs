@@ -1604,6 +1604,19 @@ var TOOLS = [
     }
   },
   {
+    name: "wudi_ci_generate",
+    description: "\u751F\u6210 CI/CD \u5DE5\u4F5C\u6D41\uFF08github-actions\uFF09\uFF1Aci.yml \u5728 push/PR \u65F6\u5B89\u88C5\u4F9D\u8D56\u5E76\u8DD1\u6784\u5EFA\u4E0E\u6D4B\u8BD5\uFF1BwithCd=true \u4E14\u6863\u6848\u5DF2\u914D deployRoot \u65F6\u53E6\u751F\u6210 cd.yml\uFF08tag \u89E6\u53D1 SSH \u90E8\u7F72 + \u5065\u5EB7\u68C0\u67E5\uFF0Csecrets \u9700\u914D SSH_HOST/SSH_USER/SSH_KEY\uFF09\u3002\u5DF2\u5B58\u5728\u7684\u6587\u4EF6\u4E0D\u8986\u76D6\uFF08overwrite: true \u8986\u76D6\uFF09\u3002",
+    inputSchema: {
+      type: "object",
+      properties: {
+        provider: { type: "string", enum: ["github-actions"], description: "CI \u63D0\u4F9B\u5546\uFF0C\u9ED8\u8BA4 github-actions" },
+        withCd: { type: "boolean", description: "\u540C\u65F6\u751F\u6210 CD \u90E8\u7F72\u5DE5\u4F5C\u6D41\uFF08\u9700\u6863\u6848\u5DF2\u914D deployRoot\uFF09" },
+        overwrite: { type: "boolean", description: "\u5DF2\u5B58\u5728\u65F6\u662F\u5426\u8986\u76D6\uFF0C\u9ED8\u8BA4 false" },
+        root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF09" }
+      }
+    }
+  },
+  {
     name: "wudi_req_add",
     description: "\u6DFB\u52A0\u4E00\u6761\u9700\u6C42\u5230\u9879\u76EE\u9700\u6C42\u6E05\u5355\uFF08.wudi/<\u9879\u76EE\u540D>/requirements.json\uFF09\u3002\u5F00\u53D1\u8FC7\u7A0B\u4E2D\u8BA9 Agent \u8BB0\u5F55\u8981\u505A\u7684\u4E8B\uFF0C\u843D\u5730\u8FDB\u5EA6\u4E00\u76EE\u4E86\u7136\u3002",
     inputSchema: {
@@ -2032,6 +2045,8 @@ async function callTool(name, args = {}) {
         return await toolReleaseNotes(args);
       case "wudi_health_trend":
         return toolHealthTrend(args);
+      case "wudi_ci_generate":
+        return toolCiGenerate(args);
       case "wudi_docs_register":
         return toolDocsRegister(args);
       case "wudi_ssh_ping":
@@ -6061,6 +6076,145 @@ async function toolReleaseNotes(args = {}) {
 
 ${md}`, notes);
 }
+function toolCiGenerate(args = {}) {
+  let root;
+  try {
+    root = toolRoot(args);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  const provider = String(args?.provider ?? "github-actions").trim();
+  if (provider !== "github-actions") return fail(`\u6682\u53EA\u652F\u6301 provider=github-actions\uFF08\u6536\u5230 ${provider}\uFF09\u3002`);
+  const overwrite = args?.overwrite === true;
+  const withCd = args?.withCd === true;
+  const project = loadProjectAt(root);
+  const actions = devActionsFor(root);
+  const pm = devPm(root);
+  let nodeVersion = "20";
+  try {
+    const engines = String(JSON.parse(readFileSync2(join3(root, "package.json"), "utf-8"))?.engines?.node ?? "");
+    const major = Number(engines.split(".")[0].replace(/\D/g, ""));
+    if (Number.isFinite(major) && major >= 18) nodeVersion = String(major);
+  } catch {
+  }
+  const installCmd = devInstallCommand(pm);
+  const buildCmd = project?.build || actions.find((a) => /build/i.test(a.id) || /build/i.test(a.command))?.command || "";
+  const testAction = actions.find((a) => /test/i.test(a.id) || /test/i.test(a.command));
+  const cacheKey = pm === "pnpm" ? "pnpm" : pm === "yarn" ? "yarn" : "npm";
+  const ci = [
+    `name: CI`,
+    ``,
+    `on:`,
+    `  push:`,
+    `    branches: [main, master]`,
+    `  pull_request:`,
+    ``,
+    `jobs:`,
+    `  build-test:`,
+    `    runs-on: ubuntu-latest`,
+    `    steps:`,
+    `      - uses: actions/checkout@v4`,
+    ...pm === "pnpm" ? [`      - run: corepack enable`] : [],
+    `      - uses: actions/setup-node@v4`,
+    `        with:`,
+    `          node-version: ${nodeVersion}`,
+    `          cache: ${cacheKey}`,
+    `      - run: ${installCmd}`,
+    ...buildCmd ? [`      - run: ${buildCmd}`] : [],
+    ...testAction ? [`      - run: ${testAction.command}`] : [],
+    ``
+  ].join("\n");
+  const created = [];
+  const skipped = [];
+  const failed = [];
+  const writeFile = (rel, content) => {
+    const relClean = String(rel).replace(/^\/+/, "");
+    if (relClean.includes("..") || /^[A-Za-z]:/.test(relClean)) {
+      failed.push(relClean);
+      return;
+    }
+    const abs = resolve3(root, relClean);
+    if (!abs.startsWith(resolve3(root) + "/")) {
+      failed.push(relClean);
+      return;
+    }
+    if (existsSync3(abs) && !overwrite) {
+      skipped.push(relClean);
+      return;
+    }
+    try {
+      mkdirSync2(_dirname(abs), { recursive: true });
+      writeFileSync2(abs, content);
+      created.push(relClean);
+    } catch {
+      failed.push(relClean);
+    }
+  };
+  writeFile(".github/workflows/ci.yml", ci);
+  let cdNotes = "";
+  if (withCd) {
+    if (!project?.deployRoot) {
+      cdNotes = "cd.yml \u672A\u751F\u6210\uFF1A\u9879\u76EE\u6863\u6848\u7F3A\u5C11 deployRoot\uFF08\u5148\u5728\u300C\u603B\u89C8\u300D\u5B8C\u5584\u90E8\u7F72\u914D\u7F6E\uFF09\u3002";
+    } else {
+      const packagePath = project.package?.type === "docker-image" ? project.package?.dockerImage || "dist" : project.package?.path || "dist";
+      const remoteScript = project.remoteScript || "docker compose up -d";
+      const health = project.healthCheck?.url || "";
+      const cd = [
+        `name: CD`,
+        ``,
+        `on:`,
+        `  push:`,
+        `    tags: ["v*"]`,
+        ``,
+        `jobs:`,
+        `  deploy:`,
+        `    runs-on: ubuntu-latest`,
+        `    steps:`,
+        `      - uses: actions/checkout@v4`,
+        ...pm === "pnpm" ? [`      - run: corepack enable`] : [],
+        `      - uses: actions/setup-node@v4`,
+        `        with:`,
+        `          node-version: ${nodeVersion}`,
+        `          cache: ${cacheKey}`,
+        `      - run: ${installCmd}`,
+        ...buildCmd ? [`      - run: ${buildCmd}`] : [],
+        `      - name: \u4E0A\u4F20\u4EA7\u7269`,
+        `        uses: appleboy/scp-action@v0.1.7`,
+        `        with:`,
+        `          host: \${{ secrets.SSH_HOST }}`,
+        `          username: \${{ secrets.SSH_USER }}`,
+        `          key: \${{ secrets.SSH_KEY }}`,
+        `          source: "${packagePath}/*"`,
+        `          target: "${project.deployRoot}/releases/\${{ github.sha }}/"`,
+        `      - name: \u5207\u6362\u7248\u672C + \u91CD\u542F + \u5065\u5EB7\u68C0\u67E5`,
+        `        uses: appleboy/ssh-action@v1.0.3`,
+        `        with:`,
+        `          host: \${{ secrets.SSH_HOST }}`,
+        `          username: \${{ secrets.SSH_USER }}`,
+        `          key: \${{ secrets.SSH_KEY }}`,
+        `          script: |`,
+        `            ln -sfn ${project.deployRoot}/releases/\${{ github.sha }} ${project.deployRoot}/current`,
+        `            cd ${project.deployRoot} && ( ${remoteScript} )`,
+        ...health ? [`            curl -fsS ${health}`] : [`            # \u5065\u5EB7\u68C0\u67E5\uFF1A\u6863\u6848\u672A\u914D\u7F6E healthCheck.url\uFF0C\u8BF7\u8865\u5145`],
+        ``,
+        `# \u9700\u5728\u4ED3\u5E93 Settings \u2192 Secrets \u914D\u7F6E\uFF1ASSH_HOST / SSH_USER / SSH_KEY`
+      ].join("\n");
+      writeFile(".github/workflows/cd.yml", cd);
+    }
+  }
+  const text = [
+    `\u2550\u2550\u2550 CI/CD \u5DE5\u4F5C\u6D41\u751F\u6210\uFF08github-actions\uFF09\u2550\u2550\u2550`,
+    created.length ? `\u65B0\u5EFA\uFF1A
+- ${created.join("\n- ")}` : "\u6CA1\u6709\u65B0\u5EFA\u6587\u4EF6",
+    skipped.length ? `\u8DF3\u8FC7\uFF08\u5DF2\u5B58\u5728\uFF0Coverwrite: true \u8986\u76D6\uFF09\uFF1A
+- ${skipped.join("\n- ")}` : "",
+    failed.length ? `\u5931\u8D25\uFF1A
+- ${failed.join("\n- ")}` : "",
+    cdNotes,
+    created.some((f) => f.endsWith("cd.yml")) ? "\u6CE8\u610F\uFF1A\u5728\u4ED3\u5E93 Settings \u2192 Secrets \u914D\u7F6E SSH_HOST / SSH_USER / SSH_KEY \u540E\uFF0C\u6253 tag\uFF08v*\uFF09\u5373\u81EA\u52A8\u90E8\u7F72\u3002" : "CI \u4F1A\u5728 push/PR \u65F6\u81EA\u52A8\u5B89\u88C5\u4F9D\u8D56\u5E76\u8DD1\u6784\u5EFA\u4E0E\u6D4B\u8BD5\u3002"
+  ].filter(Boolean).join("\n");
+  return ok(text, { provider, created, skipped, failed });
+}
 function toolProjectsList() {
   const root = projectRoot();
   try {
@@ -6766,7 +6920,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.47.0" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.48.0" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());
