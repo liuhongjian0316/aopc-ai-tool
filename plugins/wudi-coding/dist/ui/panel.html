@@ -525,7 +525,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.49.0" },
+    { name: "wudi-coding", version: "0.50.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -1448,6 +1448,7 @@ const EmptyResultSchema = {
       <div class="btnrow" style="margin-bottom:8px">
         <button class="btn" id="btn-weekly" ${state.busy || isForeignProject() ? "disabled" : ""}>生成周报</button>
         <button class="btn" id="btn-release-notes" ${state.busy ? "disabled" : ""}>生成发布记录</button>
+        <button class="btn" id="btn-handover" ${state.busy ? "disabled" : ""}>生成交接文档</button>
         <span class="muted">${isForeignProject() ? "查看其他项目：只读（生成周报请在该项目工作区进行）" : "周报：近 7 天 git 变更；发布记录：自上个 tag 的 feat/fix 分组 + 部署信息"}</span>
       </div>
       ${docs.length ? docs.map((d) =>
@@ -1818,7 +1819,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.49.0" },
+              hostInfo: { name: "wudi-workbench", version: "0.50.0" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -2030,6 +2031,17 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
       setBusy(false);
       await loadAll();
     }));
+    document.getElementById("btn-handover")?.addEventListener("click", async () => {
+      setBusy(true);
+      try {
+        const res = await callTool("wudi_handover", { ...rootArg() });
+        state.notice = { kind: "ok", text: `交接文档已生成：${struct(res)?.path ?? ""}` };
+      } catch (err) {
+        state.notice = { kind: "err", text: `生成失败：${String(err.message ?? err).slice(0, 300)}` };
+      }
+      setBusy(false);
+      await loadAll();
+    });
     document.getElementById("btn-release-notes")?.addEventListener("click", async () => {
       const tag = await inputDialog("发布 tag（留空按 package.json 版本 / 日期生成）", "");
       if (tag === null) return;

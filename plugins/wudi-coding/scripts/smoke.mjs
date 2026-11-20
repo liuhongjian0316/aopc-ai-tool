@@ -546,6 +546,13 @@ async function protocolTests() {
       r = await s.call("tools/call", { name: "wudi_release_check", arguments: {} });
       check("ship: 检查结果留存 recordedAt", !errOf(r) && !!r?.result?.structuredContent?.recordedAt);
       check("ship: checks.json 落盘 .wudi/<项目名>/deploys/", existsSync(join(workdir, ".wudi", wsBase, "deploys", "checks.json")));
+      /* ---- 交接文档 ---- */
+      r = await s.call("tools/call", { name: "wudi_handover", arguments: { root: archProj } });
+      const hoPath = r?.result?.structuredContent?.path ?? "";
+      const hoMd = hoPath ? await readFile(join(workdir, hoPath), "utf8").catch(() => "") : "";
+      check("handover: 生成并登记", !errOf(r) && hoPath.startsWith(".wudi/archproj/docs/handover-")
+        && hoMd.includes("## 1. 本地开发") && hoMd.includes("## 3. 部署") && hoMd.includes("## 4. 需求进度")
+        && hoMd.includes("登录页（手机端）") && hoMd.includes("1/1"), hoPath || "missing");
     } finally {
       await rm(outside, { recursive: true, force: true });
     }

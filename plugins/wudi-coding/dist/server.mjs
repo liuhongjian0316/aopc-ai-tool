@@ -1602,6 +1602,14 @@ var TOOLS = [
     }
   },
   {
+    name: "wudi_handover",
+    description: "\u751F\u6210\u4EA4\u63A5\u6587\u6863\uFF1A\u6C47\u603B\u9879\u76EE\u6982\u89C8\u3001\u672C\u5730\u5F00\u53D1\u547D\u4EE4\u3001\u67B6\u6784\uFF08\u542B ADR \u94FE\u63A5\uFF09\u3001\u90E8\u7F72\u65B9\u5F0F\u4E0E\u73AF\u5883\u3001\u9700\u6C42\u8FDB\u5EA6\u3001\u6700\u8FD1\u53D1\u5E03\u3001\u8FD0\u7EF4\uFF08\u5065\u5EB7\u8D8B\u52BF/\u65E5\u5FD7/\u56DE\u6EDA\uFF09\u3001\u6587\u6863\u7D22\u5F15\uFF0C\u5199\u5165 .wudi/<\u9879\u76EE\u540D>/docs/handover-<\u65F6\u95F4\u6233>.md \u5E76\u767B\u8BB0\u3002\u4EA4\u4ED8/\u79FB\u4EA4/\u590D\u76D8\u4E00\u952E\u5B8C\u6210\u3002",
+    inputSchema: {
+      type: "object",
+      properties: { root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF09" } }
+    }
+  },
+  {
     name: "wudi_ship",
     description: "\u4E00\u952E\u4E0A\u7EBF\uFF1A\u5148\u8DD1\u5B8C\u6574\u53D1\u5E03\u5C31\u7EEA\u68C0\u67E5\uFF08\u6D4B\u8BD5+\u6784\u5EFA\u5B9E\u9645\u6267\u884C\uFF09\u2014\u2014\u672A\u5C31\u7EEA\u8FD4\u56DE\u6E05\u5355\u5E76\u4E2D\u6B62\uFF1B\u5C31\u7EEA\u540E confirm: true \u76F4\u63A5\u6267\u884C\u90E8\u7F72\u6D41\u6C34\u7EBF\uFF0C\u53D1\u5E03\u8BB0\u5F55\u4E0E\u5065\u5EB7\u8D8B\u52BF\u81EA\u52A8\u751F\u6210\u3002\u751F\u4EA7\u73AF\u5883\u914D\u7F6E\u4E86 confirmWord \u65F6\u6D41\u6C34\u7EBF\u4F1A\u8981\u6C42\u4E8C\u6B21\u786E\u8BA4\u3002",
     inputSchema: {
@@ -2073,6 +2081,8 @@ async function callTool(name, args = {}) {
         return toolCiGenerate(args);
       case "wudi_ship":
         return await toolShip(args);
+      case "wudi_handover":
+        return await toolHandover(args);
       case "wudi_docs_register":
         return toolDocsRegister(args);
       case "wudi_ssh_ping":
@@ -6310,6 +6320,120 @@ ${deployText.slice(0, 1e3)}`);
     { ready: true, deployed: true, score: sc.score, items: sc.items, deploy: deploySc.deploy ?? null }
   );
 }
+async function toolHandover(args = {}) {
+  let root;
+  try {
+    root = toolRoot(args);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  const project = loadProjectAt(root);
+  const pkg = (() => {
+    try {
+      return JSON.parse(readFileSync2(join3(root, "package.json"), "utf-8"));
+    } catch {
+      return null;
+    }
+  })();
+  const name = project?.name || pkg?.name || projectBaseName(root);
+  const base = projectBaseName(root);
+  const relData = `.wudi/${base}`;
+  const isRepo = existsSync3(join3(root, ".git"));
+  let repoUrl = "";
+  let branch = "";
+  if (isRepo) {
+    try {
+      repoUrl = String(await localRun("git config --get remote.origin.url", { cwd: root, timeoutMs: 15e3 })).trim();
+    } catch {
+    }
+    try {
+      branch = String(await localRun("git rev-parse --abbrev-ref HEAD", { cwd: root, timeoutMs: 15e3 })).trim();
+    } catch {
+    }
+  }
+  let arch = null;
+  try {
+    const mp = archModelPathFor(root);
+    if (existsSync3(mp)) arch = JSON.parse(readFileSync2(mp, "utf-8"));
+  } catch {
+  }
+  const requirements = loadRequirementsAt(root);
+  const reqDone = requirements.filter((r) => r.status === "done").length;
+  const group = (st) => requirements.filter((r) => r.status === st);
+  const reqLines = (st) => group(st).map((r) => `- [${REQ_STATUS_ZH[st]}] ${r.title}${r.notes ? `\uFF08${r.notes}\uFF09` : ""}`).join("\n");
+  const deploys = loadDeploysAt(root).slice(0, 5);
+  const health = loadHealthAt(root).slice(0, 10);
+  const healthOk = health.filter((h) => h.ok).length;
+  const docs = loadDocsAt(root);
+  const hasDocker = existsSync3(join3(root, "Dockerfile"));
+  const hasCi = existsSync3(join3(root, ".github", "workflows", "ci.yml"));
+  const hasCd = existsSync3(join3(root, ".github", "workflows", "cd.yml"));
+  const md = [
+    `# ${name} \xB7 \u9879\u76EE\u4EA4\u63A5\u6587\u6863`,
+    "",
+    `- \u751F\u6210\u65F6\u95F4\uFF1A${(/* @__PURE__ */ new Date()).toISOString()}`,
+    `- \u4ED3\u5E93\uFF1A${repoUrl || "\uFF08\u672A\u914D\u7F6E remote\uFF09"}${branch ? `\uFF08\u5206\u652F ${branch}\uFF09` : ""}`,
+    `- \u6280\u672F\u6808\uFF1A${(arch?.stack ?? []).join(" \xB7 ") || project?.techStack || "\uFF08\u672A\u8BC6\u522B\uFF09"}`,
+    "",
+    `## 1. \u672C\u5730\u5F00\u53D1`,
+    "",
+    ...pkg?.scripts && Object.keys(pkg.scripts).length ? [
+      `| \u7528\u9014 | \u547D\u4EE4 |`,
+      `| --- | --- |`,
+      ...Object.entries(pkg.scripts).slice(0, 10).map(([k, v]) => `| ${k} | \`npm run ${k}\`\uFF08${String(v).slice(0, 60)}\uFF09 |`)
+    ] : [`\`\`\`bash`, project?.build || "# \u53C2\u8003 ARCHITECTURE.md \u7684\u547D\u4EE4", `\`\`\``],
+    "",
+    `## 2. \u67B6\u6784`,
+    "",
+    arch ? [`- \u72B6\u6001\uFF1A${arch.status === "scaffolded" ? "\u9AA8\u67B6\u5DF2\u5199\u5165" : "\u5DF2\u89C4\u5212"}`, `- \u6280\u672F\u6808\uFF1A${(arch.stack ?? []).join(" \xB7 ")}`, `- \u67B6\u6784\u76EE\u5F55\uFF1A${relData}/architecture/\uFF08ARCHITECTURE.md / ADR / diagrams\uFF09`, "", ...(arch.dirs ?? []).length ? [`\u9876\u5C42\u76EE\u5F55\uFF1A${(arch.dirs ?? []).map((d) => `\`${d}/\``).join("\u3001")}`] : []].join("\n") : `\u672A\u751F\u6210\u67B6\u6784\u65B9\u6848\uFF08\u53EF\u5728\u5DE5\u4F5C\u53F0\u300C\u67B6\u6784\u300D\u9875\u751F\u6210\uFF0C\u6216\u8BA9 Agent \u8C03\u7528 wudi_arch_plan\uFF09\u3002`,
+    "",
+    `## 3. \u90E8\u7F72`,
+    "",
+    `- \u65B9\u5F0F\uFF1A${project?.package?.type === "docker-image" ? `Docker \u955C\u50CF\uFF08${project.package.dockerImage || "\u672A\u914D\u955C\u50CF\u540D"}\uFF09` : `\u76EE\u5F55\u4EA7\u7269\uFF08${project?.package?.path || "dist"}\uFF09`}`,
+    `- \u90E8\u7F72\u6839\uFF1A${project?.deployRoot || "\uFF08\u672A\u914D\u7F6E\uFF09"}`,
+    `- \u5065\u5EB7\u68C0\u67E5\uFF1A${project?.healthCheck?.url || "\uFF08\u672A\u914D\u7F6E\uFF09"}`,
+    `- \u73AF\u5883\uFF1A${(Array.isArray(project?.envs) && project.envs.length ? project.envs.map((e) => e.name) : ["default"]).join("\u3001")}`,
+    `- \u5BB9\u5668\u5316\uFF1A${hasDocker ? "Dockerfile \u2713" : "\u65E0"}\uFF5CCI\uFF1A${hasCi ? "ci.yml \u2713" : "\u65E0"}\uFF5CCD\uFF1A${hasCd ? "cd.yml \u2713" : "\u65E0"}`,
+    hasDocker ? `- \u672C\u5730\u8FD0\u884C\uFF1A\`docker compose up -d --build\`` : "",
+    "",
+    `## 4. \u9700\u6C42\u8FDB\u5EA6\uFF08${reqDone}/${requirements.length}\uFF09`,
+    "",
+    group("doing").length ? `### \u8FDB\u884C\u4E2D
+${reqLines("doing")}` : "",
+    group("todo").length ? `### \u5F85\u529E
+${reqLines("todo")}` : "",
+    group("done").length ? `### \u5DF2\u5B8C\u6210
+${reqLines("done")}` : "",
+    requirements.length ? "" : "\uFF08\u672A\u4F7F\u7528\u9700\u6C42\u6E05\u5355\uFF09",
+    "",
+    `## 5. \u6700\u8FD1\u53D1\u5E03`,
+    "",
+    deploys.length ? deploys.map((d) => `- ${d.release ?? d.id}\uFF5C${d.type === "rollback" ? "\u56DE\u6EDA" : "\u90E8\u7F72"}\uFF5C${d.status}${d.env && d.env !== "default" ? ` @${d.env}` : ""}\uFF5C${d.finishedAt ?? d.startedAt}`).join("\n") : "- \uFF08\u65E0\u90E8\u7F72\u8BB0\u5F55\uFF09",
+    "",
+    `## 6. \u8FD0\u7EF4`,
+    "",
+    `- \u5065\u5EB7\u8D8B\u52BF\uFF1A\u6700\u8FD1 ${health.length} \u6B21\u68C0\u67E5\uFF0C\u901A\u8FC7 ${healthOk}${health.length ? `\uFF08\u6700\u8FD1\u4E00\u6B21\uFF1A${health[0].ok ? "\u2713" : "\u2717"} ${health[0].at}\uFF09` : ""}`,
+    project?.logCommand ? `- \u65E5\u5FD7\u547D\u4EE4\uFF1A\`${project.logCommand}\`` : `- \u65E5\u5FD7\uFF1A\`wudi_deploy_logs\` \u62C9\u53D6\uFF08\u6216\u670D\u52A1\u5668 docker logs / journalctl\uFF09`,
+    `- \u56DE\u6EDA\uFF1A\u5DE5\u4F5C\u53F0\u300C\u90E8\u7F72\u300D\u9875\u4E00\u952E\u56DE\u6EDA\u4E0A\u4E00\u7248`,
+    "",
+    `## 7. \u6587\u6863\u7D22\u5F15\uFF08${docs.length}\uFF09`,
+    "",
+    docs.length ? docs.slice(0, 20).map((d) => `- [${d.type}] ${d.path}`).join("\n") : "- \uFF08\u65E0\u767B\u8BB0\u6587\u6863\uFF09",
+    ""
+  ].filter((x) => x !== "").join("\n");
+  const stamp = releaseStamp();
+  const relPath = `${relData}/docs/handover-${stamp}.md`;
+  const abs = join3(projectDataDirFor(root), "docs", `handover-${stamp}.md`);
+  mkdirSync2(_dirname(abs), { recursive: true });
+  writeFileSync2(abs, md);
+  registerDocAt(root, { path: relPath, type: "doc", title: `${name} \xB7 \u4EA4\u63A5\u6587\u6863`, source: "wudi_handover" });
+  return ok(
+    `\u4EA4\u63A5\u6587\u6863\u5DF2\u751F\u6210\uFF1A${relPath}
+
+\u6DB5\u76D6\uFF1A\u672C\u5730\u5F00\u53D1 / \u67B6\u6784 / \u90E8\u7F72 / \u9700\u6C42\u8FDB\u5EA6\uFF08${reqDone}/${requirements.length}\uFF09/ \u6700\u8FD1\u53D1\u5E03 / \u8FD0\u7EF4 / \u6587\u6863\u7D22\u5F15\u3002\u53EF\u76F4\u63A5\u53D1\u7ED9\u63A5\u624B\u4EBA\u6216\u8D34\u8FDB wiki\u3002`,
+    { path: relPath, sections: 7, docs: docs.length }
+  );
+}
 function toolProjectsList() {
   const root = projectRoot();
   try {
@@ -7015,7 +7139,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.49.0" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.50.0" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());

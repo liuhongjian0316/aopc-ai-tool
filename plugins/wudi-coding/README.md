@@ -427,6 +427,20 @@ plugins/wudi-coding/
   - 面板**主动打开编辑器**：收到 `get_design_status` 的 `live:false` 或「编辑器未打开」失败结果时，自动打开该画布编辑器——Agent 稍后重试即可写入了。
 - 注意：本机 homebrew Node 24 依赖损坏（libsimdjson 缺失），openpencil 的 web 构建暂不可用；本次服务端补丁直接应用于 vendored dist（与源码补丁一致）。
 
+## 交接文档 wudi_handover（v0.50.0）
+
+- **`wudi_handover`**（文档页一键「生成交接文档」）：汇总插件已知的全部项目信息，生成一份完整交接文档：
+  - 项目概览（仓库 / 分支 / 技术栈）
+  - 本地开发（scripts 命令表）
+  - 架构（状态 / 技术栈 / 顶层目录 / 链接 ARCHITECTURE.md 与 ADR）
+  - 部署（方式 / 部署根 / 健康检查 / 环境 / Docker·CI·CD 就绪情况）
+  - 需求进度（进行中 / 待办 / 已完成分组）
+  - 最近发布（最近 5 次部署）
+  - 运维（健康趋势摘要 / 日志命令 / 回滚入口）
+  - 文档索引（全部登记文档）
+- 写入 `.wudi/<项目名>/docs/handover-<时间戳>.md` 并登记到文档库，可直接发给接手人或贴进 wiki。
+- 回归：smoke **195 项全绿**（+1）；修复无档案项目上的空指针。
+
 ## 一键上线 wudi_ship（v0.49.0）
 
 - **`wudi_ship`**（总览「一键上线」按钮 / Agent 直接调用）：

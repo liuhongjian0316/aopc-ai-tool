@@ -18,7 +18,7 @@
         "en": "Wudi Coding: a full-lifecycle developer plugin covering development (plan/implement/review/test), UI design (mockup generation with screenshot self-review, design tokens, optional Figma), deployment (SSH+Docker pipeline with rollback and health checks) and documentation, orchestrated by the /wudi command family.",
         "zh-CN": "无敌编程：程序员全生命周期插件——开发（方案/实现/评审/测试）、UI 设计（设计稿生成与截图自检迭代、design tokens、Figma 可选）、部署（SSH+Docker 流水线、回滚、健康检查）、文档（README/API/PRD/部署手册），/wudi 命令族调度四个域"
       },
-      "version": "0.49.0",
+      "version": "0.50.0",
       "author": {
         "name": "liuhongjian"
       },
@@ -34,6 +34,15 @@
         "aopc"
       ],
       "changelog": [
+        {
+          "version": "0.50.0",
+          "date": "2026-11-20",
+          "changes": [
+            "新增 wudi_handover 交接文档：汇总项目概览（仓库/技术栈）、本地开发命令、架构（含 ADR 链接）、部署方式与环境、需求进度、最近发布、运维（健康趋势/日志/回滚）、文档索引，写入 .wudi/<项目名>/docs/handover-<时间戳>.md 并登记",
+            "文档页新增「生成交接文档」按钮；交付/移交/复盘一键完成",
+            "smoke +1（195 全绿）：交接文档生成、章节与需求进度断言；修复无档案项目上的空指针"
+          ]
+        },
         {
           "version": "0.49.0",
           "date": "2026-11-20",

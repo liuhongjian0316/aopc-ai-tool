@@ -346,6 +346,14 @@ export const TOOLS = [
     },
   },
   {
+    name: "wudi_handover",
+    description: "生成交接文档：汇总项目概览、本地开发命令、架构（含 ADR 链接）、部署方式与环境、需求进度、最近发布、运维（健康趋势/日志/回滚）、文档索引，写入 .wudi/<项目名>/docs/handover-<时间戳>.md 并登记。交付/移交/复盘一键完成。",
+    inputSchema: {
+      type: "object",
+      properties: { root: { type: "string", description: "项目根路径（缺省为当前工作区）" } },
+    },
+  },
+  {
     name: "wudi_ship",
     description: "一键上线：先跑完整发布就绪检查（测试+构建实际执行）——未就绪返回清单并中止；就绪后 confirm: true 直接执行部署流水线，发布记录与健康趋势自动生成。生产环境配置了 confirmWord 时流水线会要求二次确认。",
     inputSchema: {
@@ -818,6 +826,8 @@ export async function callTool(name, args = {}) {
         return toolCiGenerate(args);
       case "wudi_ship":
         return await toolShip(args);
+      case "wudi_handover":
+        return await toolHandover(args);
       case "wudi_docs_register":
         return toolDocsRegister(args);
       case "wudi_ssh_ping":
@@ -3951,7 +3961,117 @@ async function toolShip(args: any = {}) {
   );
 }
 
+/* ================= 交接文档（项目交付/移交） ================= */
+
+/** 汇总插件已知的全部项目信息，生成一份交接文档（.wudi/<项目名>/docs/handover-<时间戳>.md）。 */
+async function toolHandover(args: any = {}) {
+  let root;
+  try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
+  const project = store.loadProjectAt(root);
+  const pkg = (() => { try { return JSON.parse(readFileSync(join(root, "package.json"), "utf-8")); } catch { return null; } })();
+  const name = project?.name || pkg?.name || store.projectBaseName(root);
+  const base = store.projectBaseName(root);
+  const relData = `.wudi/${base}`;
+
+  /* 仓库信息 */
+  const isRepo = existsSync(join(root, ".git"));
+  let repoUrl = "";
+  let branch = "";
+  if (isRepo) {
+    try { repoUrl = String(await localRun("git config --get remote.origin.url", { cwd: root, timeoutMs: 15000 })).trim(); } catch { /* 无 remote */ }
+    try { branch = String(await localRun("git rev-parse --abbrev-ref HEAD", { cwd: root, timeoutMs: 15000 })).trim(); } catch { /* ignore */ }
+  }
+
+  /* 架构 */
+  let arch = null;
+  try {
+    const mp = store.archModelPathFor(root);
+    if (existsSync(mp)) arch = JSON.parse(readFileSync(mp, "utf-8"));
+  } catch { /* ignore */ }
+
+  /* 需求 */
+  const requirements = store.loadRequirementsAt(root);
+  const reqDone = requirements.filter((r: any) => r.status === "done").length;
+  const group = (st) => requirements.filter((r: any) => r.status === st);
+  const reqLines = (st) => group(st).map((r: any) => `- [${REQ_STATUS_ZH[st]}] ${r.title}${r.notes ? `（${r.notes}）` : ""}`).join("\n");
+
+  /* 部署与健康 */
+  const deploys = store.loadDeploysAt(root).slice(0, 5);
+  const health = store.loadHealthAt(root).slice(0, 10);
+  const healthOk = health.filter((h) => h.ok).length;
+  const docs = store.loadDocsAt(root);
+  const hasDocker = existsSync(join(root, "Dockerfile"));
+  const hasCi = existsSync(join(root, ".github", "workflows", "ci.yml"));
+  const hasCd = existsSync(join(root, ".github", "workflows", "cd.yml"));
+
+  const md = [
+    `# ${name} · 项目交接文档`,
+    "",
+    `- 生成时间：${new Date().toISOString()}`,
+    `- 仓库：${repoUrl || "（未配置 remote）"}${branch ? `（分支 ${branch}）` : ""}`,
+    `- 技术栈：${(arch?.stack ?? []).join(" · ") || project?.techStack || "（未识别）"}`,
+    "",
+    `## 1. 本地开发`,
+    "",
+    ...((pkg?.scripts && Object.keys(pkg.scripts).length)
+      ? [`| 用途 | 命令 |`, `| --- | --- |`,
+         ...Object.entries(pkg.scripts).slice(0, 10).map(([k, v]) => `| ${k} | \`npm run ${k}\`（${String(v).slice(0, 60)}） |`)]
+      : [`\`\`\`bash`, project?.build || "# 参考 ARCHITECTURE.md 的命令", `\`\`\``]),
+    "",
+    `## 2. 架构`,
+    "",
+    arch
+      ? [`- 状态：${arch.status === "scaffolded" ? "骨架已写入" : "已规划"}`, `- 技术栈：${(arch.stack ?? []).join(" · ")}`, `- 架构目录：${relData}/architecture/（ARCHITECTURE.md / ADR / diagrams）`, "", ...(arch.dirs ?? []).length ? [`顶层目录：${(arch.dirs ?? []).map((d) => `\`${d}/\``).join("、")}`] : []].join("\n")
+      : `未生成架构方案（可在工作台「架构」页生成，或让 Agent 调用 wudi_arch_plan）。`,
+    "",
+    `## 3. 部署`,
+    "",
+    `- 方式：${project?.package?.type === "docker-image" ? `Docker 镜像（${project.package.dockerImage || "未配镜像名"}）` : `目录产物（${project?.package?.path || "dist"}）`}`,
+    `- 部署根：${project?.deployRoot || "（未配置）"}`,
+    `- 健康检查：${project?.healthCheck?.url || "（未配置）"}`,
+    `- 环境：${(Array.isArray(project?.envs) && project.envs.length ? project.envs.map((e: any) => e.name) : ["default"]).join("、")}`,
+    `- 容器化：${hasDocker ? "Dockerfile ✓" : "无"}｜CI：${hasCi ? "ci.yml ✓" : "无"}｜CD：${hasCd ? "cd.yml ✓" : "无"}`,
+    hasDocker ? `- 本地运行：\`docker compose up -d --build\`` : "",
+    "",
+    `## 4. 需求进度（${reqDone}/${requirements.length}）`,
+    "",
+    group("doing").length ? `### 进行中\n${reqLines("doing")}` : "",
+    group("todo").length ? `### 待办\n${reqLines("todo")}` : "",
+    group("done").length ? `### 已完成\n${reqLines("done")}` : "",
+    requirements.length ? "" : "（未使用需求清单）",
+    "",
+    `## 5. 最近发布`,
+    "",
+    deploys.length
+      ? deploys.map((d) => `- ${d.release ?? d.id}｜${d.type === "rollback" ? "回滚" : "部署"}｜${d.status}${d.env && d.env !== "default" ? ` @${d.env}` : ""}｜${d.finishedAt ?? d.startedAt}`).join("\n")
+      : "- （无部署记录）",
+    "",
+    `## 6. 运维`,
+    "",
+    `- 健康趋势：最近 ${health.length} 次检查，通过 ${healthOk}${health.length ? `（最近一次：${health[0].ok ? "✓" : "✗"} ${health[0].at}）` : ""}`,
+    project?.logCommand ? `- 日志命令：\`${project.logCommand}\`` : `- 日志：\`wudi_deploy_logs\` 拉取（或服务器 docker logs / journalctl）`,
+    `- 回滚：工作台「部署」页一键回滚上一版`,
+    "",
+    `## 7. 文档索引（${docs.length}）`,
+    "",
+    docs.length ? docs.slice(0, 20).map((d: any) => `- [${d.type}] ${d.path}`).join("\n") : "- （无登记文档）",
+    "",
+  ].filter((x) => x !== "").join("\n");
+
+  const stamp = store.releaseStamp();
+  const relPath = `${relData}/docs/handover-${stamp}.md`;
+  const abs = join(store.projectDataDirFor(root), "docs", `handover-${stamp}.md`);
+  mkdirSync(_dirname(abs), { recursive: true });
+  writeFileSync(abs, md);
+  store.registerDocAt(root, { path: relPath, type: "doc", title: `${name} · 交接文档`, source: "wudi_handover" });
+  return ok(
+    `交接文档已生成：${relPath}\n\n涵盖：本地开发 / 架构 / 部署 / 需求进度（${reqDone}/${requirements.length}）/ 最近发布 / 运维 / 文档索引。可直接发给接手人或贴进 wiki。`,
+    { path: relPath, sections: 7, docs: docs.length }
+  );
+}
+
 /* ================= 项目注册表（跨项目管理） ================= */
+
 
 
 
