@@ -361,6 +361,15 @@ function updateDeploy(id, patch) {
   writeDeployHistory(projectRoot(), list);
   return list[idx];
 }
+function loadHealthAt(root) {
+  const list = readNestedJSON(root, "deploys/health.json", []);
+  return Array.isArray(list) ? list : [];
+}
+function appendHealthAt(root, record) {
+  const list = loadHealthAt(root);
+  list.unshift({ at: (/* @__PURE__ */ new Date()).toISOString(), ...record });
+  return writeNestedJSON(root, "deploys/health.json", list.slice(0, 100));
+}
 function loadDocs() {
   return readJSONAt(projectRoot(), "docs.json", []);
 }
@@ -813,6 +822,7 @@ export {
   CANVAS_SHAPE_TYPES,
   PROJECT_TEMPLATE,
   appendDeploy,
+  appendHealthAt,
   archModelPathFor,
   archPlanPathFor,
   architectureDirFor,
@@ -832,6 +842,7 @@ export {
   loadDeploysAt,
   loadDocs,
   loadDocsAt,
+  loadHealthAt,
   loadProject,
   loadProjectAt,
   loadRegistry,

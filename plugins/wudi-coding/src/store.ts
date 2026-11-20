@@ -442,6 +442,19 @@ export function updateDeploy(id, patch) {
   return list[idx];
 }
 
+/** 健康趋势：<ws>/.wudi/<项目名>/deploys/health.json（最近 100 次检查，新→旧）。 */
+export function loadHealthAt(root) {
+  const list = readNestedJSON(root, "deploys/health.json", []);
+  return Array.isArray(list) ? list : [];
+}
+
+/** 追加一次健康检查记录（部署 verify 与 wudi_health_check 都会写入）。 */
+export function appendHealthAt(root, record) {
+  const list = loadHealthAt(root);
+  list.unshift({ at: new Date().toISOString(), ...record });
+  return writeNestedJSON(root, "deploys/health.json", list.slice(0, 100));
+}
+
 /* ---------------- 文档清单 docs.json ---------------- */
 
 export function loadDocs() {

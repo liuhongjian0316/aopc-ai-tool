@@ -427,6 +427,14 @@ plugins/wudi-coding/
   - 面板**主动打开编辑器**：收到 `get_design_status` 的 `live:false` 或「编辑器未打开」失败结果时，自动打开该画布编辑器——Agent 稍后重试即可写入了。
 - 注意：本机 homebrew Node 24 依赖损坏（libsimdjson 缺失），openpencil 的 web 构建暂不可用；本次服务端补丁直接应用于 vendored dist（与源码补丁一致）。
 
+## 部署后自动闭环（v0.47.0）
+
+- **发布记录自动生成**：部署 verify 通过后自动生成 `deploy-<版本>.md`（自上个 tag 的 feat/fix 分组 + 本次部署信息），写入 `docs/releases/` 并登记，部署记录新增 `releaseNotes` 字段、部署页条目里直接显示路径。
+- **健康趋势自动入档**：部署 verify 与 `wudi_health_check`（成功/失败都记）写入 `.wudi/<项目名>/deploys/health.json`（最近 100 次：时间/环境/URL/状态码/关联版本/via）。
+- **新工具 `wudi_health_trend`**：最近 N 次健康检查时间线；`wudi_deploy_history` 返回 `healthTrend`。
+- **部署页**：新增「健康趋势」流程图（✓/✗ + 环境/版本/状态码）与「发布记录」卡片（changelog 文档列表）。
+- 回归：smoke **186 项全绿**（+6：本地健康检查入档通过/失败、趋势工具、deploy_history 返回）。
+
 ## 编程到落地闭环（v0.46.0）
 
 - **落地进度**（总览新增）：架构 → 文档 → 需求 → 部署 四步流程图，每步显示状态与数量，一眼看清项目走到哪一步。

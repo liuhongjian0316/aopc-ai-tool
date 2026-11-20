@@ -8,6 +8,7 @@
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import http from "node:http";
 import net from "node:net";
 import crypto from "node:crypto";
 import { tmpdir } from "node:os";
@@ -502,6 +503,24 @@ async function protocolTests() {
         && relPath.includes("docs/releases/")
         && existsSync(join(workdir, relPath))
         && textOf(r).includes("## 新功能"), relPath);
+      /* ---- 部署闭环：健康趋势入档（deploys/health.json）---- */
+      const hServer = http.createServer((_req, res) => { res.writeHead(200); res.end("ok"); });
+      const hPort = await new Promise((r2) => hServer.listen(0, "127.0.0.1", () => r2(hServer.address().port)));
+      r = await s.call("tools/call", { name: "wudi_project_init", arguments: { build: "echo build-ok", packagePath: "dist", deployRoot: "/srv/smoke-hc", healthCheckUrl: `http://127.0.0.1:${hPort}/`, healthCheckFrom: "local" } });
+      check("hc_trend: 配置本地健康检查", !errOf(r), textOf(r).slice(0, 160));
+      r = await s.call("tools/call", { name: "wudi_health_check", arguments: {} });
+      check("hc_trend: 健康检查通过", !errOf(r), textOf(r).slice(0, 200));
+      r = await s.call("tools/call", { name: "wudi_deploy_history", arguments: {} });
+      const trend1 = r?.result?.structuredContent?.healthTrend ?? [];
+      check("hc_trend: 检查入档（通过）", trend1.length === 1 && trend1[0].ok === true && String(trend1[0].url).includes(String(hPort)), JSON.stringify(trend1));
+      r = await s.call("tools/call", { name: "wudi_health_trend", arguments: {} });
+      check("hc_trend: 趋势工具返回", !errOf(r) && (r?.result?.structuredContent?.trend ?? []).length === 1);
+      hServer.close();
+      r = await s.call("tools/call", { name: "wudi_health_check", arguments: {} });
+      check("hc_trend: 失败也入档", errOf(r) === true);
+      r = await s.call("tools/call", { name: "wudi_deploy_history", arguments: {} });
+      const trend2 = r?.result?.structuredContent?.healthTrend ?? [];
+      check("hc_trend: 失败记录在趋势里", trend2.length === 2 && trend2[0].ok === false, JSON.stringify(trend2));
     } finally {
       await rm(outside, { recursive: true, force: true });
     }

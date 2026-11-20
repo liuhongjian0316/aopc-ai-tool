@@ -19,7 +19,7 @@ const EmptyResultSchema = {
 
 
   const app = new App(
-    { name: "wudi-coding", version: "0.46.0" },
+    { name: "wudi-coding", version: "0.47.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   /* 资源缓存：设计图 base64 与设计稿 HTML 文本（readServerResource 经 server 动态资源管线） */
@@ -494,6 +494,21 @@ const EmptyResultSchema = {
 
   function renderDeploys() {
     const deploys = state.history?.deploys ?? state.data?.deploys ?? [];
+    /* 健康趋势：部署 verify 与健康检查自动记录（.wudi/<项目名>/deploys/health.json） */
+    const trend = state.history?.healthTrend ?? [];
+    /* 发布记录：docs 里 changelog 类型（部署成功自动生成 / 文档页手动生成） */
+    const releases = (state.data?.docs ?? []).filter((x) => x.type === "changelog");
+    const trendCard = `
+      <div class="card" style="margin-top:12px"><h3>健康趋势<span class="line"></span><span class="muted" style="text-transform:none;letter-spacing:0">最近 ${trend.length} 次 · 通过 ${trend.filter((t) => t.ok).length}</span></h3>
+        ${trend.length ? `<div class="flow">${trend.slice(0, 10).map((t, i) =>
+          `<div class="node"><b>${t.ok ? "✓" : "✗"} ${esc(fmtTime(t.at))}</b><span>${esc(t.env ?? "-")}${t.release ? ` · ${esc(t.release)}` : ""}${t.status ? ` · ${esc(String(t.status))}` : ""}</span></div>${i < Math.min(trend.length, 10) - 1 ? '<span class="arrow">→</span>' : ""}`
+        ).join("")}</div>` : `<div class="muted">暂无记录：每次部署 verify 和「健康检查」都会自动写入时间线。</div>`}
+      </div>`;
+    const releasesCard = releases.length
+      ? `<div class="card" style="margin-top:12px"><h3>发布记录<span class="line"></span></h3>
+          <div class="entrychips">${releases.map((x) => `<span class="chip mono">${esc(x.path)}</span>`).join("")}</div>
+        </div>`
+      : "";
     return `
       <div class="card"><h3>操作<span class="line"></span></h3>
         <div class="btnrow">
@@ -503,6 +518,8 @@ const EmptyResultSchema = {
           <span class="muted">${isForeignProject() ? "查看其他项目：部署/回滚/体检请在该项目工作区进行（此处只读）" : "均先出预检计划，确认后执行（走宿主审批）"}</span>
         </div>
       </div>
+      ${trendCard}
+      ${releasesCard}
       ${deploys.length ? deploys.map((d) => {
         const h = d.health;
         const healthBadge = !h ? "" : h.skipped
@@ -515,7 +532,7 @@ const EmptyResultSchema = {
         ).join("");
         return `<div class="deploy">
           <div class="head"><span class="rel">${esc(d.release ?? d.id)}</span>${badge(d.status)}<span class="badge neutral">${d.type === "rollback" ? "回滚" : "部署"}</span>${healthBadge}<span class="time">${esc(fmtTime(d.startedAt))}</span></div>
-          <div class="stages">${stages || '<div class="muted">无阶段明细</div>'}</div>
+          <div class="stages">${stages || '<div class="muted">无阶段明细</div>'}${d.releaseNotes ? `<div class="stage"><span class="name">发布记录</span><span class="detail mono">${esc(d.releaseNotes)}</span></div>` : ""}</div>
         </div>`;
       }).join("") : `<div class="empty"><div class="icon"></div>还没有部署记录。点上方「部署新版本」或会话里执行 <span class="mono">/wudi-deploy deploy</span>。</div>`}`;
   }
@@ -1293,7 +1310,7 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
             reply({
               protocolVersion: String(p.protocolVersion ?? "2026-01-26"),
               hostCapabilities: { experimental: {} },
-              hostInfo: { name: "wudi-workbench", version: "0.46.0" },
+              hostInfo: { name: "wudi-workbench", version: "0.47.0" },
               hostContext: {
                 theme: app.getHostContext()?.theme ?? "light",
                 displayMode: "inline",
@@ -2067,7 +2084,18 @@ addEventListener("unhandledrejection",function(e){window.__wudiErrs.push(String(
       ],
       architecture: { status: "scaffolded", stack: ["React", "Vite", "Tailwind CSS"], dir: ".wudi/zongheng-app/architecture" },
     };
-    state.history = { deploys: state.data.deploys };
+    state.history = {
+      deploys: state.data.deploys,
+      healthTrend: [
+        { at: iso(300), env: "prod", release: "20261101-2201", url: "http://127.0.0.1:8080/healthz", ok: true, status: 200, via: "local" },
+        { at: iso(1500), env: "prod", release: "20261031-1830", url: "http://127.0.0.1:8080/healthz", ok: true, status: 200, via: "remote" },
+        { at: iso(2900), env: "staging", release: "20261030-0912", url: "http://127.0.0.1:8081/healthz", ok: false, status: 502, via: "remote" },
+      ],
+    };
+    state.data.docs = [
+      ...(state.data.docs ?? []),
+      { path: ".wudi/zongheng-app/docs/releases/deploy-20261101-2201.md", type: "changelog", updatedAt: iso(300) },
+    ];
     state.designs = {
       designs: [
         { name: "ui.fig", path: ".wudi/designs/ui.fig", format: "fig（可编辑）", sizeKB: 128.4, updatedAt: iso(30) },

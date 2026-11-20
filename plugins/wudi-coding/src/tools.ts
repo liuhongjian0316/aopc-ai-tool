@@ -346,6 +346,17 @@ export const TOOLS = [
     },
   },
   {
+    name: "wudi_health_trend",
+    description: "健康趋势：最近 N 次健康检查记录（部署 verify 与 wudi_health_check 自动写入 .wudi/<项目名>/deploys/health.json），按时间倒序，含环境/URL/状态/关联版本。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "number", description: "返回条数，默认 20" },
+        root: { type: "string", description: "项目根路径（缺省为当前工作区）" },
+      },
+    },
+  },
+  {
     name: "wudi_req_add",
     description: "添加一条需求到项目需求清单（.wudi/<项目名>/requirements.json）。开发过程中让 Agent 记录要做的事，落地进度一目了然。",
     inputSchema: {
@@ -773,6 +784,8 @@ export async function callTool(name, args = {}) {
         return await toolReleaseCheck(args);
       case "wudi_release_notes":
         return await toolReleaseNotes(args);
+      case "wudi_health_trend":
+        return toolHealthTrend(args);
       case "wudi_docs_register":
         return toolDocsRegister(args);
       case "wudi_ssh_ping":
@@ -1270,6 +1283,24 @@ async function toolDeploy(args: any = {}) {
     record.finishedAt = new Date().toISOString();
     store.updateDeploy(record.id, { status: record.status, finishedAt: record.finishedAt, ...(record.health ? { health: record.health } : {}) });
 
+    /* 落地闭环：健康趋势入档 + 自动生成发布记录 */
+    let notesLine = "";
+    try {
+      if (!record.health?.skipped) {
+        store.appendHealthAt(store.projectRoot(), {
+          env: envObj.name, release: stamp,
+          url: envObj.healthCheck?.url ?? "", ok: !!record.health?.ok,
+          status: record.health?.status ?? 0, via: record.health?.via ?? "",
+        });
+      }
+    } catch { /* 趋势记录失败不阻塞 */ }
+    try {
+      const notes = await writeReleaseNotesFor(store.projectRoot(), `deploy-${stamp}`);
+      record.releaseNotes = notes.path;
+      store.updateDeploy(record.id, { releaseNotes: notes.path });
+      notesLine = `\n发布记录：${notes.path}（自动生成，含自上个 tag 的 feat/fix）`;
+    } catch { /* 发布记录生成失败不阻塞 */ }
+
     // 清理旧版本（可选）
     let pruneLine = "";
     if (pruneOld) pruneLine = `\n${await pruneReleases(envObj)}`;
@@ -1293,6 +1324,7 @@ async function toolDeploy(args: any = {}) {
       record.status === "ok-with-warnings" ? "注意：未配置健康检查 URL，本次部署未经线上验证。" : "",
       pruneLine,
       notifyLine,
+      notesLine,
       record.status === "ok-with-warnings"
         ? "建议：补全档案 healthCheck.url 后用 wudi_health_check 手动验证。"
         : "下一步：如需文档更新用 /wudi-docs changelog。",
@@ -1336,7 +1368,7 @@ function toolDeployHistory(args: any = {}) {
     .loadDeploysAt(root)
     .filter((d) => !envFilter || d.env === envFilter)
     .slice(0, limit);
-  if (!deploys.length) return ok(envFilter ? `环境 ${envFilter} 还没有部署记录。` : "还没有部署记录。", { deploys: [] });
+  if (!deploys.length) return ok(envFilter ? `环境 ${envFilter} 还没有部署记录。` : "还没有部署记录。", { deploys: [], healthTrend: store.loadHealthAt(root).slice(0, 20) });
   const lines = deploys.map((d) =>
     [
       `── ${d.release ?? d.id}｜${d.type === "rollback" ? "回滚" : "部署"}${d.env && d.env !== "default" ? `@${d.env}` : ""}｜${d.status}`,
@@ -1344,7 +1376,7 @@ function toolDeployHistory(args: any = {}) {
       ...d.stages.map((s) => `   ${s.name}: ${s.status}${s.detail ? `｜${clip(s.detail, 160)}` : ""}`),
     ].join("\n")
   );
-  return ok(lines.join("\n"), { deploys });
+  return ok(lines.join("\n"), { deploys, healthTrend: store.loadHealthAt(root).slice(0, 20) });
 }
 
 /* ================= 回滚 ================= */
@@ -1509,6 +1541,15 @@ async function toolHealthCheck(args: any = {}) {
   }
   const results = await checkHealthWithRetry(envObj);
   const last = results.at(-1);
+  /* 健康趋势入档（成功与失败都记，形成时间线） */
+  try {
+    if (!last.skipped) {
+      store.appendHealthAt(store.projectRoot(), {
+        env: envObj.name, url: envObj.healthCheck?.url ?? "",
+        ok: !!last.ok, status: last.status ?? 0, via: last.via ?? "",
+      });
+    }
+  } catch { /* 趋势记录失败不阻塞 */ }
   const lines = [`健康检查（${envObj.name}）：${last.ok ? "通过 ✓" : "未通过 ✗"}`, formatHealth(results)];
   if (!last.ok) {
     lines.push(
@@ -1519,6 +1560,22 @@ async function toolHealthCheck(args: any = {}) {
     );
   }
   return last.ok ? ok(lines.join("\n"), { health: results }) : fail(lines.join("\n"));
+}
+
+/** 健康趋势：最近 N 次检查（部署 verify 与 wudi_health_check 自动记录）。 */
+function toolHealthTrend(args: any = {}) {
+  let root;
+  try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
+  const limit = Math.min(Math.max(Number(args?.limit) || 20, 1), 100);
+  const trend = store.loadHealthAt(root).slice(0, limit);
+  const okCount = trend.filter((t) => t.ok).length;
+  const text = [
+    `═══ 健康趋势（最近 ${trend.length} 次 · 通过 ${okCount}）═══`,
+    trend.length
+      ? trend.map((t) => `- ${t.at}｜${t.env ?? "-"}｜${t.ok ? "✓ 通过" : "✗ 未通过"}｜${t.url || "-"}${t.status ? ` · ${t.status}` : ""}${t.release ? ` · ${t.release}` : ""}`).join("\n")
+      : "（暂无记录：wudi_health_check 或部署 verify 后自动写入 .wudi/<项目名>/deploys/health.json）",
+  ].join("\n");
+  return ok(text, { trend, okCount, total: trend.length });
 }
 
 async function toolRemoteExec(args: any = {}) {
@@ -3609,13 +3666,11 @@ async function toolReleaseCheck(args: any = {}) {
 }
 
 /** 发布记录：git log（自上个 tag）+ 最近部署 → docs/releases/<tag>.md 并登记。 */
-async function toolReleaseNotes(args: any = {}) {
-  let root;
-  try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
+/** 生成发布记录（部署成功后自动调用 / wudi_release_notes 手动调用）。 */
+async function writeReleaseNotesFor(root, tag = "") {
   const project = store.loadProjectAt(root);
   const isRepo = existsSync(join(root, ".git"));
   const stamp = store.releaseStamp();
-  let tag = String(args?.tag ?? "").trim();
   if (!tag) {
     let v = "";
     try { v = String(JSON.parse(readFileSync(join(root, "package.json"), "utf-8"))?.version ?? ""); } catch { /* 无 package.json */ }
@@ -3662,10 +3717,15 @@ async function toolReleaseNotes(args: any = {}) {
   mkdirSync(_dirname(abs), { recursive: true });
   writeFileSync(abs, md);
   store.registerDocAt(root, { path: relPath, type: "changelog", title: `Release ${tag}`, source: "git log" });
-  return ok(
-    `发布记录已生成：${relPath}（${commits.length} 条提交）\n\n${md}`,
-    { path: relPath, tag, commits: commits.length }
-  );
+  return { path: relPath, tag, commits: commits.length };
+}
+
+async function toolReleaseNotes(args: any = {}) {
+  let root;
+  try { root = toolRoot(args); } catch (err: any) { return fail(String(err?.message ?? err)); }
+  const notes = await writeReleaseNotesFor(root, String(args?.tag ?? "").trim());
+  const md = readFileSync(join(store.projectDataDirFor(root), "docs", "releases", `${notes.tag.replace(/[^\w.\-]/g, "_")}.md`), "utf-8");
+  return ok(`发布记录已生成：${notes.path}（${notes.commits} 条提交）\n\n${md}`, notes);
 }
 
 /* ================= 项目注册表（跨项目管理） ================= */

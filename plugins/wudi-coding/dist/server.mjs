@@ -373,6 +373,15 @@ function updateDeploy(id, patch) {
   writeDeployHistory(projectRoot(), list);
   return list[idx];
 }
+function loadHealthAt(root) {
+  const list = readNestedJSON(root, "deploys/health.json", []);
+  return Array.isArray(list) ? list : [];
+}
+function appendHealthAt(root, record) {
+  const list = loadHealthAt(root);
+  list.unshift({ at: (/* @__PURE__ */ new Date()).toISOString(), ...record });
+  return writeNestedJSON(root, "deploys/health.json", list.slice(0, 100));
+}
 function registerDocAt(root, { path: docPath, type = "doc", title = "", source = "" }) {
   if (!docPath) throw new Error("\u7F3A\u5C11 path\uFF1A\u8981\u767B\u8BB0\u7684\u6587\u6863\u8DEF\u5F84\u3002");
   const list = (loadDocsAt(root) ?? []).filter((d) => d.path !== docPath);
@@ -1584,6 +1593,17 @@ var TOOLS = [
     }
   },
   {
+    name: "wudi_health_trend",
+    description: "\u5065\u5EB7\u8D8B\u52BF\uFF1A\u6700\u8FD1 N \u6B21\u5065\u5EB7\u68C0\u67E5\u8BB0\u5F55\uFF08\u90E8\u7F72 verify \u4E0E wudi_health_check \u81EA\u52A8\u5199\u5165 .wudi/<\u9879\u76EE\u540D>/deploys/health.json\uFF09\uFF0C\u6309\u65F6\u95F4\u5012\u5E8F\uFF0C\u542B\u73AF\u5883/URL/\u72B6\u6001/\u5173\u8054\u7248\u672C\u3002",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "number", description: "\u8FD4\u56DE\u6761\u6570\uFF0C\u9ED8\u8BA4 20" },
+        root: { type: "string", description: "\u9879\u76EE\u6839\u8DEF\u5F84\uFF08\u7F3A\u7701\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF09" }
+      }
+    }
+  },
+  {
     name: "wudi_req_add",
     description: "\u6DFB\u52A0\u4E00\u6761\u9700\u6C42\u5230\u9879\u76EE\u9700\u6C42\u6E05\u5355\uFF08.wudi/<\u9879\u76EE\u540D>/requirements.json\uFF09\u3002\u5F00\u53D1\u8FC7\u7A0B\u4E2D\u8BA9 Agent \u8BB0\u5F55\u8981\u505A\u7684\u4E8B\uFF0C\u843D\u5730\u8FDB\u5EA6\u4E00\u76EE\u4E86\u7136\u3002",
     inputSchema: {
@@ -2010,6 +2030,8 @@ async function callTool(name, args = {}) {
         return await toolReleaseCheck(args);
       case "wudi_release_notes":
         return await toolReleaseNotes(args);
+      case "wudi_health_trend":
+        return toolHealthTrend(args);
       case "wudi_docs_register":
         return toolDocsRegister(args);
       case "wudi_ssh_ping":
@@ -2465,6 +2487,28 @@ ${formatHealth(results)}`);
     record.status = healthResults?.skipped ? "ok-with-warnings" : "ok";
     record.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
     updateDeploy(record.id, { status: record.status, finishedAt: record.finishedAt, ...record.health ? { health: record.health } : {} });
+    let notesLine = "";
+    try {
+      if (!record.health?.skipped) {
+        appendHealthAt(projectRoot(), {
+          env: envObj.name,
+          release: stamp,
+          url: envObj.healthCheck?.url ?? "",
+          ok: !!record.health?.ok,
+          status: record.health?.status ?? 0,
+          via: record.health?.via ?? ""
+        });
+      }
+    } catch {
+    }
+    try {
+      const notes = await writeReleaseNotesFor(projectRoot(), `deploy-${stamp}`);
+      record.releaseNotes = notes.path;
+      updateDeploy(record.id, { releaseNotes: notes.path });
+      notesLine = `
+\u53D1\u5E03\u8BB0\u5F55\uFF1A${notes.path}\uFF08\u81EA\u52A8\u751F\u6210\uFF0C\u542B\u81EA\u4E0A\u4E2A tag \u7684 feat/fix\uFF09`;
+    } catch {
+    }
     let pruneLine = "";
     if (pruneOld) pruneLine = `
 ${await pruneReleases(envObj)}`;
@@ -2491,6 +2535,7 @@ ${await pruneReleases(envObj)}`;
       record.status === "ok-with-warnings" ? "\u6CE8\u610F\uFF1A\u672A\u914D\u7F6E\u5065\u5EB7\u68C0\u67E5 URL\uFF0C\u672C\u6B21\u90E8\u7F72\u672A\u7ECF\u7EBF\u4E0A\u9A8C\u8BC1\u3002" : "",
       pruneLine,
       notifyLine,
+      notesLine,
       record.status === "ok-with-warnings" ? "\u5EFA\u8BAE\uFF1A\u8865\u5168\u6863\u6848 healthCheck.url \u540E\u7528 wudi_health_check \u624B\u52A8\u9A8C\u8BC1\u3002" : "\u4E0B\u4E00\u6B65\uFF1A\u5982\u9700\u6587\u6863\u66F4\u65B0\u7528 /wudi-docs changelog\u3002"
     ].filter(Boolean);
     return ok(lines.join("\n"), { deploy: loadDeploys()[0] });
@@ -2534,7 +2579,7 @@ function toolDeployHistory(args = {}) {
     return fail(String(err?.message ?? err));
   }
   const deploys = loadDeploysAt(root).filter((d) => !envFilter || d.env === envFilter).slice(0, limit);
-  if (!deploys.length) return ok(envFilter ? `\u73AF\u5883 ${envFilter} \u8FD8\u6CA1\u6709\u90E8\u7F72\u8BB0\u5F55\u3002` : "\u8FD8\u6CA1\u6709\u90E8\u7F72\u8BB0\u5F55\u3002", { deploys: [] });
+  if (!deploys.length) return ok(envFilter ? `\u73AF\u5883 ${envFilter} \u8FD8\u6CA1\u6709\u90E8\u7F72\u8BB0\u5F55\u3002` : "\u8FD8\u6CA1\u6709\u90E8\u7F72\u8BB0\u5F55\u3002", { deploys: [], healthTrend: loadHealthAt(root).slice(0, 20) });
   const lines = deploys.map(
     (d) => [
       `\u2500\u2500 ${d.release ?? d.id}\uFF5C${d.type === "rollback" ? "\u56DE\u6EDA" : "\u90E8\u7F72"}${d.env && d.env !== "default" ? `@${d.env}` : ""}\uFF5C${d.status}`,
@@ -2542,7 +2587,7 @@ function toolDeployHistory(args = {}) {
       ...d.stages.map((s) => `   ${s.name}: ${s.status}${s.detail ? `\uFF5C${clip(s.detail, 160)}` : ""}`)
     ].join("\n")
   );
-  return ok(lines.join("\n"), { deploys });
+  return ok(lines.join("\n"), { deploys, healthTrend: loadHealthAt(root).slice(0, 20) });
 }
 function parseRemoteReleases(stdout) {
   return String(stdout).split("\n").map((s) => s.trim()).filter((s) => /^\d{8}-\d{6}$/.test(s)).sort().reverse();
@@ -2696,6 +2741,18 @@ async function toolHealthCheck(args = {}) {
   }
   const results = await checkHealthWithRetry(envObj);
   const last = results.at(-1);
+  try {
+    if (!last.skipped) {
+      appendHealthAt(projectRoot(), {
+        env: envObj.name,
+        url: envObj.healthCheck?.url ?? "",
+        ok: !!last.ok,
+        status: last.status ?? 0,
+        via: last.via ?? ""
+      });
+    }
+  } catch {
+  }
   const lines = [`\u5065\u5EB7\u68C0\u67E5\uFF08${envObj.name}\uFF09\uFF1A${last.ok ? "\u901A\u8FC7 \u2713" : "\u672A\u901A\u8FC7 \u2717"}`, formatHealth(results)];
   if (!last.ok) {
     lines.push(
@@ -2706,6 +2763,22 @@ async function toolHealthCheck(args = {}) {
     );
   }
   return last.ok ? ok(lines.join("\n"), { health: results }) : fail(lines.join("\n"));
+}
+function toolHealthTrend(args = {}) {
+  let root;
+  try {
+    root = toolRoot(args);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  const limit = Math.min(Math.max(Number(args?.limit) || 20, 1), 100);
+  const trend = loadHealthAt(root).slice(0, limit);
+  const okCount = trend.filter((t) => t.ok).length;
+  const text = [
+    `\u2550\u2550\u2550 \u5065\u5EB7\u8D8B\u52BF\uFF08\u6700\u8FD1 ${trend.length} \u6B21 \xB7 \u901A\u8FC7 ${okCount}\uFF09\u2550\u2550\u2550`,
+    trend.length ? trend.map((t) => `- ${t.at}\uFF5C${t.env ?? "-"}\uFF5C${t.ok ? "\u2713 \u901A\u8FC7" : "\u2717 \u672A\u901A\u8FC7"}\uFF5C${t.url || "-"}${t.status ? ` \xB7 ${t.status}` : ""}${t.release ? ` \xB7 ${t.release}` : ""}`).join("\n") : "\uFF08\u6682\u65E0\u8BB0\u5F55\uFF1Awudi_health_check \u6216\u90E8\u7F72 verify \u540E\u81EA\u52A8\u5199\u5165 .wudi/<\u9879\u76EE\u540D>/deploys/health.json\uFF09"
+  ].join("\n");
+  return ok(text, { trend, okCount, total: trend.length });
 }
 async function toolRemoteExec(args = {}) {
   const project = loadProject();
@@ -5916,17 +5989,10 @@ async function toolReleaseCheck(args = {}) {
   ].join("\n");
   return ok(text, { ready, score: `${okCount}/${items.length}`, items, runTests, runBuild });
 }
-async function toolReleaseNotes(args = {}) {
-  let root;
-  try {
-    root = toolRoot(args);
-  } catch (err) {
-    return fail(String(err?.message ?? err));
-  }
+async function writeReleaseNotesFor(root, tag = "") {
   const project = loadProjectAt(root);
   const isRepo = existsSync3(join3(root, ".git"));
   const stamp = releaseStamp();
-  let tag = String(args?.tag ?? "").trim();
   if (!tag) {
     let v = "";
     try {
@@ -5980,12 +6046,20 @@ async function toolReleaseNotes(args = {}) {
   mkdirSync2(_dirname(abs), { recursive: true });
   writeFileSync2(abs, md);
   registerDocAt(root, { path: relPath, type: "changelog", title: `Release ${tag}`, source: "git log" });
-  return ok(
-    `\u53D1\u5E03\u8BB0\u5F55\u5DF2\u751F\u6210\uFF1A${relPath}\uFF08${commits.length} \u6761\u63D0\u4EA4\uFF09
+  return { path: relPath, tag, commits: commits.length };
+}
+async function toolReleaseNotes(args = {}) {
+  let root;
+  try {
+    root = toolRoot(args);
+  } catch (err) {
+    return fail(String(err?.message ?? err));
+  }
+  const notes = await writeReleaseNotesFor(root, String(args?.tag ?? "").trim());
+  const md = readFileSync2(join3(projectDataDirFor(root), "docs", "releases", `${notes.tag.replace(/[^\w.\-]/g, "_")}.md`), "utf-8");
+  return ok(`\u53D1\u5E03\u8BB0\u5F55\u5DF2\u751F\u6210\uFF1A${notes.path}\uFF08${notes.commits} \u6761\u63D0\u4EA4\uFF09
 
-${md}`,
-    { path: relPath, tag, commits: commits.length }
-  );
+${md}`, notes);
 }
 function toolProjectsList() {
   const root = projectRoot();
@@ -6692,7 +6766,7 @@ var opToolsCache = (() => {
     return [];
   }
 })();
-var SERVER_INFO = { name: "wudi-coding", version: "0.46.0" };
+var SERVER_INFO = { name: "wudi-coding", version: "0.47.0" };
 try {
   ensureWudiDir();
   ensureProfileAt(projectRoot());
